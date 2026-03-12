@@ -72,6 +72,7 @@ jobs:
     name: Test for Python ${{ matrix.python-version }} with ${{ matrix.runner.toolkit }} (on ${{ matrix.runner.name }})
     if: |
       github.repository_owner == 'tile-ai' &&
+      matrix.runner.name == 'self-hosted-metax' &&
       (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     needs: [lint]
     runs-on: ${{ matrix.runner.tags }}
@@ -88,6 +89,10 @@ jobs:
             # Format: [Nightly-]ROCm-<major>.<minor>[.<patch>]. E.g., "ROCm-6.4" or "Nightly-ROCm-7.0".
             # Use "Nightly-" prefix to use torch nightly builds.
             toolkit: Nightly-ROCm-7.1
+          - tags: [self-hosted, metax]
+            name: self-hosted-metax
+            # Format: MACA-<major>.<minor>[.<patch>]. E.g., "MACA-3.0".
+            toolkit: MACA-3.6
           - tags: [macos-latest]
             name: macos-latest
             toolkit: Metal # or Nightly-Metal
