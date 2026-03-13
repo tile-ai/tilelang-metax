@@ -34,23 +34,24 @@
 namespace tvm {
 namespace runtime {
 
-#define MACA_DRIVER_CALL(x)                                                                    \
-  {                                                                                            \
-    mcError_t result = x;                                                                      \
-    if (result != mcSuccess && result != mcErrorDeinitialized) {                               \
-      LOG(FATAL) << "MACA MACA Error: " #x " failed with error: " << mcGetErrorString(result); \
-    }                                                                                          \
+#define MACA_DRIVER_CALL(x)                                                    \
+  {                                                                            \
+    mcError_t result = x;                                                      \
+    if (result != mcSuccess && result != mcErrorDeinitialized) {               \
+      LOG(FATAL) << "MACA MACA Error: " #x " failed with error: "              \
+                 << mcGetErrorString(result);                                  \
+    }                                                                          \
   }
 
-#define MACA_CALL(func)                                             \
-  {                                                                 \
-    mcError_t e = (func);                                           \
-    ICHECK(e == mcSuccess) << "MACA MACA: " << mcGetErrorString(e); \
+#define MACA_CALL(func)                                                        \
+  {                                                                            \
+    mcError_t e = (func);                                                      \
+    ICHECK(e == mcSuccess) << "MACA MACA: " << mcGetErrorString(e);            \
   }
 
 /*! \brief Thread local workspace */
 class MACAThreadEntry {
- public:
+public:
   /*! \brief The maca stream */
   mcStream_t stream{nullptr};
   /*! \brief thread local pool*/
@@ -58,8 +59,8 @@ class MACAThreadEntry {
   /*! \brief constructor */
   MACAThreadEntry();
   // get the threadlocal workspace
-  static MACAThreadEntry* ThreadLocal();
+  static MACAThreadEntry *ThreadLocal();
 };
-}  // namespace runtime
-}  // namespace tvm
-#endif  // TVM_RUNTIME_MACA_MACA_COMMON_H_
+} // namespace runtime
+} // namespace tvm
+#endif // TVM_RUNTIME_MACA_MACA_COMMON_H_

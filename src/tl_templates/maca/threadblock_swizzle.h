@@ -1,4 +1,5 @@
-// Copyright (c) 2025 MetaX Integrated Circuits (Shanghai) Co., Ltd. All rights reserved.
+// Copyright (c) 2025 MetaX Integrated Circuits (Shanghai) Co., Ltd. All rights
+// reserved.
 
 #pragma once
 

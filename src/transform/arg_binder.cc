@@ -1041,7 +1041,9 @@ void ArgBinder::BindDLTensors(
     // Check device_type consistency (device_id equality is implicitly ensured
     // by binding above)
     {
-      PrimExpr ok = (device_type == actual_dev_type) || (device_type == DLDeviceType::kDLMACA && actual_dev_type == DLDeviceType::kDLCUDA);
+      PrimExpr ok = (device_type == actual_dev_type) ||
+                    (device_type == DLDeviceType::kDLMACA &&
+                     actual_dev_type == DLDeviceType::kDLCUDA);
       ffi::Array<PrimExpr> pargs2;
       pargs2.push_back(StringImm(tvm_error_device_type_mismatch));
       pargs2.push_back(StringImm(kernel_nm));

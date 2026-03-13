@@ -48,8 +48,8 @@ static constexpr const int kMaxNumGPUs = 32;
  * \param maca_source Optional, maca source file
  */
 ffi::Module MACAModuleCreate(std::string data, std::string fmt,
-                        std::unordered_map<std::string, FunctionInfo> fmap,
-                        std::string maca_source);
-}  // namespace runtime
-}  // namespace tvm
-#endif  // TVM_RUNTIME_MACA_MACA_MODULE_H_
+                             std::unordered_map<std::string, FunctionInfo> fmap,
+                             std::string maca_source);
+} // namespace runtime
+} // namespace tvm
+#endif // TVM_RUNTIME_MACA_MACA_MODULE_H_

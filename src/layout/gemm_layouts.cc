@@ -1,4 +1,5 @@
-// 2025 - Modified by MetaX Integrated Circuits (Shanghai) Co., Ltd. All Rights Reserved.
+// 2025 - Modified by MetaX Integrated Circuits (Shanghai) Co., Ltd. All Rights
+// Reserved.
 /*!
  * \file layout/gemm_layouts.cc
  * \brief Define Layout used in MMA and other operations.
@@ -349,7 +350,8 @@ Fragment makeGemmFragmentAMACA(const int block_m, const int block_n,
   if (transposed) {
     PrimExpr forward_thread = 16 * FloorDiv(i->var, 4) + j;
     PrimExpr index = FloorMod(i->var, 4);
-    auto base_layout = Fragment({i, j}, {index}, forward_thread, rep)->Repeat({1, 1}, false, false);
+    auto base_layout = Fragment({i, j}, {index}, forward_thread, rep)
+                           ->Repeat({1, 1}, false, false);
     auto warp_layout = base_layout->Repeat({1, block_m / warp_m}, true, false)
                            ->Replicate(block_n / warp_n);
     auto block_layout =
@@ -358,7 +360,8 @@ Fragment makeGemmFragmentAMACA(const int block_m, const int block_n,
   } else {
     PrimExpr forward_thread = 16 * FloorDiv(j->var, 4) + i;
     PrimExpr index = FloorMod(j->var, 4);
-    auto base_layout = Fragment({i, j}, {index}, forward_thread, rep)->Repeat({1, 1}, false, false);
+    auto base_layout = Fragment({i, j}, {index}, forward_thread, rep)
+                           ->Repeat({1, 1}, false, false);
     auto warp_layout = base_layout->Repeat({block_m / warp_m, 1}, true)
                            ->Replicate(block_n / warp_n);
     auto block_layout =
@@ -993,7 +996,8 @@ Layout makeGemmABLayoutMACA(int mat_stride, int mat_continuous, int continuity,
     return makeGemmABLayoutPadded(mat_stride, mat_continuous, element_size);
   } else if (mat_continuous % (vector_size * 8) == 0) {
     if (mat_stride % 64 == 32) {
-      return MakeFullBankSwizzleLayout2D(mat_stride, mat_continuous, element_size);
+      return MakeFullBankSwizzleLayout2D(mat_stride, mat_continuous,
+                                         element_size);
     }
     Var i = InputPlaceholder(0);
     Var j = InputPlaceholder(1);
@@ -1007,7 +1011,8 @@ Layout makeGemmABLayoutMACA(int mat_stride, int mat_continuous, int continuity,
     PrimExpr index = vec + (c_swizzle + s * 16) * vector_size;
     return Layout(Array<PrimExpr>{mat_stride, mat_continuous}, {tc, ts, index});
   } else if (mat_continuous % (vector_size * 4) == 0) {
-    return MakeHalfBankSwizzleLayout2D(mat_stride, mat_continuous, element_size);
+    return MakeHalfBankSwizzleLayout2D(mat_stride, mat_continuous,
+                                       element_size);
   } else {
     ICHECK(0);
     return makeGemmABLayoutPadded(mat_stride, mat_continuous, element_size);

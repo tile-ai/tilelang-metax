@@ -1,4 +1,5 @@
-// Copyright (c) 2025 MetaX Integrated Circuits (Shanghai) Co., Ltd. All rights reserved.
+// Copyright (c) 2025 MetaX Integrated Circuits (Shanghai) Co., Ltd. All rights
+// reserved.
 
 /*!
  * \file target/codegen.cc
@@ -715,8 +716,8 @@ void CodeGenTileLangMACA::PrintVecElemStore(const std::string &vec, DataType t,
     }
   } else if (t.is_bfloat16()) {
     if (t.lanes() <= 8) {
-      stream << "((maca_bfloat162*)(&(" << vec << "." << access[i / 2] << ")))->"
-             << access[i % 2] << " = " << value << ";\n";
+      stream << "((maca_bfloat162*)(&(" << vec << "." << access[i / 2]
+             << ")))->" << access[i % 2] << " = " << value << ";\n";
     } else {
       stream << "(((maca_bfloat162*)(&(" << vec << "." << access[i / 4]
              << "))) + " << (i / 2 % 2) << ")->" << access[i % 2] << " = "
@@ -937,8 +938,8 @@ void CodeGenTileLangMACA::VisitExpr_(const CastNode *op, std::ostream &os) {
   if (from_ty.is_bfloat16() && target_ty.is_float() && target_ty.bits() == 32) {
     // Use __bfloat1622float2 for vectorized conversion (bfloat162 -> float2)
     if (lanes == 2 || lanes == 4 || lanes == 8) {
-      PrintVectorizedCast("__bfloat1622float2", "__maca_bfloat162", "float2", "",
-                          true, false);
+      PrintVectorizedCast("__bfloat1622float2", "__maca_bfloat162", "float2",
+                          "", true, false);
       return;
     }
   }
@@ -958,9 +959,11 @@ void CodeGenTileLangMACA::VisitExpr_(const CastNode *op, std::ostream &os) {
       tl::IsCudaVectorizableFP8(target_ty)) {
     bool target_type_is_e4m3 =
         target_ty.is_float8_e4m3() || target_ty.is_float8_e4m3fn();
-    std::string type_suffix = target_type_is_e4m3 ? "__MACA_E4M3" : "__MACA_E5M2";
+    std::string type_suffix =
+        target_type_is_e4m3 ? "__MACA_E4M3" : "__MACA_E5M2";
 
-    // Use __maca_cvt_float2_to_fp8x2 for vectorized conversion (float2 -> fp8x2)
+    // Use __maca_cvt_float2_to_fp8x2 for vectorized conversion (float2 ->
+    // fp8x2)
     if (lanes == 2 || lanes == 4 || lanes == 8) {
       std::string extra_args = ", __MACA_SATFINITE, " + type_suffix;
       PrintVectorizedCast("__maca_cvt_float2_to_fp8x2", "float2",
@@ -990,8 +993,8 @@ void CodeGenTileLangMACA::VisitExpr_(const CastNode *op, std::ostream &os) {
     // bfloat162)
     if (lanes == 2 || lanes == 4 || lanes == 8) {
       PrintVectorizedCast("__tl_cvt_e8m0x2_to_bfloat162",
-                          "__maca_fp8x2_storage_t", "__maca_bfloat162", "", true,
-                          false);
+                          "__maca_fp8x2_storage_t", "__maca_bfloat162", "",
+                          true, false);
       return;
     }
   }

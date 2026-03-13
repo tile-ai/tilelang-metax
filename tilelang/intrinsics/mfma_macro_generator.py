@@ -186,6 +186,7 @@ class MatrixCoreIntrinEmitter:
                 self.mfma_suffix = f"{out_dtype_abbrv}_{M_DIM}x{N_DIM}x{k_dim}{in_dtype_abbrv}"
         else:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.warning("need to fix mfma suffix")
             self.mfma_suffix = f"{M_DIM}x{N_DIM}x{k_dim}{in_dtype_abbrv}"

@@ -6,6 +6,7 @@ from .arch_base import TileDevice
 from typing import List, Union
 from .cuda import TensorInstruction
 
+
 def is_maca_arch(arch: TileDevice) -> bool:
     return isinstance(arch, MACA)
 
@@ -34,7 +35,5 @@ class MACA(TileDevice):
         self.bandwidth: List[int] = [750, 12080]
 
     def get_avaliable_tensorintrin_shapes(self):
-        self.available_tensor_instructions = (
-            TensorInstruction("wmma", [16, 16]),
-        )
+        self.available_tensor_instructions = (TensorInstruction("wmma", [16, 16]),)
         return [t.shape for t in self.available_tensor_instructions]

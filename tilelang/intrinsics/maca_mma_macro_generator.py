@@ -18,16 +18,12 @@ from .mfma_layout import (
     shared_16x16_to_local_64x4_layout_B,
     shared_16x32_to_local_64x8_layout_A,
     shared_16x32_to_local_64x8_layout_B,
-    shared_16x64_to_local_64x16_layout_A,
-    shared_16x64_to_local_64x16_layout_B,
     thread_id_shared_access_64x1_to_16x4_layout_A,
     thread_id_shared_access_64x1_to_4x16_layout_B,
     thread_id_shared_access_64x4_to_16x16_layout_A,
     thread_id_shared_access_64x4_to_16x16_layout_B,
     thread_id_shared_access_64x8_to_16x32_layout_A,
     thread_id_shared_access_64x8_to_16x32_layout_B,
-    thread_id_shared_access_64x16_to_16x64_layout_A,
-    thread_id_shared_access_64x16_to_16x64_layout_B,
 )
 
 lift = convert

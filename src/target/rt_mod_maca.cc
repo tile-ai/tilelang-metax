@@ -1,4 +1,5 @@
-// Copyright (c) 2025 MetaX Integrated Circuits (Shanghai) Co., Ltd. All rights reserved.
+// Copyright (c) 2025 MetaX Integrated Circuits (Shanghai) Co., Ltd. All rights
+// reserved.
 
 #include "../transform/common/attr.h"
 #include "codegen_maca.h"
@@ -118,9 +119,9 @@ ffi::Module BuildTileLangMACAWithoutCompile(IRModule mod, Target target) {
 TVM_FFI_STATIC_INIT_BLOCK() {
   namespace refl = tvm::ffi::reflection;
   refl::GlobalDef()
-    .def("target.build.tilelang_maca", BuildTileLangMACA)
-    .def("target.build.tilelang_maca_without_compile",
-         BuildTileLangMACAWithoutCompile);
+      .def("target.build.tilelang_maca", BuildTileLangMACA)
+      .def("target.build.tilelang_maca_without_compile",
+           BuildTileLangMACAWithoutCompile);
 }
 
 } // namespace codegen

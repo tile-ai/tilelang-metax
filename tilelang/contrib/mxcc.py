@@ -236,8 +236,7 @@ def get_target_compute_version(target=None):
         return tvm.maca(0).compute_version
 
     raise ValueError(
-        "No MACA architecture was specified or GPU detected."
-        "Try specifying it by adding '--offload-arch=xcorexxxx' to your target."
+        "No MACA architecture was specified or GPU detected.Try specifying it by adding '--offload-arch=xcorexxxx' to your target."
     )
 
 

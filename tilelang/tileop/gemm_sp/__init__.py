@@ -1,8 +1,6 @@
 from tilelang import tvm as tvm
 from tvm import tir
-from tilelang.utils.target import (
-    target_is_cuda, target_is_maca
-)
+from tilelang.utils.target import target_is_cuda, target_is_maca
 from tvm.target import Target
 from tvm.ir.base import Node
 from tvm.ir import Range

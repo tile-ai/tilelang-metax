@@ -58,8 +58,8 @@ The following files are newly added by MetaX Integrated Circuits (Shanghai) Co.,
     added: tilelang/carver/arch/maca.py
     added: tilelang/quantize/lop3_maca.py
 
-BitBLAS uses third-party material as listed below. The attached notices are 
-provided for informational purposes only. 
+BitBLAS uses third-party material as listed below. The attached notices are
+provided for informational purposes only.
 =======
 BitBLAS uses third-party material as listed below. The attached notices are
 provided for informational purposes only.

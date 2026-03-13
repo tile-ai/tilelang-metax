@@ -1,4 +1,5 @@
-// Copyright (c) 2025 MetaX Integrated Circuits (Shanghai) Co., Ltd. All rights reserved.
+// Copyright (c) 2025 MetaX Integrated Circuits (Shanghai) Co., Ltd. All rights
+// reserved.
 
 #pragma once
 
@@ -11,8 +12,7 @@ namespace cute {
 template <typename A_type, typename B_type, typename C_type>
 struct DispatchInstruction;
 
-template <>
-struct DispatchInstruction<half_t, half_t, float> {
+template <> struct DispatchInstruction<half_t, half_t, float> {
   using MMA = MMA_Atom<MMA_Traits<MACA_16x16x16_F32F16F16F32>>;
 };
 
@@ -24,7 +24,7 @@ template <int N, int K, int num_warp_n>
 struct OperandTraits<16, N, K, true, num_warp_n,
                      typename std::enable_if<K % 64 == 32>::type> {
   using LayoutAtom = decltype(composition(
-    Swizzle<2, 3, 3>{}, Layout<Shape<_8, _32>, Stride<_32, _1>>{}));
+      Swizzle<2, 3, 3>{}, Layout<Shape<_8, _32>, Stride<_32, _1>>{}));
   using Layout = decltype(tile_to_shape(LayoutAtom{}, Shape<Int<N>, Int<K>>{}));
   using Copy = Copy_Traits<UniversalCopy<cute::uint64_t>>;
 };
@@ -68,8 +68,10 @@ public:
 
   using Instruction = DispatchInstruction<A_type, B_type, C_type>;
 
-  using OperandATraits = OperandTraits<sizeof_bits<A_type>::value, M, K, !trans_A, num_warp_m>;
-  using OperandBTraits = OperandTraits<sizeof_bits<B_type>::value, N, K, trans_B, num_warp_n>;
+  using OperandATraits =
+      OperandTraits<sizeof_bits<A_type>::value, M, K, !trans_A, num_warp_m>;
+  using OperandBTraits =
+      OperandTraits<sizeof_bits<B_type>::value, N, K, trans_B, num_warp_n>;
 
   using SmemLayoutA = typename OperandATraits::Layout;
   using SmemLayoutB = typename OperandBTraits::Layout;
@@ -159,9 +161,8 @@ template <int M, int N, int K, int num_warp_m, int num_warp_n, bool trans_A,
           bool trans_B, bool clear_accum, int kPack, typename A_type,
           typename B_type, typename C_type>
 MCTLASS_DEVICE void gemm_ss(A_type *pA, B_type *pB, C_type *accum) {
-  using MMA =
-      cute::GemmTensorOp<M, N, K, num_warp_m, num_warp_n, trans_A, trans_B,
-                         clear_accum, A_type, B_type, C_type>;
+  using MMA = cute::GemmTensorOp<M, N, K, num_warp_m, num_warp_n, trans_A,
+                                 trans_B, clear_accum, A_type, B_type, C_type>;
   MMA::body(pA, pB, accum);
 }
 
@@ -169,9 +170,8 @@ template <int M, int N, int K, int num_warp_m, int num_warp_n, bool trans_A,
           bool trans_B, bool clear_accum, int kPack, typename A_type,
           typename B_type, typename C_type>
 TL_DEVICE void gemm_rs(A_type *pA, B_type *pB, C_type *accum) {
-  using MMA =
-      cute::GemmTensorOp<M, N, K, num_warp_m, num_warp_n, trans_A, trans_B,
-                         clear_accum, A_type, B_type, C_type>;
+  using MMA = cute::GemmTensorOp<M, N, K, num_warp_m, num_warp_n, trans_A,
+                                 trans_B, clear_accum, A_type, B_type, C_type>;
   MMA::body_rs(pA, pB, accum);
 }
 } // namespace tl

@@ -70,7 +70,7 @@ Check out [Installing Docker Engine](https://docs.docker.com/engine/install/ubun
 Check out [Metax docker](https://sw-download.metax-tech.com/docker) and download pytorch image.
 
 ``` bash
-docker login --username=cr_temp_user --password=eyJpbnN0YW5jZUlkIjoiY3JpLXpxYTIzejI2YTU5M3R3M2QiLCJ0aW1lIjoiMTc3MDg5NTI0MzAwMCIsInR5cGUiOiJzdWIiLCJ1c2VySWQiOiIyMDcwOTQwMTA1NjYzNDE3OTIifQ:91ecedb8bd5c4af6858745f0329d069263e1bf82 cr.metax-tech.com && docker pull cr.metax-tech.com/public-library/maca-pytorch:3.3.0.4-torch2.6-py310-ubuntu24.04-amd64 
+docker login --username=cr_temp_user --password=eyJpbnN0YW5jZUlkIjoiY3JpLXpxYTIzejI2YTU5M3R3M2QiLCJ0aW1lIjoiMTc3MDg5NTI0MzAwMCIsInR5cGUiOiJzdWIiLCJ1c2VySWQiOiIyMDcwOTQwMTA1NjYzNDE3OTIifQ:91ecedb8bd5c4af6858745f0329d069263e1bf82 cr.metax-tech.com && docker pull cr.metax-tech.com/public-library/maca-pytorch:3.3.0.4-torch2.6-py310-ubuntu24.04-amd64
 
 docker run -it --net=host --device=/dev/dri --device=/dev/mxcd --group-add video --name mctilelang cr.metax-tech.com/public-library/maca-pytorch:3.3.0.4-torch2.6-py310-ubuntu24.04-amd64 /bin/bash
 

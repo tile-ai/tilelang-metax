@@ -1,6 +1,5 @@
 # Copyright (c) 2025 MetaX Integrated Circuits (Shanghai) Co., Ltd. All rights reserved.
 
-from typing import Dict, Literal
 
 decode_i4_to_f16 = """
 #include "maca_fp16.h"
@@ -36,6 +35,4 @@ __device__ void decode_i4u_to_f16(T1 *_i4u, T2 *B_local_decode, const int N = 8)
 }
 """
 
-import_maca_c_map = {
-    "i4_to_f16": decode_i4_to_f16
-}
+import_maca_c_map = {"i4_to_f16": decode_i4_to_f16}

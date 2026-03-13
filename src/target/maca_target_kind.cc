@@ -3,24 +3,28 @@
 
 namespace tvm {
 
-std::string ExtractStringWithPrefix(const std::string& str, const std::string& prefix) {
-  if (str.find(prefix) != 0) return "";
+std::string ExtractStringWithPrefix(const std::string &str,
+                                    const std::string &prefix) {
+  if (str.find(prefix) != 0)
+    return "";
   std::size_t pos = prefix.length();
-  while (pos < str.length() && (std::isdigit(str[pos]) || std::isalpha(str[pos]))) {
+  while (pos < str.length() &&
+         (std::isdigit(str[pos]) || std::isalpha(str[pos]))) {
     ++pos;
   }
   return str.substr(prefix.length(), pos - prefix.length());
 }
 
-void CheckOrSetAttr(ffi::Map<ffi::String, ffi::Any>* attrs, const ffi::String& name,
-                    const ffi::String& value) {
+void CheckOrSetAttr(ffi::Map<ffi::String, ffi::Any> *attrs,
+                    const ffi::String &name, const ffi::String &value) {
   auto iter = attrs->find(name);
   if (iter == attrs->end()) {
     attrs->Set(name, value);
   } else {
     auto str = (*iter).second.try_cast<ffi::String>();
-    ICHECK(str && str.value() == value) << "ValueError: Expects \"" << name << "\" to be \""
-                                        << value << "\", but gets: " << (*iter).second;
+    ICHECK(str && str.value() == value)
+        << "ValueError: Expects \"" << name << "\" to be \"" << value
+        << "\", but gets: " << (*iter).second;
   }
 }
 
@@ -36,10 +40,12 @@ TargetJSON UpdateMACAAttrs(TargetJSON target) {
   if (target.count("mcpu")) {
     ffi::String mcpu = Downcast<ffi::String>(target.at("mcpu"));
     arch = ExtractStringWithPrefix(mcpu, "xcore");
-    ICHECK(!arch.empty()) << "ValueError: MACA target gets an invalid XCORE version: -mcpu="
-                          << mcpu;
+    ICHECK(!arch.empty())
+        << "ValueError: MACA target gets an invalid XCORE version: -mcpu="
+        << mcpu;
   } else {
-    if (auto f_get_maca_arch = tvm::ffi::Function::GetGlobal("tvm_callback_maca_get_arch")) {
+    if (auto f_get_maca_arch =
+            tvm::ffi::Function::GetGlobal("tvm_callback_maca_get_arch")) {
       arch = (*f_get_maca_arch)().cast<std::string>();
     }
     target.Set("mcpu", ffi::String(arch));

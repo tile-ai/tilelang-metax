@@ -1,4 +1,5 @@
-// 2025 - Modified by MetaX Integrated Circuits (Shanghai) Co., Ltd. All Rights Reserved.
+// 2025 - Modified by MetaX Integrated Circuits (Shanghai) Co., Ltd. All Rights
+// Reserved.
 /*!
  * \file tl/op/gemm.cc
  * \brief Implementation of General Matrix Multiplication (GEMM) operators

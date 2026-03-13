@@ -1,12 +1,13 @@
-// Copyright (c) 2025 MetaX Integrated Circuits (Shanghai) Co., Ltd. All rights reserved.
+// Copyright (c) 2025 MetaX Integrated Circuits (Shanghai) Co., Ltd. All rights
+// reserved.
 
 #pragma once
 
-#include <cute/underscore.hpp>
 #include <common/maca_bfloat16.h>
 #include <common/maca_fp16.h>
-#include <mcr/mc_runtime.h>
 #include <cute/arch/mma.hpp>
+#include <cute/underscore.hpp>
+#include <mcr/mc_runtime.h>
 #include <mctlass/fast_math.h>
 
 #define MACART_INF_F __int_as_float(0x7f800000)
@@ -31,20 +32,20 @@
 
 #define TILELANG_CHECK(stmt)                                                   \
   do {                                                                         \
-    mcError_t __err = (stmt);                                                 \
-    if (__err != mcSuccess) {                                                 \
+    mcError_t __err = (stmt);                                                  \
+    if (__err != mcSuccess) {                                                  \
       snprintf(error_buf, ERROR_BUF_SIZE, "%s:%d: %s - %s", __FILE__,          \
-               __LINE__, mcGetErrorName(__err), mcGetErrorString(__err));    \
+               __LINE__, mcGetErrorName(__err), mcGetErrorString(__err));      \
       return -1;                                                               \
     }                                                                          \
   } while (0)
 
 #define TILELANG_CHECK_LAST_ERROR(kernel_name)                                 \
   do {                                                                         \
-    mcError_t __err = mcGetLastError();                                      \
-    if (__err != mcSuccess) {                                                 \
+    mcError_t __err = mcGetLastError();                                        \
+    if (__err != mcSuccess) {                                                  \
       snprintf(error_buf, ERROR_BUF_SIZE, "kernel_name: %s - %s",              \
-               mcGetErrorName(__err), mcGetErrorString(__err));              \
+               mcGetErrorName(__err), mcGetErrorString(__err));                \
       return -1;                                                               \
     }                                                                          \
   } while (0)
@@ -101,7 +102,8 @@ TL_DEVICE unsigned __pack_half2(const half_t x, const half_t y) {
 }
 
 // Pack two bfloat16_t values.
-TL_DEVICE unsigned __pack_maca_bfloat162(const bfloat16_t x, const bfloat16_t y) {
+TL_DEVICE unsigned __pack_maca_bfloat162(const bfloat16_t x,
+                                         const bfloat16_t y) {
   unsigned v0 = *((unsigned short *)&x);
   unsigned v1 = *((unsigned short *)&y);
   return (v1 << 16) | v0;
@@ -113,8 +115,7 @@ TL_DEVICE void AtomicAdd(T1 *address, T2 val, int memory_order = 0) {
   atomicAdd(reinterpret_cast<T1 *>(address), static_cast<T1>(val));
 }
 
-template <typename T>
-TL_DEVICE void AtomicAdd(_Float16 *address, T val) {
+template <typename T> TL_DEVICE void AtomicAdd(_Float16 *address, T val) {
   atomicAdd(reinterpret_cast<__half *>(address), static_cast<__half>(val));
 }
 
@@ -129,11 +130,14 @@ TL_DEVICE half_t min(const half_t a, const half_t b) {
 // DP4A
 TL_DEVICE int __dp4a(int srcA, int srcB, int c) {
   int4 v_srca{(signed char)(srcA & 0xff), (signed char)((srcA >> 8) & 0xff),
-              (signed char)((srcA >> 16) & 0xff), (signed char)((srcA >> 24) & 0xff)};
+              (signed char)((srcA >> 16) & 0xff),
+              (signed char)((srcA >> 24) & 0xff)};
   int4 v_srcb{(signed char)(srcB & 0xff), (signed char)((srcB >> 8) & 0xff),
-              (signed char)((srcB >> 16) & 0xff), (signed char)((srcB >> 24) & 0xff)};
+              (signed char)((srcB >> 16) & 0xff),
+              (signed char)((srcB >> 24) & 0xff)};
 
-  return v_srca.x * v_srcb.x + v_srca.y * v_srcb.y + v_srca.z * v_srcb.z + v_srca.w * v_srcb.w + c;
+  return v_srca.x * v_srcb.x + v_srca.y * v_srcb.y + v_srca.z * v_srcb.z +
+         v_srca.w * v_srcb.w + c;
 }
 
 // Helper to cast SMEM pointer to unsigned

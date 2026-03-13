@@ -1,4 +1,5 @@
-// Copyright (c) 2025 MetaX Integrated Circuits (Shanghai) Co., Ltd. All rights reserved.
+// Copyright (c) 2025 MetaX Integrated Circuits (Shanghai) Co., Ltd. All rights
+// reserved.
 
 #pragma once
 
@@ -53,7 +54,6 @@ template <> __device__ void debug_print_var<half>(const char *msg, half var) {
          threadIdx.z, (float)var);
 }
 
-
 // Specialization for bfloat16_t type
 template <>
 __device__ void debug_print_var<bfloat16_t>(const char *msg, bfloat16_t var) {
@@ -86,10 +86,9 @@ __device__ void debug_print_var<fp8_e4_t>(const char *msg, fp8_e4_t var) {
 // template <>
 // __device__ void debug_print_var<fp8_e5_t>(const char *msg, fp8_e5_t var) {
 //   printf(
-//       "msg='%s' BlockIdx=(%d, %d, %d), ThreadIdx=(%d, %d, %d): dtype=fp8_e5_t "
-//       "value=%f\n",
-//       msg, blockIdx.x, blockIdx.y, blockIdx.z, threadIdx.x, threadIdx.y,
-//       threadIdx.z, (float)var);
+//       "msg='%s' BlockIdx=(%d, %d, %d), ThreadIdx=(%d, %d, %d): dtype=fp8_e5_t
+//       " "value=%f\n", msg, blockIdx.x, blockIdx.y, blockIdx.z, threadIdx.x,
+//       threadIdx.y, threadIdx.z, (float)var);
 // }
 
 // Template declaration for device-side debug printing (buffer only)
@@ -190,7 +189,8 @@ __device__ void debug_print_buffer_value<fp8_e4_t>(const char *msg,
 // __device__ void debug_print_buffer_value<fp8_e5_t>(const char *msg,
 //                                                    const char *buf_name,
 //                                                    int index, fp8_e5_t var) {
-//   printf("msg='%s' BlockIdx=(%d, %d, %d), ThreadIdx=(%d, %d, %d): buffer=%s, "
+//   printf("msg='%s' BlockIdx=(%d, %d, %d), ThreadIdx=(%d, %d, %d): buffer=%s,
+//   "
 //          "index=%d, dtype=fp8_e5_t value=%f\n",
 //          msg, blockIdx.x, blockIdx.y, blockIdx.z, threadIdx.x, threadIdx.y,
 //          threadIdx.z, buf_name, index, (float)var);
