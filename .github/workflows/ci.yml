@@ -89,7 +89,7 @@ jobs:
           #   # Use "Nightly-" prefix to use torch nightly builds.
           #   toolkit: Nightly-ROCm-7.1
           - tags: tilelang-metax-runner
-            name: tilelang-metax-runner
+            name: self-hosted-metax
             # Format: MACA-<major>.<minor>[.<patch>]. E.g., "MACA-3.0".
             toolkit: MACA-3.6
           - tags: [macos-latest]
@@ -101,6 +101,11 @@ jobs:
     timeout-minutes: 120
 
     steps:
+      - name: Install dependencies for runner (MetaX)
+        if: contains(matrix.runner.toolkit, 'MACA')
+        run: |
+          apt-get update && apt-get install -y git
+
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
