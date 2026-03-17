@@ -224,7 +224,7 @@ jobs:
         if: contains(matrix.runner.toolkit, 'MACA')
         run: |
           TOOLKIT="${{ matrix.runner.toolkit }}"
-          UV_PYTHON=$(which python)
+          UV_PYTHON=/opt/conda/bin/python
           export PIP_EXTRA_INDEX_URL="https://repo.metax-tech.com/r/pypi/simple"
           export UV_INDEX="${PIP_EXTRA_INDEX_URL}"
           export CLANG_TIDY_CMAKE_OPTIONS="${CLANG_TIDY_CMAKE_OPTIONS} -DUSE_MACA=ON"
