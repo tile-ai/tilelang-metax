@@ -224,13 +224,9 @@ jobs:
         if: contains(matrix.runner.toolkit, 'MACA')
         run: |
           TOOLKIT="${{ matrix.runner.toolkit }}"
-          export PIP_EXTRA_INDEX_URL="https://repo.metax-tech.com/r/pypi/simple"
-          export UV_INDEX="${PIP_EXTRA_INDEX_URL}"
           export CLANG_TIDY_CMAKE_OPTIONS="${CLANG_TIDY_CMAKE_OPTIONS} -DUSE_MACA=ON"
 
           echo "USE_MACA=ON" | tee -a "${GITHUB_ENV}"
-          echo "PIP_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL}" | tee -a "${GITHUB_ENV}"
-          echo "UV_INDEX=${UV_INDEX}" | tee -a "${GITHUB_ENV}"
           echo "CLANG_TIDY_CMAKE_OPTIONS=${CLANG_TIDY_CMAKE_OPTIONS}" | tee -a "${GITHUB_ENV}"
 
           if [[ -x "$(command -v mxcc)" ]]; then
