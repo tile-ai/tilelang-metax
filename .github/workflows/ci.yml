@@ -224,17 +224,14 @@ jobs:
         if: contains(matrix.runner.toolkit, 'MACA')
         run: |
           TOOLKIT="${{ matrix.runner.toolkit }}"
-          UV_PYTHON_BIN_DIR=/opt/conda/bin
           export PIP_EXTRA_INDEX_URL="https://repo.metax-tech.com/r/pypi/simple"
           export UV_INDEX="${PIP_EXTRA_INDEX_URL}"
           export CLANG_TIDY_CMAKE_OPTIONS="${CLANG_TIDY_CMAKE_OPTIONS} -DUSE_MACA=ON"
-          export UV_PYTHON_BIN_DIR=${UV_PYTHON_BIN_DIR}
 
           echo "USE_MACA=ON" | tee -a "${GITHUB_ENV}"
           echo "PIP_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL}" | tee -a "${GITHUB_ENV}"
           echo "UV_INDEX=${UV_INDEX}" | tee -a "${GITHUB_ENV}"
           echo "CLANG_TIDY_CMAKE_OPTIONS=${CLANG_TIDY_CMAKE_OPTIONS}" | tee -a "${GITHUB_ENV}"
-          echo "UV_PYTHON_BIN_DIR=${UV_PYTHON_BIN_DIR}" | tee -a "${GITHUB_ENV}"
 
           if [[ -x "$(command -v mxcc)" ]]; then
             echo "\$ $(command -v mxcc) --version" && mxcc --version
@@ -293,6 +290,7 @@ jobs:
           elif [[ "${{ matrix.runner.toolkit }}" == *"ROCm"* ]]; then
             uv pip install -v -r requirements-test-rocm.txt
           elif [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
+            uv python install
             uv pip install -v -r requirements-test-maca.txt
           elif [[ "${{ matrix.runner.toolkit }}" == *"Metal"* ]]; then
             uv pip install -v -r requirements-test-metal.txt
