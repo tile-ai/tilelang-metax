@@ -415,7 +415,7 @@ jobs:
 
       # MetaXGPU MACA tests
       - name: Run MACA tests with Python ${{ matrix.python-version }} (${{ matrix.runner.toolkit }})
-        id: cuda-tests
+        id: maca-tests
         if: contains(matrix.runner.toolkit, 'MACA')
         run: |
           cd testing
