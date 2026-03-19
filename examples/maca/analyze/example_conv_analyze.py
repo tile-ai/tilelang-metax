@@ -1,7 +1,6 @@
 import tilelang.language as T
 from tilelang.tools import Analyzer
 from tilelang.carver.arch import MACA
-import torch
 
 N = 64
 C = 256
