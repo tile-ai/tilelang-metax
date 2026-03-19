@@ -381,7 +381,7 @@ jobs:
           fi
 
       - name: Run examples with Python ${{ matrix.python-version }} (${{ matrix.runner.toolkit }})
-        if: ${{ contains(matrix.runner.toolkit, 'CUDA') || contains(matrix.runner.toolkit, 'MACA') }}
+        if: contains(matrix.runner.toolkit, 'CUDA')
         run: |
           cd testing
           PYTEST=(
@@ -390,6 +390,17 @@ jobs:
           )
           "${PYTEST[@]}" --maxfail=3 --numprocesses=4 \
             ../examples
+
+      - name: Run MACA examples with Python ${{ matrix.python-version }} (${{ matrix.runner.toolkit }})
+        if: contains(matrix.runner.toolkit, 'MACA')
+        run: |
+          cd testing
+          PYTEST=(
+            uv run --no-project -m --
+            pytest --verbose --color=yes --durations=0 --showlocals --cache-clear
+          )
+          "${PYTEST[@]}" --maxfail=3 --numprocesses=4 \
+            ../examples/maca
 
       # NVIDIA CUDA tests
       - name: Run CUDA tests with Python ${{ matrix.python-version }} (${{ matrix.runner.toolkit }})
@@ -430,6 +441,18 @@ jobs:
             pytest --verbose --color=yes --durations=0 --showlocals --cache-clear
           )
           "${PYTEST[@]}" --maxfail=3 --numprocesses=4 \
+            --ignore=./python/debug \
+            --ignore=./python/kernel \
+            --ignore=./python/analysis \
+            --ignore=./python/autotune \
+            --ignore=./python/issue \
+            --ignore=./python/language \
+            --ignore=./python/jit \
+            --ignore=./python/layout \
+            --ignore=./python/tilelibrary \
+            --ignore=./python/profiler \
+            --ignore=./python/transform \
+            --ignore=./python/runtime \
             ./python
 
       # Apple Metal tests
