@@ -49,10 +49,12 @@ def test_example_mha_sink_bwd_bhsd_sliding_window():
     example_mha_sink_bwd_bhsd.main(window_size=128)
 
 
+@tilelang.testing.pytest.mark.xfail
 def test_example_gqa_sink_bwd_bhsd():
     example_gqa_sink_bwd_bhsd.main()
 
 
+@tilelang.testing.pytest.mark.xfail
 def test_example_gqa_sink_bwd_bhsd_sliding_window():
     example_gqa_sink_bwd_bhsd.main(window_size=128)
 

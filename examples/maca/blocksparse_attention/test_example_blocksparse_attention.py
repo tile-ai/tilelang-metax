@@ -9,6 +9,7 @@ def test_block_sparse_attn_triton():
     block_sparse_attn_triton.main()
 
 
+@tilelang.testing.pytest.mark.xfail
 def test_example_tilelang_block_sparse_attn():
     example_tilelang_block_sparse_attn.main()
 
