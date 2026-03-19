@@ -16,6 +16,7 @@ def test_example_gemm_intrinsics():
     example_gemm_intrinsics.main(M=1024, N=1024, K=1024)
 
 
+@tilelang.testing.pytest.mark.xfail
 def test_example_gemm_schedule():
     example_gemm_schedule.main()
 

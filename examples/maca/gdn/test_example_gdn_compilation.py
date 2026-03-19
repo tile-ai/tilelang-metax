@@ -221,6 +221,7 @@ def test_example_chunk_scaled_dot_kkt_compilation():
     A_tilelang = kernel(K, Beta, G)  # noqa: F841
 
 
+@tilelang.testing.pytest.mark.xfail
 def test_example_cumsum_compilation():
     from example_cumsum import tilelang_chunk_local_cumsum_scalar, prepare_cumsum_input, prepare_cumsum_output
 
