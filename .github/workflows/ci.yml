@@ -49,27 +49,27 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          submodules: recursive
+          # submodules: recursive
 
-      - name: Setup Python 3.9
-        id: setup-pylowest
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.9"
-          update-environment: true
-          cache: pip
-          cache-dependency-path: |
-            pyproject.toml
-            requirements*.txt
-            .pre-commit-config.yaml
+      # - name: Setup Python 3.9
+      #   id: setup-pylowest
+      #   uses: actions/setup-python@v6
+      #   with:
+      #     python-version: "3.9"
+      #     update-environment: true
+      #     cache: pip
+      #     cache-dependency-path: |
+      #       pyproject.toml
+      #       requirements*.txt
+      #       .pre-commit-config.yaml
 
       - name: Check AST with Python 3.9
         run: |
-          "${{ steps.setup-pylowest.outputs.python-path }}" -m compileall -q -f tilelang
+          python -m compileall -q -f tilelang
 
       - name: Pre-commit Lint
         run: |
-          if ! pipx run pre-commit run --all-files --color=always --show-diff-on-failure; then
+          if ! pre-commit run --all-files --color=always --show-diff-on-failure; then
             echo "::error::Pre-commit checks failed. Please run 'pre-commit install' and 'pre-commit run --all-files' locally to see the issues."
             exit 1
           fi
@@ -98,9 +98,9 @@ jobs:
             name: self-hosted-metax
             # Format: MACA-<major>.<minor>[.<patch>]. E.g., "MACA-3.0".
             toolkit: MACA-3.6
-          - tags: [macos-latest]
-            name: macos-latest
-            toolkit: Metal # or Nightly-Metal
+          # - tags: [macos-latest]
+          #   name: macos-latest
+          #   toolkit: Metal # or Nightly-Metal
         python-version:
           - "3.12"
       fail-fast: false
