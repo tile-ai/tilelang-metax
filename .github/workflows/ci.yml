@@ -42,7 +42,7 @@ jobs:
       - name: Install dependencies for runner (MetaX)
         run: |
           sudo apt-get update && sudo apt-get install -y git
-          sudo /opt/conda/bin/pip install -y pre-commit
+          sudo /opt/conda/bin/pip install pre-commit
           export PATH="/opt/conda/bin:${PATH}"
           echo "PATH=${PATH}" | tee -a "${GITHUB_ENV}"
 
