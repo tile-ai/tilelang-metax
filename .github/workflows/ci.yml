@@ -80,7 +80,7 @@ jobs:
     if: |
       github.repository_owner == 'tile-ai' &&
       (github.event_name != 'pull_request' || !github.event.pull_request.draft)
-    # needs: [lint]
+    needs: [lint]
     runs-on: ${{ matrix.runner.tags }}
     strategy:
       matrix:
@@ -460,6 +460,7 @@ jobs:
             --ignore=./python/profiler \
             --ignore=./python/transform \
             --ignore=./python/runtime \
+            --ignore=./python/cpu \
             ./python
 
       # Apple Metal tests
