@@ -411,6 +411,22 @@ private:
   }
 
   Stmt ProcessSharedSync(const CallNode *op, const std::string &scope) {
+    auto get_static_extent = [](const IterVar &iv) -> int64_t {
+      if (iv->dom.defined() && iv->dom->extent.defined()) {
+        if (auto ext =as_const_int(iv->dom->extent)) {
+          return *ext;
+        }
+      }
+      return 1;
+    };
+
+    int64_t total_block_threads = get_static_extent(tx_) *
+                                  get_static_extent(ty_) *
+                                  get_static_extent(tz_);
+
+    if (total_block_threads > 0 && total_block_threads <= 32) {
+      return Stmt();
+    }
     // Get thread bounds
     auto bound_tx = analyzer_->const_int_bound(tx_);
     auto bound_ty = analyzer_->const_int_bound(ty_);

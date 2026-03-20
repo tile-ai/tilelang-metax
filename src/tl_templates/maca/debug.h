@@ -47,7 +47,7 @@ template <> __device__ void debug_print_var<float>(const char *msg, float var) {
 }
 
 // Specialization for half type
-template <> __device__ void debug_print_var<half>(const char *msg, half var) {
+template <> __device__ void debug_print_var<mctlass::half_t>(const char *msg, mctlass::half_t var) {
   printf("msg='%s' BlockIdx=(%d, %d, %d), ThreadIdx=(%d, %d, %d): dtype=half "
          "value=%f\n",
          msg, blockIdx.x, blockIdx.y, blockIdx.z, threadIdx.x, threadIdx.y,
@@ -182,6 +182,81 @@ __device__ void debug_print_buffer_value<fp8_e4_t>(const char *msg,
          "index=%d, dtype=fp8_e4_t value=%f\n",
          msg, blockIdx.x, blockIdx.y, blockIdx.z, threadIdx.x, threadIdx.y,
          threadIdx.z, buf_name, index, (float)var);
+}
+
+//specialization for short type
+template <>
+__device__ void debug_print_buffer_value<short>(const char *msg,
+                                               const char *buf_name,
+                                               int index, short var) {
+  printf("msg='%s' BlockIdx=(%d, %d, %d), ThreadIdx=(%d, %d, %d): buffer=%s, "
+         "index=%d, dtype=short value=%d\n",
+         msg, blockIdx.x, blockIdx.y, blockIdx.z, threadIdx.x, threadIdx.y,
+         threadIdx.z, buf_name, index, (int)var);
+}
+
+//specialization for unsigned short type
+template <>
+__device__ void debug_print_buffer_value<unsigned short>(const char *msg,
+                                                        const char *buf_name,
+                                                        int index,
+                                                        unsigned short var) {
+  printf("msg='%s' BlockIdx=(%d, %d, %d), ThreadIdx=(%d, %d, %d): buffer=%s, "
+         "index=%d, dtype=unsigned_short value=%u\n",
+         msg, blockIdx.x, blockIdx.y, blockIdx.z, threadIdx.x, threadIdx.y,
+         threadIdx.z, buf_name, index, (unsigned int)var);
+}
+
+//specialization for unsigned int type
+template <>
+__device__ void debug_print_buffer_value<unsigned int>(const char *msg,
+                                                      const char *buf_name,
+                                                      int index,
+                                                      unsigned int var) {
+  printf("msg='%s' BlockIdx=(%d, %d, %d), ThreadIdx=(%d, %d, %d): buffer=%s, "
+         "index=%d, dtype=unsigned_int value=%u\n",
+         msg, blockIdx.x, blockIdx.y, blockIdx.z, threadIdx.x, threadIdx.y,
+         threadIdx.z, buf_name, index, var);
+}
+
+//specialization for long type
+template <>
+__device__ void debug_print_buffer_value<long>(const char *msg,
+                                              const char *buf_name,
+                                              int index, long var) {
+  printf("msg='%s' BlockIdx=(%d, %d, %d), ThreadIdx=(%d, %d, %d): buffer=%s, "
+         "index=%d, dtype=long value=%lld\n",
+         msg, blockIdx.x, blockIdx.y, blockIdx.z, threadIdx.x, threadIdx.y,
+         threadIdx.z, buf_name, index, (long long)var);
+}
+
+//specialization for unsigned long type
+template <>
+__device__ void debug_print_buffer_value<unsigned long>(const char *msg,
+                                                       const char *buf_name,
+                                                       int index,
+                                                       unsigned long var) {
+  printf("msg='%s' BlockIdx=(%d, %d, %d), ThreadIdx=(%d, %d, %d): buffer=%s, "
+         "index=%d, dtype=unsigned_long value=%llu\n",
+         msg, blockIdx.x, blockIdx.y, blockIdx.z, threadIdx.x, threadIdx.y,
+         threadIdx.z, buf_name, index, (unsigned long long)var);
+}
+
+//specialization for mctlass::half_t type
+template <>
+__device__ void debug_print_buffer_value<mctlass::half_t>(const char *msg,
+                                                         const char *buf_name,
+                                                         int index,
+                                                         mctlass::half_t var) {
+  printf("msg='%s' BlockIdx=(%d, %d, %d), ThreadIdx=(%d, %d, %d): buffer=%s, "
+         "index=%d, dtype=float16 value=%f\n",
+         msg, blockIdx.x, blockIdx.y, blockIdx.z, threadIdx.x, threadIdx.y,
+         threadIdx.z, buf_name, index, (float)var);
+}
+
+
+__device__ inline void debug_print_msg(const char *msg) {
+       printf("%s\n" , msg);
 }
 
 // // Specialization for fp8_e5_t type

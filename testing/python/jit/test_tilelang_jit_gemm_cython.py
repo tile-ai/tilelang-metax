@@ -230,7 +230,7 @@ def run_cython_kernel_multi_stream(
         num_threads,
     )
 
-    matmul_kernel = tilelang.compile(program, execution_backend="cython")
+    matmul_kernel = tilelang.compile(program, execution_backend="cython", out_idx=-1)
 
     in_dtype = map_torch_type(in_dtype)
     out_dtype = map_torch_type(out_dtype)
@@ -245,11 +245,14 @@ def run_cython_kernel_multi_stream(
     tensor_c = torch.randn(M, N, dtype=out_dtype).cuda()
 
     num_streams = 4
+    results = []
     for _ in range(num_streams):
         stream = torch.cuda.Stream()
         with torch.cuda.stream(stream):
-            matmul_kernel(tensor_a, tensor_b, tensor_c)
+            res_c = matmul_kernel(tensor_a, tensor_b)
+            results.append(res_c)
 
+    torch.cuda.synchronize()
 
 def test_cython_kernel_multi_stream():
     run_cython_kernel_multi_stream(512, 1024, 768, False, False, T.float16, T.float16, T.float32, 128, 256, 32, 2)
