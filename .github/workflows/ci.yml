@@ -44,10 +44,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y git
           sudo /opt/conda/bin/pip install pre-commit
           export PATH="/opt/conda/bin:${PATH}"
-          export XDG_CACHE_HOME="${{ runner.tool_cache }}/.ci-cache-${{ github.workflow }}"
           echo "PATH=${PATH}" | tee -a "${GITHUB_ENV}"
-          echo "XDG_CACHE_HOME=${XDG_CACHE_HOME}" | tee -a "${GITHUB_ENV}"
-          echo "PRE_COMMIT_HOME=${XDG_CACHE_HOME}/pip/.pre-commit" | tee -a "${GITHUB_ENV}"
 
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -410,7 +407,7 @@ jobs:
             uv run --no-project -m --
             pytest --verbose --color=yes --durations=0 --showlocals --cache-clear
           )
-          "${PYTEST[@]}" --maxfail=3 --numprocesses=4 \
+          "${PYTEST[@]}" --maxfail=3 \
             ../examples/maca
 
       # NVIDIA CUDA tests
