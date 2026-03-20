@@ -45,7 +45,7 @@ def mhc_pre_big_fuse_tilelang(
     comb_mix: T.Tensor[[num_tokens, hc_mult * hc_mult], T.float32]
     layer_input: T.Tensor[[num_tokens, hidden_size], T.bfloat16]
 
-    with T.Kernel(num_tokens, threads=256) as i:
+    with T.Kernel(num_tokens, threads=96) as i:
         ##################################################################
         # _pre_norm_fn_fwd_norm
         rms = T.alloc_fragment(1, T.float32)
@@ -63,7 +63,7 @@ def mhc_pre_big_fuse_tilelang(
         mixes_shared = T.alloc_shared(hc_mult3, T.float32)
         T.copy(mixes, mixes_shared)
 
-        if True:
+        if T.get_thread_binding() < 32:
             ##################################################################
             # _pre_split_mixes_fwd (post & comb)
             cm = T.alloc_fragment((hc_mult, hc_mult), T.float32)
@@ -105,6 +105,7 @@ def mhc_pre_big_fuse_tilelang(
             # save comb_mix to global memory
             for j, k in T.Parallel(hc_mult, hc_mult):
                 comb_mix[i, j * hc_mult + k] = cm[j, k]
+        else:
             ##################################################################
             # _pre_split_mixes_fwd (pre)
             pre_mix_shared = T.alloc_shared(hc_mult, T.float32)
@@ -143,7 +144,7 @@ def mhc_pre_gemm_sqrsum_tilelang(
     hc_mult3: int,
     hc_hidden_size: int,
     token_block: int = 32,
-    hidden_block: int = 128,
+    hidden_block: int = 256,
 ) -> tilelang.JITKernel:
     """Not highly optimized TileLang implementation of fused gemm and sqrsum in mHC pre block."""
     assert hc_mult3 <= 32  # should be 24 usually

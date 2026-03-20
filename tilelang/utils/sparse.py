@@ -4,7 +4,6 @@ import torch
 import warnings
 from tilelang.contrib import nvcc
 from tilelang.utils.tensor import is_float8_dtype, fp8_remove_negative_zeros_
-from torch.utils.cpp_extension import load, _import_module_from_library
 from tilelang import env
 
 # Include version information to ensure different versions use separate caches
@@ -15,6 +14,15 @@ compress_util = os.path.join(env.TILELANG_TEMPLATE_PATH, "tl_templates/cuda/comp
 # Cache directory for compiled extensions
 _CACHE_DIR = os.path.join(env.TILELANG_CACHE_DIR, "sparse_compressor", __version__)
 os.makedirs(_CACHE_DIR, exist_ok=True)
+
+original_cxx = os.environ.get("CXX")
+from torch.utils.cpp_extension import load, _import_module_from_library
+
+if getattr(torch.version, "maca", None):
+    if original_cxx:
+        os.environ["CXX"] = original_cxx
+    else:
+        os.environ.pop("CXX", None)
 
 
 def _get_cached_lib():

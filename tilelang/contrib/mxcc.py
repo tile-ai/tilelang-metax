@@ -232,8 +232,8 @@ def get_target_compute_version(target=None):
         return major + "." + minor
 
     # 3. GPU compute version
-    if tvm.maca(0).exist:
-        return tvm.maca(0).compute_version
+    if tvm.device(tvm.ffi.DLDeviceType.kDLMACA, 0).exist:
+        return tvm.device(tvm.ffi.DLDeviceType.kDLMACA, 0).compute_version
 
     raise ValueError(
         "No MACA architecture was specified or GPU detected.Try specifying it by adding '--offload-arch=xcorexxxx' to your target."
