@@ -13,7 +13,7 @@ struct Barrier {
 
 namespace tl {
 
-__device__ inline void fence_barrier_init() { __synthreads(); }
+__device__ inline void fence_barrier_init() { __syncthreads(); }
 
 } // namespace tl
 
