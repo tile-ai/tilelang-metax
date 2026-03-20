@@ -448,19 +448,11 @@ jobs:
             uv run --no-project -m --
             pytest --verbose --color=yes --durations=0 --showlocals --cache-clear
           )
-          "${PYTEST[@]}" --maxfail=3 --numprocesses=4 \
+          "${PYTEST[@]}" --maxfail=3 --numprocesses=4 --timeout=180 \
             --ignore=./python/debug \
-            --ignore=./python/kernel \
-            --ignore=./python/analysis \
-            --ignore=./python/autotune \
-            --ignore=./python/issue \
             --ignore=./python/language \
-            --ignore=./python/jit \
-            --ignore=./python/layout \
-            --ignore=./python/tilelibrary \
             --ignore=./python/profiler \
             --ignore=./python/transform \
-            --ignore=./python/runtime \
             --ignore=./python/cpu \
             ./python
 
