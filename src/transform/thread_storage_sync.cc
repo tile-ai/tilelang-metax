@@ -413,7 +413,7 @@ private:
   Stmt ProcessSharedSync(const CallNode *op, const std::string &scope) {
     auto get_static_extent = [](const IterVar &iv) -> int64_t {
       if (iv->dom.defined() && iv->dom->extent.defined()) {
-        if (auto ext =as_const_int(iv->dom->extent)) {
+        if (auto ext = as_const_int(iv->dom->extent)) {
           return *ext;
         }
       }

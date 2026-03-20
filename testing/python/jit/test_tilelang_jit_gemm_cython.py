@@ -242,7 +242,6 @@ def run_cython_kernel_multi_stream(
         tensor_a = tensor_a.T
     if trans_B:
         tensor_b = tensor_b.T
-    tensor_c = torch.randn(M, N, dtype=out_dtype).cuda()
 
     num_streams = 4
     results = []
@@ -253,6 +252,7 @@ def run_cython_kernel_multi_stream(
             results.append(res_c)
 
     torch.cuda.synchronize()
+
 
 def test_cython_kernel_multi_stream():
     run_cython_kernel_multi_stream(512, 1024, 768, False, False, T.float16, T.float16, T.float32, 128, 256, 32, 2)

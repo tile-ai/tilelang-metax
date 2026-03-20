@@ -4,19 +4,16 @@
 
 namespace mctlass {
 
-struct Barrier{
-    uint64_t data;
-    __device__ inline void init(int count) {
-    }
+struct Barrier {
+  uint64_t data;
+  __device__ inline void init(int count) {}
 };
 
 } // namespace mctlass
 
 namespace tl {
 
-__device__ inline void fence_barrier_init() {
-    __synthreads();
-}
+__device__ inline void fence_barrier_init() { __synthreads(); }
 
 } // namespace tl
 

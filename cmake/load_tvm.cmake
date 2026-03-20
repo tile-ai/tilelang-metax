@@ -80,11 +80,11 @@ if(EXISTS "${ffi_error_py}")
   # --- Fix 1: Inner frame cycle in append_traceback ---
   if(NOT FILE_CONTENTS MATCHES "def create")
     message(STATUS "Auto-patching tvm_ffi/error.py: Fix inner frame cycle in append_traceback...")
-    set(OLD_CODE_1 
+    set(OLD_CODE_1
 "        frame = self._create_frame(filename, lineno, func)
         return types.TracebackType(tb, frame, frame.f_lasti, lineno)"
     )
-    set(NEW_CODE_1 
+    set(NEW_CODE_1
 "        def create(
             tb: types.TracebackType | None, frame: types.FrameType, lineno: int
         ) -> types.TracebackType:
@@ -99,13 +99,13 @@ if(EXISTS "${ffi_error_py}")
   # --- Fix 2: Outer cycle in _with_append_backtrace ---
   if(NOT FILE_CONTENTS MATCHES "del py_error, tb")
     message(STATUS "Auto-patching tvm_ffi/error.py: Fix outer cycle in _with_append_backtrace...")
-    set(OLD_CODE_2 
+    set(OLD_CODE_2
 "    tb = py_error.__traceback__
     for filename, lineno, func in _parse_backtrace(backtrace):
         tb = _TRACEBACK_MANAGER.append_traceback(tb, filename, lineno, func)
     return py_error.with_traceback(tb)"
     )
-    set(NEW_CODE_2 
+    set(NEW_CODE_2
 "    tb = py_error.__traceback__
     try:
         for filename, lineno, func in _parse_backtrace(backtrace):
