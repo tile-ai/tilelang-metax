@@ -73,7 +73,6 @@ def test_example_mha_fwd_bhsd_wgmma_pipelined():
     example_mha_fwd_bhsd_wgmma_pipelined.main()
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_mha_fwd_bhsd():
     example_mha_fwd_bhsd.main()
 
@@ -88,7 +87,6 @@ def test_example_mha_fwd_bshd():
     example_mha_fwd_bshd.main(batch=1, seq_len=256)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_mha_fwd_varlen():
     example_mha_fwd_varlen.main(batch=4, heads=16, seq_len=512, dim=64, causal=False)
     example_mha_fwd_varlen.main(batch=4, heads=16, seq_len=512, dim=64, causal=True)

@@ -63,7 +63,6 @@ def ref_program(x):
     return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + 1e-12)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_rms_norm(M=1024, N=1024, blk_m=1):
     program = rms_norm(M, N, blk_m)
     kernel = tilelang.compile(program, out_idx=-1, pass_configs={"tl.disable_tma_lower": True})

@@ -9,17 +9,14 @@ def test_block_sparse_attn_triton():
     block_sparse_attn_triton.main()
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_tilelang_block_sparse_attn():
     example_tilelang_block_sparse_attn.main()
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_tilelang_sparse_gqa_decode_varlen_indice():
     example_tilelang_sparse_gqa_decode_varlen_indice.main(batch=1, max_cache_seqlen=2048)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_tilelang_sparse_gqa_decode_varlen_mask():
     example_tilelang_sparse_gqa_decode_varlen_mask.main(batch=1, max_cache_seqlen=2048)
 

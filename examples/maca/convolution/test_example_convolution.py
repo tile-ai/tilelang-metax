@@ -10,7 +10,6 @@ def test_example_convolution():
     example_convolution.main([])
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_convolution_autotune():
     example_convolution_autotune.main()
 

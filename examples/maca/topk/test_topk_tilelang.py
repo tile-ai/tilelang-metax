@@ -2,7 +2,6 @@ import tilelang.testing
 import example_topk
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_topk_tilelang():
     example_topk.main(argv=[])
 
