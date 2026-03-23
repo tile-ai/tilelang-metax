@@ -36,7 +36,7 @@ def get_configs():
 
 @tilelang.jit(out_idx=[-2, -1])
 def flashattn(
-    batch, heads, k_heads, max_seqlen_kv, total_seqlen_k, dim, has_sink, block_N=128, block_H=64, num_split=1, num_stages=1, threads=128
+    batch, heads, k_heads, max_seqlen_kv, total_seqlen_k, dim, has_sink, block_N=64, block_H=32, num_split=1, num_stages=1, threads=128
 ):
     scale = (1.0 / dim) ** 0.5 * 1.44269504  # log2(e)
     shape_q = [batch, heads, dim]

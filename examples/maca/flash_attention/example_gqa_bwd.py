@@ -341,8 +341,8 @@ class _attention(torch.autograd.Function):
     def forward(ctx, q, k, v, causal, groups=1, use_atomic=True):
         BATCH, N_CTX, H, D_HEAD_QK = q.shape
         D_HEAD_V = v.shape[-1]
-        block_M = 128
-        block_N = 64
+        block_M = 64
+        block_N = 32
         mod = flashattn_fwd(BATCH, H, N_CTX, D_HEAD_QK, D_HEAD_V, causal, block_M, block_N, groups)
         o, lse = mod(q, k, v)
         ctx.save_for_backward(q, k, v, o, lse)
@@ -366,7 +366,7 @@ class _attention(torch.autograd.Function):
             return x
 
         do, q, k, v, o = [maybe_contiguous(x) for x in (do, q, k, v, o)]
-        block_M = 128
+        block_M = 32
         block_N = 32
         mod_prep = flashattn_bwd_preprocess(BATCH, H, N_CTX, D_HEAD_V)
         mod_post = flashattn_bwd_postprocess(BATCH, H, N_CTX, D_HEAD_QK)
@@ -374,7 +374,7 @@ class _attention(torch.autograd.Function):
 
         if ctx.use_atomic:
             kernel = flashattn_bwd_atomic_add(
-                BATCH, H, N_CTX, D_HEAD_QK, D_HEAD_V, ctx.causal, block_M, block_N, threads=256, num_stages=2, groups=groups
+                BATCH, H, N_CTX, D_HEAD_QK, D_HEAD_V, ctx.causal, block_M, block_N, threads=128, num_stages=0, groups=groups
             )
             shape_q = [BATCH, N_CTX, H, D_HEAD_QK]
             shape_k = [BATCH, N_CTX, HEAD_KV, D_HEAD_QK]

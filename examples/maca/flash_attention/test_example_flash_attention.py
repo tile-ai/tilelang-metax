@@ -21,7 +21,6 @@ def test_example_gqa_bwd_tma_reduce_varlen():
     example_gqa_bwd_tma_reduce_varlen.main()
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_gqa_bwd():
     example_gqa_bwd.main()
 
@@ -31,7 +30,6 @@ def test_example_gqa_bwd_wgmma_pipelined():
     example_gqa_bwd_wgmma_pipelined.main()
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_mha_bwd():
     example_mha_bwd_bshd.main(
         BATCH=1,
@@ -42,7 +40,6 @@ def test_example_mha_bwd():
     )
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_mha_bwd_bhsd():
     example_mha_bwd_bhsd.main(
         BATCH=1,
@@ -63,7 +60,6 @@ def test_example_gqa_fwd_bshd_wgmma_pipelined():
     example_gqa_fwd_bshd_wgmma_pipelined.main(batch=1, heads=16, seq_len=1024, dim=128, is_causal=False, groups=16, tune=False)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_gqa_fwd_bshd():
     example_gqa_fwd_bshd.main(batch=1, heads=16, seq_len=1024, dim=128, is_causal=False, groups=16, tune=False)
 
@@ -82,7 +78,6 @@ def test_example_mha_fwd_bshd_wgmma_pipelined():
     example_mha_fwd_bshd_wgmma_pipelined.main(batch=1, heads=32, seq_len=256)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_mha_fwd_bshd():
     example_mha_fwd_bshd.main(batch=1, seq_len=256)
 
@@ -92,7 +87,6 @@ def test_example_mha_fwd_varlen():
     example_mha_fwd_varlen.main(batch=4, heads=16, seq_len=512, dim=64, causal=True)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_gqa_fwd_varlen():
     example_gqa_fwd_varlen.main(batch=4, heads=16, q_seqlen=512, k_seqlen=512, dim=64, is_causal=False)
     example_gqa_fwd_varlen.main(batch=4, heads=16, q_seqlen=512, k_seqlen=512, dim=64, is_causal=True)

@@ -4,12 +4,10 @@ import example_tilelang_gemm_splitk
 import example_tilelang_gemm_splitk_vectorize_atomicadd
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_tilelang_gemm_splitk():
     example_tilelang_gemm_splitk.main()
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_tilelang_gemm_splitk_vectorize_atomicadd():
     example_tilelang_gemm_splitk_vectorize_atomicadd.main()
 

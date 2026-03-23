@@ -3,7 +3,7 @@ from tvm import DataType
 import tilelang
 import tilelang.language as T
 from tilelang.intrinsics import get_swizzle_layout
-from tilelang.intrinsics.mma_macro_generator import (
+from tilelang.intrinsics.maca_mma_macro_generator import (
     TensorCoreIntrinEmitter,
 )
 
@@ -74,7 +74,7 @@ def tl_matmul(
         micro_size_y,
     )
 
-    warp_size = 32
+    warp_size = 64
     threads = warp_size * (block_row_warps * block_col_warps)
     local_size_a = (micro_size_x * micro_size_k) // warp_size
     local_size_b = (micro_size_y * micro_size_k) // warp_size

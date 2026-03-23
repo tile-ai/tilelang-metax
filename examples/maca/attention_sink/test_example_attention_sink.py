@@ -9,32 +9,26 @@ import example_gqa_sink_fwd_varlen
 import example_gqa_sink_bwd_varlen
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_mha_sink_fwd_bhsd_full_attn():
     example_mha_sink_fwd_bhsd.main()
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_mha_sink_fwd_bhsd_sliding_window():
     example_mha_sink_fwd_bhsd.main(window_size=128)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_mha_sink_fwd_bhsd_wgmma_pipelined_full_attn():
     example_mha_sink_fwd_bhsd_wgmma_pipelined.main()
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_mha_sink_fwd_bhsd_wgmma_pipelined_sliding_window():
     example_mha_sink_fwd_bhsd_wgmma_pipelined.main(window_size=128)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_gqa_sink_fwd_bhsd_wgmma_pipelined_full_attn():
     example_gqa_sink_fwd_bhsd_wgmma_pipelined.main()
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_gqa_sink_fwd_bhsd_wgmma_pipelined_sliding_window():
     example_gqa_sink_fwd_bhsd_wgmma_pipelined.main(window_size=128)
 

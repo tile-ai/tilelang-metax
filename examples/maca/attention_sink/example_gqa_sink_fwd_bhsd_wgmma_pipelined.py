@@ -232,9 +232,9 @@ def main(
         print(f"Best TFlops: {total_flops / kernel.latency * 1e-9}")
         print(f"Best config: {kernel.config}")
     else:
-        block_M = 128
-        block_N = 128
-        num_stages = 2
+        block_M = 64
+        block_N = 64
+        num_stages = 0
         threads = 256
         print(f"{block_M=}, {block_N=}, {num_stages=}, {threads=}")
 
