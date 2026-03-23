@@ -4,49 +4,15 @@ WORKDIR /root
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN sed -i \
-    -e 's@http.*com/ubuntu@http://repo.metax-tech.com/r/ubuntu@g' \
-    -e 's@http.*cn/ubuntu@http://repo.metax-tech.com/r/ubuntu@g' \
-    /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources || true
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     git \
-    cmake \
-    wget \
-    curl \
-    && apt-get clean autoclean && rm -rf /var/lib/apt/lists/{apt,dpkg,cache,log} /tmp/* /var/tmp/*
-
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+    cmake
 
 ENV PATH="/root/.local/bin:${PATH}"
 
-RUN pip3 config set global.index https://repo.metax-tech.com/r/pypi/pypi && \
-    pip3 config set global.index-url https://repo.metax-tech.com/r/pypi/simple && \
-    pip3 config set install.trusted-host repo.metax-tech.com
+RUN pip install cython
 
-RUN pip install \
-    pytest-csv \
-    cython \
-    z3-solver==4.13.0 \
-    psutil \
-    cloudpickle \
-    torch-c-dlpack-ext
-
-RUN git config --global http.sslVerify "false" && \
-    git config --global url.http://repo-github.hub.metax-tech.com.insteadof https://github.com/
-
-ENV TILELANG_HOME=/code/mcTileLang
-ENV TVM_ROOT=/code/mcTileLang/3rdparty/tvm
-ENV TVM_IMPORT_PYTHON_PATH=${TVM_ROOT}/python
-ENV PYTHONPATH=${TILELANG_HOME}:${TVM_IMPORT_PYTHON_PATH}:${PYTHONPATH}
 ENV USE_MACA=ON
-ENV LD_LIBRARY_PATH=/opt/maca/ompi/lib:/opt/maca/mxgpu_llvm/lib:/opt/maca/lib:${LD_LIBRARY_PATH}
-
-ENV PYTHONDEVMODE=1
-ENV PYTHONUNBUFFERED=1
-ENV UV_INDEX_STRATEGY=unsafe-best-match
-ENV UV_HTTP_TIMEOUT=600
-ENV UV_INDEX=http://mirrors.aliyun.com/pypi/simple
 
 CMD bash
