@@ -139,7 +139,7 @@ template <int threads, int Axis = 0, bool reverse = false> struct CumSum2D {
 
           val += carry;
 
-          if (real_col < W && read_row < H)
+          if (real_col < W && real_row < H)
             dst[real_row * W + real_col] = val;
 
           T segSum = __shfl_sync(MASK, val, 0);
@@ -184,6 +184,7 @@ template <int threads, bool reverse = false> struct CumSum1D {
   template <typename T>
   static TL_DEVICE void run(const T *__restrict__ src, T *__restrict__ dst,
                             int N) {
-    Cumsum2D<threads, 1, reverse>::run(src, dst, 1, N);
+    CumSum2D<threads, 1, reverse>::run(src, dst, 1, N);
   }
+};
 } // namespace tl
