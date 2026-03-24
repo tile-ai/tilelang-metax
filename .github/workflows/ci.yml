@@ -448,7 +448,7 @@ jobs:
             uv run --no-project -m --
             pytest --verbose --color=yes --durations=0 --showlocals --cache-clear
           )
-          "${PYTEST[@]}" --maxfail=3 --numprocesses=4 --timeout=180 \
+          "${PYTEST[@]}" --maxfail=3 --timeout=180 \
             --ignore=./python/debug \
             --ignore=./python/language \
             --ignore=./python/profiler \

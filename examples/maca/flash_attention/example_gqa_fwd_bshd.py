@@ -173,7 +173,7 @@ def main(
         total_flops *= 0.5
 
     if not tune:
-        kernel = flashattn(batch, heads, seq_len, dim, is_causal, groups=groups, block_M=64, block_N=64, num_stages=2, threads=128)
+        kernel = flashattn(batch, heads, seq_len, dim, is_causal, groups=groups, block_M=64, block_N=64, num_stages=0, threads=128)
         ref_program_processed = partial(ref_program, is_causal=is_causal, groups=groups)
         profiler = kernel.get_profiler(tensor_supply_type=tilelang.TensorSupplyType.Normal)
         profiler.assert_allclose(ref_program_processed, rtol=0.01, atol=0.01)

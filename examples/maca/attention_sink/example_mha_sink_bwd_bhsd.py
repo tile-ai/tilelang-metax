@@ -34,7 +34,7 @@ def flashattn_fwd(
     sm_scale=None,
     block_M=64,
     block_N=64,
-    num_stages=1,
+    num_stages=0,
     threads=128,
     dtype: T.dtype = T.float16,
 ):
