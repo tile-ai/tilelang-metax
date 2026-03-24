@@ -210,12 +210,12 @@ cdef class CythonKernelWrapper:
                 if len(shape) == 0:
                     param_name = self.params[i].name if hasattr(self.params[i], 'name') else f'parameter_{i}'
                     raise ValueError(f"Cannot create 0-dim output tensor for {param_name}.")
-                
+
                 tensor = torch.empty(*shape, dtype=dtype, device=device)
             else:
                 tensor = inputs[ins_idx]
                 ins_idx += 1
-            
+
             tensor_list.append(tensor)
 
         if not skip_tensor_validation:
