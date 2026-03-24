@@ -1993,7 +1993,7 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     std::string dst_ptr = PrintExpr(op->args[0]);
     std::string src_ptr = PrintExpr(op->args[1]);
     this->PrintIndent();
-    this->this->stream << "AtomicAddx4(" << dst_ptr << ", " << src_ptr;
+    this->stream << "AtomicAddx4(" << dst_ptr << ", " << src_ptr;
     if (op->args.size() > 2) {
       this->stream << ", " << PrintExpr(op->args[2]);
     }
