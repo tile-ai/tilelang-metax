@@ -9,10 +9,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     cmake
 
-ENV PATH="/root/.local/bin:${PATH}"
-
-RUN pip install cython
-
 ENV USE_MACA=ON
 
 CMD bash
