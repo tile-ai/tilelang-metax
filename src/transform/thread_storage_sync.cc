@@ -382,7 +382,7 @@ class ThreadPartialSyncRewriter : public IRMutatorWithAnalyzer {
 public:
   static Stmt Rewrite(Stmt stmt, int warp_size = 32) {
     arith::Analyzer analyzer;
-    ThreadPartialSyncRewriter rewriter(&analyzer, int warp_size);
+    ThreadPartialSyncRewriter rewriter(&analyzer, warp_size);
     return rewriter(std::move(stmt));
   }
 
