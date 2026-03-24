@@ -1989,6 +1989,55 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
       this->stream << ", " << PrintExpr(op->args[2]);
     }
     this->stream << ");\n";
+  } else if (op->op.same_as(tl::atomic_addx4_elem_op())) {
+    std::string dst_ptr = PrintExpr(op->args[0]);
+    std::string src_ptr = PrintExpr(op->args[1]);
+    this->PrintIndent();
+    this->this->stream << "AtomicAddx4(" << dst_ptr << ", " << src_ptr;
+    if (op->args.size() > 2) {
+      this->stream << ", " << PrintExpr(op->args[2]);
+    }
+    this->stream << ");\n";
+  } else if (op->op.same_as(tl::atomic_max_elem_op())) {
+    // atomic_max_elem_op(dst_ptr, src_value[, memory_order])
+    std::string dst_ptr = PrintExpr(op->args[0]);
+    std::string src_value = PrintExpr(op->args[1]);
+    this->PrintIndent();
+    this->stream << "AtomicMax(" << dst_ptr << ", " << src_value;
+    if (op->args.size() > 2) {
+      this->stream << ", " << PrintExpr(op->args[2]);
+    }
+    this->stream << ");\n";
+  } else if (op->op.same_as(tl::atomic_max_ret_elem_op())) {
+    // atomic_max_ret_elem_op(dst_ptr, src_value[, memory_order]) -> returns
+    // prev value
+    std::string dst_ptr = PrintExpr(op->args[0]);
+    std::string src_value = PrintExpr(op->args[1]);
+    os << "AtomicMaxRet(" << dst_ptr << ", " << src_value;
+    if (op->args.size() > 2) {
+      os << ", " << PrintExpr(op->args[2]);
+    }
+    os << ")";
+  } else if (op->op.same_as(tl::atomic_min_elem_op())) {
+    // atomic_min_elem_op(dst_ptr, src_value[, memory_order])
+    std::string dst_ptr = PrintExpr(op->args[0]);
+    std::string src_value = PrintExpr(op->args[1]);
+    this->PrintIndent();
+    this->stream << "AtomicMin(" << dst_ptr << ", " << src_value;
+    if (op->args.size() > 2) {
+      this->stream << ", " << PrintExpr(op->args[2]);
+    }
+    this->stream << ");\n";
+  } else if (op->op.same_as(tl::atomic_min_ret_elem_op())) {
+    // atomic_min_ret_elem_op(dst_ptr, src_value[, memory_order]) -> returns
+    // prev value
+    std::string dst_ptr = PrintExpr(op->args[0]);
+    std::string src_value = PrintExpr(op->args[1]);
+    os << "AtomicMinRet(" << dst_ptr << ", " << src_value;
+    if (op->args.size() > 2) {
+      os << ", " << PrintExpr(op->args[2]);
+    }
+    os << ")";
   } else if (op->op.same_as(tl::tl_gemm_sp())) {
     ICHECK(op->args.size() == 5)
         << "tl_gemm_sp expects 5 arguments <op_instance, A_ptr, B_ptr, C_ptr, "
