@@ -163,19 +163,21 @@ cdef class CythonKernelWrapper:
         return torch.cuda.current_device()
 
     cpdef forward(self, list inputs, int64_t stream = -1, bint skip_tensor_validation = False):
-        # Validate input dimensions and prepare for kernel execution
         cdef int total_params = len(self.params)
-        cdef int total_inputs = len(inputs)
-        cdef int total_result_idx = len(self.result_idx)
-        cdef int total_dynamic_symbolics = len(self.dynamic_symbolic_map)
+        cdef int num_user_inputs = len(inputs)
+        cdef int num_outputs = len(self.result_idx)
+        cdef bint auto_allocate = False
 
-        # Ensure the number of inputs matches expected parameter count
-        if total_params != total_inputs + total_result_idx:
+        if num_user_inputs == total_params:
+            auto_allocate = False
+        elif num_user_inputs == total_params - num_outputs:
+            auto_allocate = True
+        else:
             raise ValueError(
-                f"Expected {len(self.params)} inputs, got {len(inputs) + len(self.result_idx)} with {len(inputs)} inputs and {len(self.result_idx)} outputs"
+                f"Argument count mismatch. Expected {total_params} for In-place mode "
+                f"or {total_params - num_outputs} for Return mode, but got {num_user_inputs}."
             )
 
-        # Use current CUDA stream if none specified
         if stream == -1:
             if torch.cuda.is_available():
                 try:
@@ -187,21 +189,19 @@ cdef class CythonKernelWrapper:
 
         cdef int ins_idx = 0
         cdef list tensor_list = []
-        device = None
+        cdef object device = None
 
-        # Prepare input and output tensors
-        for i in range(len(self.params)):
-            if i in self.result_idx:
+        for i in range(total_params):
+            if i in self.result_idx and auto_allocate:
                 dtype = self.param_dtypes[i]
                 shape = []
-                # Now working with native Python list, no FFI calls needed
                 for s in self.param_shapes[i]:
                     if isinstance(s, tir.Var):
                         for key in self.dynamic_symbolic_map:
                             if(str(s) == str(key)):
                                 ref_id, ref_tensor_idx, ref_shape_idx = self.dynamic_symbolic_map[key]
                                 shape.append(tensor_list[ref_tensor_idx].shape[ref_shape_idx])
-                    else:  # Already converted to Python int during initialization
+                    else:
                         shape.append(s)
 
                 if device is None:
@@ -209,26 +209,22 @@ cdef class CythonKernelWrapper:
 
                 if len(shape) == 0:
                     param_name = self.params[i].name if hasattr(self.params[i], 'name') else f'parameter_{i}'
-                    raise ValueError(
-                        f"Cannot create output tensor (name={param_name}) - 0-dimensional tensors are not supported. "
-                        f"Expected shape: {shape}"
-                    )
+                    raise ValueError(f"Cannot create 0-dim output tensor for {param_name}.")
+                
                 tensor = torch.empty(*shape, dtype=dtype, device=device)
             else:
                 tensor = inputs[ins_idx]
                 ins_idx += 1
-            # TODO(chenggang): remove this check or rewrite by ourselves?
-            '''
-            if isinstance(tensor, torch.Tensor) and tensor._base is not None and not tensor.is_contiguous():
-                base_tensor = tensor._base.as_strided(tensor._base.shape, tensor.stride())
-                if torch._debug_has_internal_overlap(base_tensor):
-                    raise ValueError(f"Cannot use an overlapping tensor"
-                                     f"(shape={tensor.shape}, strides={tensor.stride()}, "
-                                     f"overlap={torch._debug_has_internal_overlap(base_tensor)}) as the kernel input")
-            '''
+            
             tensor_list.append(tensor)
 
-        # Convert tensor pointers to C void pointers for kernel call
+        if not skip_tensor_validation:
+            self._check_buffer_device(tensor_list)
+            self._check_buffer_dtype(tensor_list)
+            self._check_static_shape(tensor_list)
+            self._check_static_strides(tensor_list)
+            self._check_static_contiguous(tensor_list)
+
         cdef dict dtype_to_ctype = {
             torch.float16: ctypes.c_float,
             torch.float32: ctypes.c_float,
@@ -257,32 +253,25 @@ cdef class CythonKernelWrapper:
             else:
                 raise ValueError(f"Unsupported tensor type: {type(tensor)}")
 
-        # Check buffer device
-        if not skip_tensor_validation:
-            self._check_buffer_device(tensor_list)
-            self._check_buffer_dtype(tensor_list)
-            self._check_static_shape(tensor_list)
-            self._check_static_strides(tensor_list)
-            self._check_static_contiguous(tensor_list)
-
-        # Add dynamic dimension values to kernel arguments
         for _, (ref_id, buffer_idx, shape_idx) in self.dynamic_symbolic_map.items():
             if ref_id == 0:
                 call_args.append(ctypes.c_int64(tensor_list[buffer_idx].shape[shape_idx]))
             else:
                 call_args.append(ctypes.c_int64(tensor_list[buffer_idx].stride(shape_idx)))
 
-        # Add CUDA stream to kernel arguments
         call_args.append(ctypes.c_void_p(stream))
 
-        # Execute the kernel
         result = self.lib.call(*call_args)
         if result != 0:
             error_msg = self.lib.get_last_error().decode('utf-8')
             raise RuntimeError(f"Kernel call failed: {error_msg}")
 
-        # Return output tensor(s)
-        if len(self.result_idx) == 1:
-            return tensor_list[self.result_idx[0]]
+        if stream != -1:
+            torch.cuda.current_stream().synchronize()
+        if auto_allocate:
+            if num_outputs == 1:
+                return tensor_list[self.result_idx[0]]
+            else:
+                return [tensor_list[i] for i in self.result_idx]
         else:
-            return [tensor_list[i] for i in self.result_idx]
+            return None

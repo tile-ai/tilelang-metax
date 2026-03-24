@@ -159,7 +159,7 @@ std::pair<int, int> GemmWarpPolicyNode::computeWarpPartition(
     kNPerWarp = 16;
   } else if (TargetIsCDNA(target)) {
     kNPerWarp = 16;
-  } else if (TargetIsMaca(target) || TargetIsMetaxC500(target)) {
+  } else if (TargetIsMaca(target)) {
     kNPerWarp = 16;
   }
   ICHECK(M % kMPerWarp == 0)

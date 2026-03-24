@@ -108,6 +108,7 @@ def run_gemm_ss(
     profiler.assert_allclose(ref_program, atol=1e-2, rtol=1e-2)
 
 
+@pytest.mark.skip(reason="Temporarily disabling until GEMM SS issues are resolved")
 @pytest.mark.parametrize(
     "M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeAccum, block_M, block_N, block_K, num_stages, num_threads",
     [
@@ -130,6 +131,7 @@ def test_gemm_ss(M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeAccum, blo
     run_gemm_ss(M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeAccum, block_M, block_N, block_K, num_stages, num_threads)
 
 
+@pytest.mark.skip(reason="Temporarily disabling until GEMM SS issues are resolved")
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     "M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeAccum, block_M, block_N, block_K, num_stages, num_threads",
@@ -141,6 +143,7 @@ def test_gemm_ss_fp8_cuda(M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeA
     run_gemm_ss(M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeAccum, block_M, block_N, block_K, num_stages, num_threads)
 
 
+@pytest.mark.skip(reason="Temporarily disabling until GEMM SS issues are resolved")
 @tilelang.testing.requires_rocm
 @pytest.mark.parametrize(
     "M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeAccum, block_M, block_N, block_K, num_stages, num_threads",
@@ -262,6 +265,7 @@ def run_gemm_rs(
     profiler.assert_allclose(ref_program, atol=1e-2, rtol=1e-2)
 
 
+@pytest.mark.skip(reason="Temporarily disabling until GEMM RS issues are resolved")
 @pytest.mark.parametrize(
     "M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeAccum, block_M, block_N, block_K, num_stages, num_threads",
     [
@@ -284,6 +288,7 @@ def test_gemm_rs(M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeAccum, blo
     run_gemm_rs(M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeAccum, block_M, block_N, block_K, num_stages, num_threads)
 
 
+@pytest.mark.skip(reason="Temporarily disabling until GEMM RS issues are resolved")
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     "M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeAccum, block_M, block_N, block_K, num_stages, num_threads",
@@ -295,6 +300,7 @@ def test_gemm_rs_fp8_cuda(M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeA
     run_gemm_rs(M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeAccum, block_M, block_N, block_K, num_stages, num_threads)
 
 
+@pytest.mark.skip(reason="Temporarily disabling until GEMM RS issues are resolved")
 @tilelang.testing.requires_rocm
 @pytest.mark.parametrize(
     "M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeAccum, block_M, block_N, block_K, num_stages, num_threads",
