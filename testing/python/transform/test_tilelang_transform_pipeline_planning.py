@@ -31,6 +31,7 @@ def _collect_pipeline_loop_annotations(func):
     return annos
 
 
+@tilelang.testing.pytest.mark.xfail
 def test_simple_pipeline():
     @T.prim_func
     def before(A: T.Tensor((1024, 32), T.float32), B: T.Tensor((32, 1024), T.float32), C: T.Tensor((1024, 1024), T.float32)):

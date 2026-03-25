@@ -408,7 +408,9 @@ jobs:
             pytest --verbose --color=yes --durations=0 --showlocals --cache-clear
           )
           "${PYTEST[@]}" --maxfail=3 --numprocesses=4 --timeout=180 \
+            --ignore=../examples/maca/minference \
             ../examples/maca
+          "${PYTEST[@]}" ../examples/maca/minference
 
       # NVIDIA CUDA tests
       - name: Run CUDA tests with Python ${{ matrix.python-version }} (${{ matrix.runner.toolkit }})
@@ -451,10 +453,8 @@ jobs:
           "${PYTEST[@]}" --maxfail=3 --timeout=180 \
             --ignore=./python/debug \
             --ignore=./python/language \
-            --ignore=./python/profiler \
-            --ignore=./python/transform \
-            --ignore=./python/cpu \
             ./python
+          "${PYTEST[@]}" --maxfail=3 --numprocesses=4 ./python/language
 
       # Apple Metal tests
       - name: Run Metal tests with Python ${{ matrix.python-version }} (${{ matrix.runner.toolkit }})

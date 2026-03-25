@@ -1937,18 +1937,32 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     }
   } else if (op->op.same_as(tl::rng_init())) {
     this->need_mcrand_kernel_h_ = true;
-    this->mcrand_philox_state = name_supply_->FreshName("__philox_state");
+    this->mcrand_random_generator_state =
+        name_supply_->FreshName("__random_generator_state");
+    this->mcrand_random_generator_state_type =
+        op->args[3].as<StringImmNode>()->value;
+    if (this->mcrand_random_generator_state_type ==
+        "curandStatePhilox4_32_10_t") {
+      this->mcrand_random_generator_state_type = "mcrandStatePhilox4_32_10_t";
+    }
     this->PrintIndent();
-    this->stream << "mcrandStatePhilox4_32_10_t " << this->mcrand_philox_state
-                 << ";\n";
+    this->stream << this->mcrand_random_generator_state_type
+                 << this->mcrand_random_generator_state << ";\n";
     this->PrintIndent();
     this->stream << "mcrand_init(" << PrintExpr(op->args[0]) << ", "
                  << PrintExpr(op->args[1]) << ", " << PrintExpr(op->args[2])
-                 << ", &" << this->mcrand_philox_state << ");\n";
+                 << ", &" << this->mcrand_random_generator_state << ");\n";
     // Store state_var for later use by rng_rand
   } else if (op->op.same_as(tl::rng_rand())) {
     this->need_mcrand_kernel_h_ = true;
-    os << "mcrand(&" << this->mcrand_philox_state << ")";
+    os << "mcrand(&" << this->mcrand_random_generator_state << ")";
+  } else if (op->op.same_as(tl::rng_rand_float())) {
+    this->need_mcrand_kernel_h_ = true;
+    os << "mcrand_" << op->args[0].as<StringImmNode>()->value;
+    if (op->dtype.bits() == 64) {
+      os << "_double";
+    }
+    os << "(&" << this->mcrand_random_generator_state << ")";
   } else if (op->op.same_as(tl::warp_reduce_sum())) {
     os << "tl::warp_reduce_sum(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::warp_reduce_max())) {
