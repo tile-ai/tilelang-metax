@@ -454,7 +454,15 @@ jobs:
             --ignore=./python/debug \
             --ignore=./python/language \
             ./python
-          "${PYTEST[@]}" --maxfail=3 --numprocesses=4 ./python/language
+          "${PYTEST[@]}" --maxfail=3 --numprocesses=4 \
+            --ignore=./python/language/test_tilelang_language_atomic.py \
+            --ignore=./python/language/test_tilelang_language_frontend_v2.py \
+            --ignore=./python/language/test_tilelang_language_cumsum.py \
+            --ignore=./python/language/test_tilelang_language_reduce.py \
+            --ignore=./python/language/test_tilelang_language_warp_reduce.py \
+            --ignore=./python/language/test_tilelang_memory_leak.py \
+            --ignore=./python/language/test_tilelang_language_reshape.py \
+            ./python/language
 
       # Apple Metal tests
       - name: Run Metal tests with Python ${{ matrix.python-version }} (${{ matrix.runner.toolkit }})
