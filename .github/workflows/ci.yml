@@ -450,7 +450,7 @@ jobs:
           )
           "${PYTEST[@]}" --maxfail=3 --numprocesses=4 --timeout=180 \
             --ignore=./python/debug \
-            --ignore=./python/language \
+            #--ignore=./python/language \
             --ignore=./python/profiler \
             --ignore=./python/transform \
             --ignore=./python/cpu \
