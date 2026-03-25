@@ -53,6 +53,9 @@ struct MACAMath {
         return "";
       }
     } else if (t.is_bfloat16()) {
+      if (name == "fabs") {
+        return "__habs";
+      }
       return 'h' + name;
     } else if (t.is_int() || t.is_uint()) {
       switch (t.bits()) {

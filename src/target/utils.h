@@ -27,6 +27,7 @@ bool TargetIsHopper(Target target);
 bool TargetIsSm100(Target target);
 bool TargetIsSM120(Target target);
 bool TargetIsCDNA(Target target);
+bool TargetIsRDNA(Target target);
 bool TargetIsMetaxC500(Target target);
 bool TargetIsGfx950(Target target);
 

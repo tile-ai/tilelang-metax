@@ -32,6 +32,9 @@ def get_heuristic_config() -> Tuple[Dict, int]:
     device = torch.cuda.current_device()
     sm_major, sm_minor = torch.cuda.get_device_capability(device)
     sm_version = sm_major * 10 + sm_minor
+    if hasattr(torch.version, "maca"):
+        cfg = dict(block_N=64, block_H=64, num_split=8, num_stages=0, threads=128)
+        return cfg, sm_version
     print(f"CUDA device capability: {sm_version}")
     if sm_version == 89:
         cfg = dict(block_N=128, block_H=64, num_split=1, num_stages=0, threads=128)

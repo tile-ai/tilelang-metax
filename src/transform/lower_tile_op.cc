@@ -23,6 +23,7 @@
 #include "ptx_async_copy_injector.h"
 
 #include "arith/ir_mutator_with_analyzer.h"
+#include "common/mbarrier.h"
 #include "layout_reducer.h"
 #include "loop_partition.h"
 
@@ -37,13 +38,13 @@ static Buffer makeBufferWithLayout(const Buffer &buffer, const Layout &layout,
       TVM_TYPE_AS(buffer->data->type_annotation, PointerTypeNode);
   Type new_type;
   // convert fragments to normal local buffer
-  if (ptr_type->storage_scope == "local.fragment") {
+  if (IsFragmentBuffer(buffer)) {
     new_type = PointerType(ptr_type->element_type, "local");
   } else {
     new_type = buffer->data->type_annotation;
   }
   Var new_var;
-  if (ptr_type->storage_scope == "global") {
+  if (IsGlobalBuffer(buffer)) {
     new_var = buffer->data;
   } else {
     if (var_remap.count(buffer->data)) {
@@ -55,8 +56,7 @@ static Buffer makeBufferWithLayout(const Buffer &buffer, const Layout &layout,
   }
   Array<PrimExpr> layout_shape = layout->OutputShape();
   Array<PrimExpr> output_shape = layout_shape;
-  if (ptr_type->storage_scope == "shared" ||
-      ptr_type->storage_scope == "shared.dyn") {
+  if (IsSharedBuffer(buffer)) {
     int replicate_extent = 1;
     Array<PrimExpr> buffer_shape = buffer->shape;
     int buffer_extent = 1;
@@ -231,6 +231,68 @@ public:
       // cp async lowering won't be generated.
       ctxt->config.Set(kDisableTMALower, Bool(!substituter.has_tma_));
     }
+
+    // If any TMA copies allocated mbarriers, inject the barrier buffer
+    // into the tilelang_root block with a barrier_init annotation.
+    // MultiVersionBuffer will expand it for pipelining, and
+    // LowerSharedBarrier will process it into ptx_init_barrier_thread_count.
+    if (substituter.mbarrier_count_ > 0) {
+      ICHECK(substituter.mbarrier_buffer_.defined())
+          << "mbarrier_buffer_ must have been created by AllocMBarrier "
+             "callback";
+      Buffer mbar_buf = substituter.mbarrier_buffer_.value();
+      // Update buffer shape in-place to final count.  We use const_cast
+      // because CopyOnWrite would create a new BufferNode, breaking identity
+      // with BufferLoad references already in the body.  MultiVersionBuffer
+      // relies on buffer identity to remap accesses correctly.
+      const_cast<BufferNode *>(mbar_buf.get())->shape = {
+          IntImm(DataType::Int(32), substituter.mbarrier_count_)};
+
+      Array<PrimExpr> counts;
+      counts.reserve(substituter.mbarrier_count_);
+      for (auto c : substituter.mbarrier_arrive_counts_)
+        counts.push_back(IntImm(DataType::Int(32), c));
+
+      // Walk the body to find the inner "tilelang_root" BlockRealize
+      // (inside the threadIdx.x scope) and inject the barrier buffer
+      // + barrier_init annotation.
+      struct RootBlockInjector : public StmtMutator {
+        Buffer barrier_buf;
+        Array<PrimExpr> arrive_counts;
+        bool injected{false};
+
+        Stmt VisitStmt_(const BlockRealizeNode *op) final {
+          if (injected)
+            return StmtMutator::VisitStmt_(op);
+          if (op->block->name_hint == "root") {
+            return StmtMutator::VisitStmt_(op);
+          }
+          injected = true;
+          Block block = op->block;
+          auto block_ptr = block.CopyOnWrite();
+          block_ptr->alloc_buffers.push_back(barrier_buf);
+          Map<Var, Array<PrimExpr>> barrier_init_map;
+          if (block_ptr->annotations.count("barrier_init")) {
+            barrier_init_map = Downcast<Map<Var, Array<PrimExpr>>>(
+                block_ptr->annotations.at("barrier_init"));
+          }
+          barrier_init_map.Set(barrier_buf->data, arrive_counts);
+          block_ptr->annotations.Set("barrier_init", barrier_init_map);
+          auto realize = tvm::ffi::GetRef<BlockRealize>(op);
+          auto realize_ptr = realize.CopyOnWrite();
+          realize_ptr->block = block;
+          return realize;
+        }
+      };
+
+      RootBlockInjector injector;
+      injector.barrier_buf = mbar_buf;
+      injector.arrive_counts = counts;
+      fptr->body = injector(fptr->body);
+      ICHECK(injector.injected)
+          << "Failed to find root BlockRealize for barrier injection";
+    }
+
     return f;
   }
 
@@ -1002,10 +1064,40 @@ private:
       let_var_to_expr.Set(var, expr);
     }
 
+    AllocMBarrierCallback mbarrier_callback = [this](int arrive_count) -> int {
+      if (!mbarrier_buffer_.defined()) {
+        mbarrier_buffer_ = CreateMBarrierBuffer(injected_mbarrier_name_, 1);
+      }
+      int id = mbarrier_count_++;
+      mbarrier_arrive_counts_.push_back(arrive_count);
+      return id;
+    };
+
+    // Compute mbarrier expressions from the enclosing loop and pipeline info.
+    // pipeline_num_stages: number of pipeline stages (from T.Pipelined
+    // annotation) mbar_stage_expr: ko % num_stages (cycles through multiple
+    // mbarriers) mbar_phase_expr: (ko / num_stages) % 2 (mbarrier parity for
+    // wait)
+    int pipeline_num_stages = 1;
+    PrimExpr mbar_phase_expr;
+    PrimExpr mbar_stage_expr = IntImm(DataType::Int(32), 0);
+    if (!loop_var_stack_.empty()) {
+      pipeline_num_stages = pipeline_num_stages_stack_.back();
+      Var loop_var = loop_var_stack_.back();
+      PrimExpr ns = IntImm(DataType::Int(32), pipeline_num_stages);
+      mbar_stage_expr = FloorMod(loop_var, ns);
+      mbar_phase_expr =
+          FloorMod(FloorDiv(loop_var, ns), IntImm(DataType::Int(32), 2));
+    } else {
+      mbar_phase_expr = IntImm(DataType::Int(32), 0);
+    }
+
     auto lowered = tile_op->Lower(
         LowerArgs{target_, thread_bounds, thread_var_->var, callback,
-                  layout_map_, buffer_remap_, let_var_to_expr,
-                  /*in_pipeline=*/pipelined_depth_ > 0},
+                  mbarrier_callback, layout_map_, buffer_remap_,
+                  let_var_to_expr,
+                  /*in_pipeline=*/pipelined_depth_ > 0, mbar_phase_expr,
+                  pipeline_num_stages, mbar_stage_expr, &mbarrier_buffer_},
         analyzer_);
 
     return IRMutatorWithAnalyzer::VisitStmt(lowered);
@@ -1046,6 +1138,17 @@ private:
    * @return Stmt The lowered statement.
    */
   Stmt VisitStmt_(const ForNode *op) final {
+    // Track enclosing loop variables for mbarrier parity computation.
+    loop_var_stack_.push_back(op->loop_var);
+    // Track pipeline num_stages from the loop's annotation.
+    int num_stages = 1;
+    if (auto ns_anno = op->annotations.Get("num_stages")) {
+      if (auto *ns_int = ns_anno.value().as<IntImmNode>()) {
+        num_stages = static_cast<int>(ns_int->value);
+      }
+    }
+    pipeline_num_stages_stack_.push_back(num_stages);
+
     // Extract reducer info from annotations
     Map<Var, ReducerInfo> reducer_info;
     if (op->annotations.count(attr::kReducerInfo)) {
@@ -1071,6 +1174,8 @@ private:
       ICHECK_GT(pipelined_depth_, 0);
       --pipelined_depth_;
     }
+    loop_var_stack_.pop_back();
+    pipeline_num_stages_stack_.pop_back();
 
     // Only process parallel loops
     if (op->kind != ForKind::kParallel) {
@@ -1265,6 +1370,17 @@ private:
   size_t thread_block_size_ = 0;
   // Stack of per-Block workspace buffers gathered while visiting children
   std::vector<Array<Buffer>> workspace_stack_;
+  // Counter and arrive-counts for mbarrier allocation via
+  // AllocMBarrierCallback. Used to inject a barrier buffer with
+  // barrier_init annotation into the root block after all tile ops are lowered.
+  int mbarrier_count_{0};
+  std::vector<int> mbarrier_arrive_counts_;
+  // The shared.barrier scope buffer created lazily by AllocMBarrier callback.
+  Optional<Buffer> mbarrier_buffer_;
+  // Stack of enclosing loop variables for mbarrier parity computation.
+  std::vector<Var> loop_var_stack_;
+  // Stack of pipeline num_stages values from enclosing loop annotations.
+  std::vector<int> pipeline_num_stages_stack_;
   // For ptx Node, we need to remap the buffer and indices
   // By access CallNode instead of BufferLoad Node.
   bool is_ptx_{false};

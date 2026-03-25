@@ -60,7 +60,7 @@ def flashattn(batch, heads, seqlen_q, seqlen_kv, dim, is_causal, block_M, block_
                 else T.ceildiv((seqlen_kv // num_split), block_N)
             )
 
-            for k in T.Pipelined(loop_range, num_stages=2):
+            for k in T.Pipelined(loop_range, num_stages=0):
                 T.copy(
                     K[bid, (seqlen_kv // num_split) * sid + k * block_N : (seqlen_kv // num_split) * sid + (k + 1) * block_N, hid, :],
                     K_shared,
@@ -241,7 +241,7 @@ def main(BATCH=1, H=32, Q_CTX=128, KV_CTX=8192, D_HEAD=128, causal=False):
     total_flops = 2 * flops_per_matmul
     if causal:
         total_flops *= 0.5
-    BLOCK_M = 128
+    BLOCK_M = 64
     BLOCK_N = 64  # if D_HEAD <= 128 else 32
     kernel = flashattn(BATCH, H, Q_CTX, KV_CTX, D_HEAD, causal, BLOCK_M, BLOCK_N)
     ref_fn = partial(ref_program, causal=causal)
