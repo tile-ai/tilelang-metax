@@ -95,7 +95,8 @@ private:
   // Global barrier expected node.
   std::string vid_global_barrier_expect_;
   // Global mcrand state
-  std::string mcrand_philox_state;
+  std::string mcrand_random_generator_state;
+  std::string mcrand_random_generator_state_type;
 
   // whether enable fp16
   bool enable_fp16_{false};

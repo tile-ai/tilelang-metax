@@ -1,0 +1,14 @@
+FROM sw-harbor-lt.mxcr.io/cimaster/maca-pytorch:20260227-616-torch2.6-py310-ubuntu24.04-amd64
+
+WORKDIR /root
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    cmake
+
+ENV USE_MACA=ON
+
+CMD bash

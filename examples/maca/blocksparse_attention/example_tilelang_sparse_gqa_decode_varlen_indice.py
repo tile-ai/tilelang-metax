@@ -193,7 +193,7 @@ class SparseFlashAttn(torch.nn.Module):
         glse = torch.empty((batch, heads, num_split), dtype=torch.float32, device="cuda")
         output_partial = torch.empty((batch, heads, num_split, dim_v), dtype=torch.float32, device="cuda")
 
-        output = flashattn(
+        kernel = flashattn(
             batch,
             heads,
             heads_kv,
@@ -204,7 +204,7 @@ class SparseFlashAttn(torch.nn.Module):
             num_stages=2,
             threads=128,
         )(query, key, value, block_indices, cache_seqlens, glse, output_partial)
-        return output
+        return kernel
 
 
 def sparse_gqa_decode_varlen_indice(query, key, value, block_indices, cache_seqlens, max_cache_seqlen, block_size):

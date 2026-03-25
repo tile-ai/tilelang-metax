@@ -35,8 +35,8 @@ def main():
     M = 1024
     N = 1024
     K = 1024
-    block_M = 128
-    block_N = 128
+    block_M = 64
+    block_N = 64
     block_K = 32
     split_k = 4
 

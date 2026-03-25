@@ -52,6 +52,7 @@ def test_example_wy_fast_compilation():
     )
     print(kernel.get_kernel_source())
     W_tilelang, U_tilelang = kernel(K, V, Beta, G, A)
+    torch.cuda.synchronize()
 
 
 @tilelang.testing.pytest.mark.skip("timeout")
