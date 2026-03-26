@@ -65,10 +65,81 @@ using float16x8 =
     __attribute__((__vector_size__(8 * sizeof(float16_t)))) float16_t;
 using float16x16 =
     __attribute__((__vector_size__(16 * sizeof(float16_t)))) float16_t;
+namespace platform {
 
-using mctlass::half_t;
+/// Numeric limits
+template <> struct numeric_limits<__half> {
+  static bool const is_specialized = true;
+  static bool const is_signed = true;
+  static bool const is_integer = false;
+  static bool const is_exact = false;
+  static bool const has_infinity = true;
+  static bool const has_quiet_NaN = true;
+  static bool const has_signaling_NaN = false;
+  static std::float_denorm_style const has_denorm = std::denorm_present;
+  static bool const has_denorm_loss = true;
+  static std::float_round_style const round_style = std::round_to_nearest;
+  static bool const is_iec559 = true;
+  static bool const is_bounded = true;
+  static bool const is_modulo = false;
+  static int const digits = 10;
 
-using mctlass::bfloat16_t;
+  /// Least positive value
+  __device__ static __half min() {
+    uint16_t val = 0x0001;
+    return *reinterpret_cast<__half *>(&val);
+  }
+
+  /// Minimum finite value
+  __device__ static __half lowest() {
+    uint16_t val = 0xfbff;
+    return *reinterpret_cast<__half *>(&val);
+  }
+
+  /// Maximum finite value
+  __device__ static __half max() {
+    uint16_t val = 0x7bff;
+    return *reinterpret_cast<__half *>(&val);
+  }
+
+  /// Returns smallest finite value
+  __device__ static __half epsilon() {
+    uint16_t val = 0x1800;
+    return *reinterpret_cast<__half *>(&val);
+  }
+
+  /// Returns maximum rounding error
+  __device__ static __half round_error() { return __half(0.5f); }
+
+  /// Returns positive infinity value
+  __device__ static __half infinity() {
+    uint16_t val = 0x7c00;
+    return *reinterpret_cast<__half *>(&val);
+  }
+
+  /// Returns quiet NaN value
+  __device__ static __half quiet_NaN() {
+    uint16_t val = 0x7fff;
+    return *reinterpret_cast<__half *>(&val);
+  }
+
+  /// Returns signaling NaN value
+  __device__ static __half signaling_NaN() {
+    uint16_t val = 0x0001;
+    return *reinterpret_cast<__half *>(&val);
+  }
+
+  /// Returns smallest positive subnormal value
+  __device__ static __half denorm_min() {
+    uint16_t val = 0x0001;
+    return *reinterpret_cast<__half *>(&val);
+  }
+};
+} // namespace platform
+
+using half_t = __half;
+
+using bfloat16_t = maca_bfloat16;
 
 struct bfloat16x2 {
   bfloat16_t data[2];

@@ -407,7 +407,7 @@ jobs:
             uv run --no-project -m --
             pytest --verbose --color=yes --durations=0 --showlocals --cache-clear
           )
-          "${PYTEST[@]}" --maxfail=3 --numprocesses=4 --timeout=180 \
+          "${PYTEST[@]}" --maxfail=3 --numprocesses=1 --timeout=180 \
             --ignore=../examples/maca/minference \
             ../examples/maca
           "${PYTEST[@]}" ../examples/maca/minference
@@ -454,7 +454,7 @@ jobs:
             --ignore=./python/debug \
             --ignore=./python/language \
             ./python
-          "${PYTEST[@]}" --maxfail=3 --numprocesses=4 \
+          "${PYTEST[@]}" --maxfail=3 --numprocesses=1 \
             #--ignore=./python/language/test_tilelang_language_atomic.py \
             --ignore=./python/language/test_tilelang_language_frontend_v2.py \
             --ignore=./python/language/test_tilelang_language_cumsum.py \
