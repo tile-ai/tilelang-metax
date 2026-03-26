@@ -9,7 +9,7 @@ from tilelang.utils import determine_fp8_type
 def debug_print_buffer(M=16, N=16, dtype=T.float16):
     @T.prim_func
     def program(Q: T.Tensor((M, N), dtype)):
-        with T.Kernel(4, 4, 2, threads=128 * 2) as (bx, by, bz):
+        with T.Kernel(1, 1, 1, threads=128 * 2) as (bx, by, bz):
             shared_buf = T.alloc_shared([M, N], dtype)
             T.print(shared_buf)
 
@@ -42,7 +42,7 @@ def debug_print_buffer_conditional(M=16, N=16):
 
     @T.prim_func
     def program(Q: T.Tensor((M, N), dtype)):
-        with T.Kernel(4, 4, 2, threads=128 * 2) as (bx, by, bz):
+        with T.Kernel(1, 1, 1, threads=128 * 2) as (bx, by, bz):
             shared_buf = T.alloc_shared([M, N], dtype)
 
             if bx == 0 and by == 0 and bz == 0:
@@ -62,7 +62,7 @@ def debug_print_value_conditional(M=16, N=16):
 
     @T.prim_func
     def program(Q: T.Tensor((M, N), dtype)):
-        with T.Kernel(4, 4, 2, threads=128 * 2) as (bx, by, bz):
+        with T.Kernel(1, 1, 1, threads=128 * 2) as (bx, by, bz):
             tid = T.get_thread_binding()
             if tid == 0:
                 T.print(bx + by + bz)
@@ -81,7 +81,7 @@ def debug_print_register_files(M=16, N=16):
 
     @T.prim_func
     def program(Q: T.Tensor((M, N), dtype)):
-        with T.Kernel(4, 4, 2, threads=128 * 2) as (bx, by, bz):
+        with T.Kernel(1, 1, 1, threads=128 * 2) as (bx, by, bz):
             register_buf = T.alloc_fragment([M, N], dtype)
             for i, j in T.Parallel(M, N):
                 T.print(register_buf[i, j])

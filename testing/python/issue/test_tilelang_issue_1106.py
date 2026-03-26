@@ -14,14 +14,14 @@ def get_kernel(m: int):
 
     @T.prim_func
     def test_kernel(a: T.Tensor[(m,), dtype], b: T.Tensor[(m,), dtype]):
-        with T.Kernel(1, threads=64) as (bx):
-            shared = T.alloc_shared((64,), dtype)
+        with T.Kernel(1, threads=128) as (bx):
+            shared = T.alloc_shared((128,), dtype)
             tx = T.get_thread_binding(0)
-            tid = tx + bx * 64
+            tid = tx + bx * 128
 
-            for i in T.serial((m // 2 - tx) // 64 + 1):
+            for i in T.serial((m // 2 - tx) // 128 + 1):
                 for j in T.vectorized(2):
-                    shared[tx] += a[(i * 64 + tid) * 2 + j]
+                    shared[tx] += a[(i * 128 + tid) * 2 + j]
 
             b[tid] = shared[tx]
 

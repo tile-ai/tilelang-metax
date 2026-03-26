@@ -193,6 +193,8 @@ std::pair<int, int> GemmWarpPolicyNode::computeWarpPartition(
     kNPerWarp = 16;
   } else if (TargetIsCDNA(target)) {
     kNPerWarp = 16;
+  } else if (TargetIsMaca(target)) {
+    kNPerWarp = 16;
   } else if (TargetIsRDNA(target)) {
     kNPerWarp = 16;
   }

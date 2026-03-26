@@ -380,15 +380,15 @@ private:
 
 class ThreadPartialSyncRewriter : public IRMutatorWithAnalyzer {
 public:
-  static Stmt Rewrite(Stmt stmt) {
+  static Stmt Rewrite(Stmt stmt, int warp_size = 32) {
     arith::Analyzer analyzer;
-    ThreadPartialSyncRewriter rewriter(&analyzer);
+    ThreadPartialSyncRewriter rewriter(&analyzer, warp_size);
     return rewriter(std::move(stmt));
   }
 
 private:
-  explicit ThreadPartialSyncRewriter(arith::Analyzer *analyzer)
-      : IRMutatorWithAnalyzer(analyzer) {}
+  explicit ThreadPartialSyncRewriter(arith::Analyzer *analyzer, int warp_size)
+      : IRMutatorWithAnalyzer(analyzer), warp_size_(warp_size) {}
 
   Stmt VisitStmt_(const EvaluateNode *op) final {
     const CallNode *call = nullptr;
@@ -412,6 +412,22 @@ private:
   }
 
   Stmt ProcessSharedSync(const CallNode *op, const std::string &scope) {
+    auto get_static_extent = [](const IterVar &iv) -> int64_t {
+      if (iv->dom.defined() && iv->dom->extent.defined()) {
+        if (auto ext = as_const_int(iv->dom->extent)) {
+          return *ext;
+        }
+      }
+      return 1;
+    };
+
+    int64_t total_block_threads = get_static_extent(tx_) *
+                                  get_static_extent(ty_) *
+                                  get_static_extent(tz_);
+
+    if (total_block_threads > 0 && total_block_threads <= warp_size_) {
+      return Stmt();
+    }
     // Get thread bounds
     auto bound_tx = analyzer_->const_int_bound(tx_);
     auto bound_ty = analyzer_->const_int_bound(ty_);
@@ -543,6 +559,7 @@ private:
       IterVar(Range::FromMinExtent(0, 1), Var("tz"), IterVarType::kDataPar);
   std::unordered_map<ThreadBoundKey, size_t> barrier_id_map_;
   std::unordered_map<ThreadBoundKey, size_t> thread_count_map_;
+  int warp_size_;
 };
 
 struct ConditionThreadProperty {
@@ -1958,7 +1975,7 @@ PrimFunc TileLangThreadSync(PrimFunc func, const std::string &storage_scope) {
   planner(stmt);
   stmt =
       ThreadSyncInserter(sync_scope, planner.syncs_inserted_)(std::move(stmt));
-  n->body = ThreadPartialSyncRewriter::Rewrite(std::move(stmt));
+  n->body = ThreadPartialSyncRewriter::Rewrite(std::move(stmt), warp_size);
   return func;
 }
 
