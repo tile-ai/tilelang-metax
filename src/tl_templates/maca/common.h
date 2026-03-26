@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "atomic.h"
 #include <common/maca_bfloat16.h>
 #include <common/maca_fp16.h>
 #include <cute/arch/mma.hpp>
