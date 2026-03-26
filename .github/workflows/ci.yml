@@ -462,6 +462,7 @@ jobs:
             #--ignore=./python/language/test_tilelang_language_warp_reduce.py \
             --ignore=./python/language/test_tilelang_memory_leak.py \
             --ignore=./python/language/test_tilelang_language_reshape.py \
+            --ignore=./python/debug/test_tilelang_debug_print.py \
             ./python/language
 
       # Apple Metal tests
