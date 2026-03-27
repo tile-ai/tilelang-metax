@@ -165,6 +165,22 @@ using float32x16 = __attribute__((__vector_size__(16 * sizeof(float)))) float;
 using float64x4 = __attribute__((__vector_size__(4 * sizeof(double)))) double;
 using int8x4 = __attribute__((__vector_size__(4 * sizeof(int8_t)))) int8_t;
 
+// Pack four char values.
+TL_DEVICE unsigned int make_uint(unsigned char x0, unsigned char x1,
+                                 unsigned char x2, unsigned char x3) {
+  return (x3 << 24) | (x2 << 16) | (x1 << 8) | x0;
+}
+
+// Pack eight char values.
+TL_DEVICE uint2 make_uint2(unsigned char x0, unsigned char x1, unsigned char x2,
+                           unsigned char x3, unsigned char y0, unsigned char y1,
+                           unsigned char y2, unsigned char y3) {
+  uint2 result;
+  result.x = make_uint(x0, x1, x2, x3);
+  result.y = make_uint(y0, y1, y2, y3);
+  return result;
+}
+
 // Pack two half_t values.
 TL_DEVICE unsigned __pack_half2(const half_t x, const half_t y) {
   unsigned v0 = *((unsigned short *)&x);
