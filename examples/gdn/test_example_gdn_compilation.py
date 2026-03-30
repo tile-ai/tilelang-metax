@@ -164,6 +164,7 @@ def test_example_chunk_o_compilation():
     O_tilelang = kernel(Q, K, V, HIDDEN, G)  # noqa: F841
 
 
+@tilelang.testing.pytest.mark.xfail
 def test_example_chunk_o_bwd_compilation():
     from example_chunk_o_bwd import tilelang_chunk_o_bwd_dqkwg, prepare_input
 

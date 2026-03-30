@@ -422,7 +422,6 @@ def run_gemm_sr(
     profiler.assert_allclose(ref_program, atol=1e-2, rtol=1e-2)
 
 
-@pytest.mark.xfail
 @pytest.mark.parametrize(
     "M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeAccum, block_M, block_N, block_K, num_stages, num_threads",
     [
