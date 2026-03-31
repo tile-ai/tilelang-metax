@@ -305,59 +305,60 @@ __tl_cvt_fp8x2_to_float2(const __maca_fp8x2_storage_t x,
 
 // e4m3 -> half
 TL_DEVICE half_t __cvt_fp8_to_half(fp8_e4_t x) {
-    half_t res;
-    res.storage = 0U;
-    unsigned short int ur = (unsigned short int)x.__x;
-    ur = (unsigned short int)(ur << 8U);
+  half_t res;
+  res.storage = 0U;
+  unsigned short int ur = (unsigned short int)x.__x;
+  ur = (unsigned short int)(ur << 8U);
 
-    // __MACA_E4M3
-    unsigned short int sign = ur & 0x8000U;
-    unsigned short int exponent = (unsigned short int)(((ur & 0x7800U) >> 1U) + 0x2000U);
-    unsigned short int mantissa = (ur & 0x0700U) >> 1U;
-    unsigned char absx = 0x7FU & (unsigned char)x.__x;
-    if (absx == 0x7FU) {// NaN
-        ur = 0x7FFFU; // fp16 canonical NaN, discard sign
-    } else if (exponent == 0x2000U) {
-        // zero or denormal
-        if (mantissa != 0U) {
-            // normalize
-            mantissa = (unsigned short int)(mantissa << 1U);
-            while ((mantissa & 0x0400U) == 0U) {
-                mantissa = (unsigned short int)(mantissa << 1U);
-                exponent = (unsigned short int)(exponent - 0x0400U);
-            }
-            // discard implicit leading bit
-            mantissa &= 0x03FFU;
-        } else { // Zero
-            exponent = 0U;
-        }
-        ur = (sign | exponent) | mantissa;
-    } else {
-        ur = (sign | exponent) | mantissa;
+  // __MACA_E4M3
+  unsigned short int sign = ur & 0x8000U;
+  unsigned short int exponent =
+      (unsigned short int)(((ur & 0x7800U) >> 1U) + 0x2000U);
+  unsigned short int mantissa = (ur & 0x0700U) >> 1U;
+  unsigned char absx = 0x7FU & (unsigned char)x.__x;
+  if (absx == 0x7FU) { // NaN
+    ur = 0x7FFFU;      // fp16 canonical NaN, discard sign
+  } else if (exponent == 0x2000U) {
+    // zero or denormal
+    if (mantissa != 0U) {
+      // normalize
+      mantissa = (unsigned short int)(mantissa << 1U);
+      while ((mantissa & 0x0400U) == 0U) {
+        mantissa = (unsigned short int)(mantissa << 1U);
+        exponent = (unsigned short int)(exponent - 0x0400U);
+      }
+      // discard implicit leading bit
+      mantissa &= 0x03FFU;
+    } else { // Zero
+      exponent = 0U;
     }
+    ur = (sign | exponent) | mantissa;
+  } else {
+    ur = (sign | exponent) | mantissa;
+  }
 
-    res.storage = ur;
-    return res;
+  res.storage = ur;
+  return res;
 }
 
 // e5m2 -> half
 TL_DEVICE half_t __cvt_fp8_to_half(fp8_e5_t x) {
-    half_t res;
-    res.storage = 0U;
-    unsigned short int ur = (unsigned short int)x.__x;
-    ur = (unsigned short int)(ur << 8U);
+  half_t res;
+  res.storage = 0U;
+  unsigned short int ur = (unsigned short int)x.__x;
+  ur = (unsigned short int)(ur << 8U);
 
-    // FP8 e5m2 -> FP16 half bits
-    unsigned short int sign     = ur & 0x8000U; // bit15
-    unsigned short int exponent = ur & 0x7C00U; // bits14..10 (5-bit exp)
-    unsigned short int mantissa = ur & 0x0300U; // bits9..8 (2-bit mantissa)
+  // FP8 e5m2 -> FP16 half bits
+  unsigned short int sign = ur & 0x8000U;     // bit15
+  unsigned short int exponent = ur & 0x7C00U; // bits14..10 (5-bit exp)
+  unsigned short int mantissa = ur & 0x0300U; // bits9..8 (2-bit mantissa)
 
-    if ((exponent == 0x7C00U) && (mantissa != 0)) {
-        mantissa |= 0x0200U; // quiet bit: half mantissa bit9
-    }
+  if ((exponent == 0x7C00U) && (mantissa != 0)) {
+    mantissa |= 0x0200U; // quiet bit: half mantissa bit9
+  }
 
-    ur = (sign | exponent) | mantissa;
+  ur = (sign | exponent) | mantissa;
 
-    res.storage = ur;
-    return res;
+  res.storage = ur;
+  return res;
 }

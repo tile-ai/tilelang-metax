@@ -898,14 +898,14 @@ std::string CodeGenTileLangMACA::CastFromTo(std::string value, DataType from,
     os << ")";
     if (from.is_float16() && (target.is_int() || target.is_uint()) &&
         target.bits() == 8) {
-        os << "(";
-        if (target.is_uint()) {
-            os << "u";
-        }
-        os << "int)";
+      os << "(";
+      if (target.is_uint()) {
+        os << "u";
+      }
+      os << "int)";
     }
     if ((from.is_float16() || from.is_bfloat16()) && target.is_float8()) {
-        os << "(float)";
+      os << "(float)";
     }
     os << value << ")";
   }
@@ -1801,8 +1801,7 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
         {"bfloat16x4", "bfloat16x4_vec"},
         {"float32x4", "float32x4"},
         {"float8_e4m3", "fp8_e4_t"},
-        {"float8_e5m2", "fp8_e5_t"}
-        {"float8_e4m3fnuzx4", "fp8_e4_4_t"},
+        {"float8_e5m2", "fp8_e5_t"} {"float8_e4m3fnuzx4", "fp8_e4_4_t"},
         {"float8_e4m3fnuzx8", "long"},
         {"float32x16", "float32x16"}};
     std::string call_mfma_code = R"({
