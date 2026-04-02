@@ -193,6 +193,8 @@ std::pair<int, int> GemmWarpPolicyNode::computeWarpPartition(
     kNPerWarp = 16;
   } else if (TargetIsCDNA(target)) {
     kNPerWarp = 16;
+  } else if (TargetIsMaca(target)) {
+    kNPerWarp = 16;
   } else if (TargetIsRDNA(target)) {
     kNPerWarp = 16;
   }
@@ -316,9 +318,6 @@ std::pair<int, int> GemmWarpPolicyNode::computeWarpPartition(
     int max_m_warps =
         M / kMPerWarp; // Each warp needs at least 16 elements in M
     int max_n_warps = N / kNPerWarp; // Each warp needs at least 8 elements in N
-    if (TargetIsMetaxC500(target)) {
-      max_n_warps = N / 16;
-    }
 
     // Calculate the ideal ratio of M/N warps based on the matrix dimensions
     float ideal_ratio = 1.0f;
