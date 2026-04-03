@@ -1178,8 +1178,7 @@ void CodeGenTileLangMACA::VisitExpr_(const MinNode *op, std::ostream &os) {
 
   // Standard min/max functions don't support bfloat16 or float16
   if ((t.is_bfloat16() || t.is_float16()) && t.is_scalar()) {
-    os << "mctlass::fast_min(" << "(float)" << PrintExpr(op->a) << ", "
-       << "(float)" << PrintExpr(op->b) << ")";
+    os << "__hmin(" << PrintExpr(op->a) << ", " << PrintExpr(op->b) << ")";
     return;
   }
 
@@ -1201,8 +1200,7 @@ void CodeGenTileLangMACA::VisitExpr_(const MaxNode *op, std::ostream &os) {
 
   // Standard min/max functions don't support bfloat16 or float16
   if ((t.is_bfloat16() || t.is_float16()) && t.is_scalar()) {
-    os << "mctlass::fast_max(" << "(float)" << PrintExpr(op->a) << ", "
-       << "(float)" << PrintExpr(op->b) << ")";
+    os << "__hmax(" << PrintExpr(op->a) << ", " << PrintExpr(op->b) << ")";
     return;
   }
 
