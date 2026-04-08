@@ -295,3 +295,145 @@ TL_DEVICE half_t shfl_xor_sync(uint64_t mask, half_t val, int laneMask) {
 }
 
 } // namespace tl
+
+namespace tl {
+
+using uint1 = unsigned int;
+
+template <typename T> TL_DEVICE T from_uint1(::uint1 v) {
+  T r;
+  __builtin_memcpy(&r, &v, sizeof(T));
+  return r;
+}
+
+template <typename T> TL_DEVICE ::uint1 to_uint1(T v) {
+  ::uint1 r;
+  __builtin_memcpy(&r, &v, sizeof(::uint1));
+  return r;
+}
+
+//  --- add2
+//  --------------------------------------------------------------------------
+
+TL_DEVICE float2 add2(float2 a, float2 b) {
+  return make_float2(a.x + b.x, a.y + b.y);
+}
+TL_DEVICE float16x2 add2(float16x2 a, float16x2 b) { return a + b; }
+
+TL_DEVICE bfloat16x2 add2(bfloat16x2 a, bfloat16x2 b) {
+  bfloat16x2 out;
+  out.data[0] = a.data[0] + b.data[0];
+  out.data[1] = a.data[1] + b.data[1];
+  return out;
+}
+
+//  --- sub2
+//  --------------------------------------------------------------------------
+
+TL_DEVICE float2 sub2(float2 a, float2 b) {
+  return make_float2(a.x - b.x, a.y - b.y);
+}
+
+TL_DEVICE float16x2 sub2(float16x2 a, float16x2 b) { return a - b; }
+
+TL_DEVICE bfloat16x2 sub2(bfloat16x2 a, bfloat16x2 b) {
+  bfloat16x2 out;
+  out.data[0] = a.data[0] - b.data[0];
+  out.data[1] = a.data[1] - b.data[1];
+  return out;
+}
+
+//  --- mul2
+//  --------------------------------------------------------------------------
+
+TL_DEVICE float2 mul2(float2 a, float2 b) {
+  return make_float2(a.x * b.x, a.y * b.y);
+}
+
+TL_DEVICE float16x2 mul2(float16x2 a, float16x2 b) { return a * b; }
+
+TL_DEVICE bfloat16x2 mul2(bfloat16x2 a, bfloat16x2 b) {
+  bfloat16x2 out;
+  out.data[0] = a.data[0] * b.data[0];
+  out.data[1] = a.data[1] * b.data[1];
+  return out;
+}
+
+//  --- fma2
+//  --------------------------------------------------------------------------
+
+TL_DEVICE float2 fma2(float2 a, float2 b, float2 c) {
+  return make_float2(a.x * b.x + c.x, a.y * b.y + c.y);
+}
+TL_DEVICE float16x2 fma2(float16x2 a, float16x2 b, float16x2 c) {
+  return a * b + c;
+}
+TL_DEVICE bfloat16x2 fma2(bfloat16x2 a, bfloat16x2 b, bfloat16x2 c) {
+  bfloat16x2 out;
+  out.data[0] = a.data[0] * b.data[0] + c.data[0];
+  out.data[1] = a.data[1] * b.data[1] + c.data[1];
+  return out;
+}
+
+//  --- max2
+//  --------------------------------------------------------------------------
+
+TL_DEVICE float2 max2(float2 a, float2 b) {
+  return make_float2(fmaxf(a.x, b.x), fmaxf(a.y, b.y));
+}
+
+TL_DEVICE float16x2 max2(float16x2 a, float16x2 b) {
+  float16x2 out;
+  out[0] = a[0] > b[0] ? a[0] : b[0];
+  out[1] = a[1] > b[1] ? a[1] : b[1];
+  return out;
+}
+
+TL_DEVICE bfloat16x2 max2(bfloat16x2 a, bfloat16x2 b) {
+  bfloat16x2 out;
+  out.data[0] = (float(a.data[0]) > float(b.data[0])) ? a.data[0] : b.data[0];
+  out.data[1] = (float(a.data[1]) > float(b.data[1])) ? a.data[1] : b.data[1];
+  return out;
+}
+
+//  --- min2
+//  --------------------------------------------------------------------------
+
+TL_DEVICE float2 min2(float2 a, float2 b) {
+  return make_float2(fminf(a.x, b.x), fminf(a.y, b.y));
+}
+
+TL_DEVICE float16x2 min2(float16x2 a, float16x2 b) {
+  float16x2 out;
+  out[0] = (float(a[0]) < float(b[0])) ? a[0] : b[0];
+  out[1] = (float(a[1]) < float(b[1])) ? a[1] : b[1];
+  return out;
+}
+
+TL_DEVICE bfloat16x2 min2(bfloat16x2 a, bfloat16x2 b) {
+  bfloat16x2 out;
+  out.data[0] = (float(a.data[0]) < float(b.data[0])) ? a.data[0] : b.data[0];
+  out.data[1] = (float(a.data[1]) < float(b.data[1])) ? a.data[1] : b.data[1];
+  return out;
+}
+
+//  --- abs2
+//  --------------------------------------------------------------------------
+
+TL_DEVICE float2 abs2(float2 a) { return make_float2(fabsf(a.x), fabsf(a.y)); }
+
+TL_DEVICE float16x2 abs2(float16x2 a) {
+  float16x2 out;
+  out[0] = (a[0] < _Float16(0.0f)) ? -a[0] : a[0];
+  out[1] = (a[1] < _Float16(0.0f)) ? -a[1] : a[1];
+  return out;
+}
+
+TL_DEVICE bfloat16x2 abs2(bfloat16x2 a) {
+  bfloat16x2 out;
+  out.data[0] = (float(a.data[0]) < 0.0f) ? -a.data[0] : a.data[0];
+  out.data[1] = (float(a.data[1]) < 0.0f) ? -a.data[1] : a.data[1];
+  return out;
+}
+
+} // namespace tl

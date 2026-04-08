@@ -587,6 +587,51 @@ void CodeGenTileLangMACA::PrintType(DataType t, std::ostream &os) { // NOLINT(*)
 void CodeGenTileLangMACA::PrintVecBinaryOp(const std::string &op, DataType t,
                                            PrimExpr lhs, PrimExpr rhs,
                                            std::ostream &os) { // NOLINT(*)
+  if (t.lanes() == 2) {
+    bool is_f32x2 = t.is_float() && t.bits() == 32;
+    bool is_bf16x2 = t.is_bfloat16();
+    bool is_fp16x2 = t.is_float16();
+
+    bool should_emit = is_f32x2 || is_bf16x2 || is_fp16x2;
+
+    if (should_emit) {
+      // Map TIR binary-op strings to tl:: packed helpers.
+      // Note: fma (ternary) and abs (unary) cannot appear here.
+      std::string tl_func;
+      if (op == "+")
+        tl_func = "add2";
+      else if (op == "-")
+        tl_func = "sub2";
+      else if (op == "*")
+        tl_func = "mul2";
+      else if (op == "min")
+        tl_func = "min2";
+      else if (op == "max")
+        tl_func = "max2";
+
+      if (!tl_func.empty()) {
+        bool need_cast = is_bf16x2 || is_fp16x2;
+        std::string native_type;
+        if (is_bf16x2) {
+          native_type = "bfloat16x2";
+        } else if (is_fp16x2) {
+          native_type = "float16x2";
+        }
+
+        std::string lhs_str = PrintExpr(lhs);
+        std::string rhs_str = PrintExpr(rhs);
+
+        if (need_cast) {
+          os << "tl::to_uint1(tl::" << tl_func << "("
+             << "tl::from_uint1<" << native_type << ">(" << lhs_str << "), "
+             << "tl::from_uint1<" << native_type << ">(" << rhs_str << ")))";
+        } else {
+          os << "tl::" << tl_func << "(" << lhs_str << ", " << rhs_str << ")";
+        }
+        return;
+      }
+    }
+  }
   // Declare the result.
   std::string sret = name_supply_->FreshName("_");
   this->PrintIndent();
@@ -1999,6 +2044,59 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
       os << "_double";
     }
     os << "(&" << this->mcrand_random_generator_state << ")";
+  } else if (op->op.same_as(tl::add2()) || op->op.same_as(tl::sub2()) ||
+             op->op.same_as(tl::mul2()) || op->op.same_as(tl::fma2()) ||
+             op->op.same_as(tl::max2()) || op->op.same_as(tl::min2()) ||
+             op->op.same_as(tl::abs2())) {
+    std::string op_name;
+    if (op->op.same_as(tl::add2()))
+      op_name = "add2";
+    else if (op->op.same_as(tl::sub2()))
+      op_name = "sub2";
+    else if (op->op.same_as(tl::mul2()))
+      op_name = "mul2";
+    else if (op->op.same_as(tl::fma2()))
+      op_name = "fma2";
+    else if (op->op.same_as(tl::max2()))
+      op_name = "max2";
+    else if (op->op.same_as(tl::min2()))
+      op_name = "min2";
+    else
+      op_name = "abs2";
+
+    DataType dtype = op->dtype;
+    bool need_cast = dtype.is_bfloat16() || dtype.is_float16();
+    std::string native_type;
+
+    if (dtype.is_bfloat16()) {
+      native_type = "bfloat16x2";
+    } else if (dtype.is_float16()) {
+      native_type = "float16x2";
+    }
+
+    auto print_arg = [&](int idx) -> std::string {
+      std::string arg_str = PrintExpr(op->args[idx]);
+      if (need_cast) {
+        return "tl::from_uint1<" + native_type + ">(" + arg_str + ")";
+      }
+      return arg_str;
+    };
+
+    if (need_cast) {
+      os << "tl::to_uint1(tl::" << op_name << "(";
+    } else {
+      os << "tl::" << op_name << "(";
+    }
+
+    os << print_arg(0);
+    for (size_t i = 1; i < op->args.size(); ++i) {
+      os << ", " << print_arg(i);
+    }
+    os << ")";
+
+    if (need_cast) {
+      os << ")";
+    }
   } else if (op->op.same_as(tl::warp_reduce_sum())) {
     os << "tl::warp_reduce_sum(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::warp_reduce_max())) {
