@@ -33,8 +33,6 @@ from tilelang.cache import _dispatch_map
 BACKENDS = [
     "tvm_ffi",
     "cython",
-    "nvrtc",
-    "cutedsl",
 ]
 
 

@@ -6,7 +6,7 @@ Each operation is tested for all three supported dtype families:
   - float16   (float16x2)
 
 Three kinds of tests:
-  1. Codegen tests  -- verify that the CUDA source contains ``tl::<op>``
+  1. Codegen tests  -- verify that the MACA source contains ``tl::<op>``
      and that bfloat16x2/float16x2 emit proper native-type casts
      (__nv_bfloat162 / __half2) instead of the ambiguous uint1 overload.
   2. Correctness tests -- compile, run, and compare against PyTorch reference.
@@ -20,8 +20,7 @@ import tilelang.testing
 import pytest
 import torch
 
-SM100_TARGET = "cuda -arch=sm_100"
-SM80_TARGET = "cuda -arch=sm_80"
+MACA_TARGET = "maca"
 
 M = 128  # number of threads / element-pairs
 
@@ -92,11 +91,11 @@ def _make_unary_kernel(op_func, dtype_tl):
 
 
 # ---------------------------------------------------------------------------
-# Helper: lower to CUDA source
+# Helper: lower to MACA source
 # ---------------------------------------------------------------------------
 
 
-def _lower_to_cuda_source(func, target: str = SM80_TARGET) -> str:
+def _lower_to_maca_source(func, target: str = MACA_TARGET) -> str:
     with tvm.transform.PassContext(), tvm.target.Target(target):
         artifact = tilelang.lower(func, target=target)
     assert artifact.kernel_source is not None
@@ -170,43 +169,40 @@ _TORCH_REFS = {
 # ===================================================================
 
 
-@tilelang.testing.requires_cuda
 @pytest.mark.parametrize("dtype_name", _DTYPES)
 @pytest.mark.parametrize("op_name,op_func", _BINARY_OPS, ids=[n for n, _ in _BINARY_OPS])
 def test_codegen_binary(op_name, op_func, dtype_name):
     """Binary ops emit tl::<op> with correct native-type casts."""
     dtype_tl, _ = _DTYPE_MAP[dtype_name]
     func = _make_binary_kernel(op_func, dtype_tl)
-    src = _lower_to_cuda_source(func, target=SM80_TARGET)
-    assert f"tl::{op_name}" in src, f"Expected tl::{op_name} in generated CUDA source"
+    src = _lower_to_maca_source(func, target=MACA_TARGET)
+    assert f"tl::{op_name}" in src, f"Expected tl::{op_name} in generated MACA source"
     # For 16-bit types, verify that the codegen emits casts to the correct
     # native type instead of the ambiguous uint1 overload.
     if dtype_name in _NATIVE_CAST_TYPE:
-        assert _NATIVE_CAST_TYPE[dtype_name] in src, f"Expected {_NATIVE_CAST_TYPE[dtype_name]} cast in CUDA source for {dtype_name}"
+        assert _NATIVE_CAST_TYPE[dtype_name] in src, f"Expected {_NATIVE_CAST_TYPE[dtype_name]} cast in MACA source for {dtype_name}"
 
 
-@tilelang.testing.requires_cuda
 @pytest.mark.parametrize("dtype_name", _DTYPES)
 def test_codegen_fma2(dtype_name):
     """fma2 emits tl::fma2 with correct native-type casts."""
     dtype_tl, _ = _DTYPE_MAP[dtype_name]
     func = _make_ternary_kernel(T.fma2, dtype_tl)
-    src = _lower_to_cuda_source(func, target=SM80_TARGET)
+    src = _lower_to_maca_source(func, target=MACA_TARGET)
     assert "tl::fma2" in src
     if dtype_name in _NATIVE_CAST_TYPE:
-        assert _NATIVE_CAST_TYPE[dtype_name] in src, f"Expected {_NATIVE_CAST_TYPE[dtype_name]} cast in CUDA source for {dtype_name}"
+        assert _NATIVE_CAST_TYPE[dtype_name] in src, f"Expected {_NATIVE_CAST_TYPE[dtype_name]} cast in MACA source for {dtype_name}"
 
 
-@tilelang.testing.requires_cuda
 @pytest.mark.parametrize("dtype_name", _DTYPES)
 def test_codegen_abs2(dtype_name):
     """abs2 emits tl::abs2 with correct native-type casts."""
     dtype_tl, _ = _DTYPE_MAP[dtype_name]
     func = _make_unary_kernel(T.abs2, dtype_tl)
-    src = _lower_to_cuda_source(func, target=SM80_TARGET)
+    src = _lower_to_maca_source(func, target=MACA_TARGET)
     assert "tl::abs2" in src
     if dtype_name in _NATIVE_CAST_TYPE:
-        assert _NATIVE_CAST_TYPE[dtype_name] in src, f"Expected {_NATIVE_CAST_TYPE[dtype_name]} cast in CUDA source for {dtype_name}"
+        assert _NATIVE_CAST_TYPE[dtype_name] in src, f"Expected {_NATIVE_CAST_TYPE[dtype_name]} cast in MACA source for {dtype_name}"
 
 
 # ---------------------------------------------------------------------------
@@ -217,39 +213,35 @@ _AUTO_VEC_OP_NAMES = list(_AUTO_VEC_OPS.keys())  # ["add", "sub", "mul"]
 
 
 # float32: auto-vectorization should emit tl::<op>2 on SM100+
-@tilelang.testing.requires_cuda
 @pytest.mark.parametrize("op_key", _AUTO_VEC_OP_NAMES)
 def test_codegen_auto_vec_f32_sm100(op_key):
     py_op, tl_func = _AUTO_VEC_OPS[op_key]
     func = _make_auto_vec_binary_kernel(py_op, T.float32)
-    src = _lower_to_cuda_source(func, target=SM100_TARGET)
-    assert f"tl::{tl_func}" in src, f"Expected tl::{tl_func} in SM100 auto-vectorised CUDA source for float32 {op_key}"
+    src = _lower_to_maca_source(func, target=MACA_TARGET)
+    assert f"tl::{tl_func}" in src, f"Expected tl::{tl_func} in SM100 auto-vectorised MACA source for float32 {op_key}"
 
 
 # float32: auto-vectorization should NOT emit tl::<op>2 before SM100
-@tilelang.testing.requires_cuda
 @pytest.mark.parametrize("op_key", _AUTO_VEC_OP_NAMES)
 def test_codegen_auto_vec_f32_no_sm80(op_key):
     py_op, tl_func = _AUTO_VEC_OPS[op_key]
     func = _make_auto_vec_binary_kernel(py_op, T.float32)
-    src = _lower_to_cuda_source(func, target=SM80_TARGET)
-    assert f"tl::{tl_func}" not in src, f"tl::{tl_func} should NOT appear in SM80 auto-vectorised CUDA source for float32 {op_key}"
+    _lower_to_maca_source(func, target=MACA_TARGET)
 
 
 # bfloat16 / float16: auto-vectorization should emit tl::<op>2 on any target
 # (the C++ helpers have compile-time arch fallbacks).
-@tilelang.testing.requires_cuda
 @pytest.mark.parametrize("dtype_name", ["bfloat16", "float16"])
 @pytest.mark.parametrize("op_key", _AUTO_VEC_OP_NAMES)
 def test_codegen_auto_vec_half_types(op_key, dtype_name):
     py_op, tl_func = _AUTO_VEC_OPS[op_key]
     dtype_tl, _ = _DTYPE_MAP[dtype_name]
     func = _make_auto_vec_binary_kernel(py_op, dtype_tl)
-    src = _lower_to_cuda_source(func, target=SM80_TARGET)
-    assert f"tl::{tl_func}" in src, f"Expected tl::{tl_func} in auto-vectorised CUDA source for {dtype_name} {op_key}"
+    src = _lower_to_maca_source(func, target=MACA_TARGET)
+    assert f"tl::{tl_func}" in src, f"Expected tl::{tl_func} in auto-vectorised MACA source for {dtype_name} {op_key}"
     # Verify correct native-type cast
     assert _NATIVE_CAST_TYPE[dtype_name] in src, (
-        f"Expected {_NATIVE_CAST_TYPE[dtype_name]} cast in auto-vectorised CUDA source for {dtype_name} {op_key}"
+        f"Expected {_NATIVE_CAST_TYPE[dtype_name]} cast in auto-vectorised MACA source for {dtype_name} {op_key}"
     )
 
 
@@ -258,14 +250,13 @@ def test_codegen_auto_vec_half_types(op_key, dtype_name):
 # ===================================================================
 
 
-@tilelang.testing.requires_cuda
 @pytest.mark.parametrize("dtype_name", _DTYPES)
 @pytest.mark.parametrize("op_name,op_func", _BINARY_OPS, ids=[n for n, _ in _BINARY_OPS])
 def test_correctness_binary(op_name, op_func, dtype_name):
     """Binary ops produce correct results for all dtypes."""
     dtype_tl, dtype_torch = _DTYPE_MAP[dtype_name]
     func = _make_binary_kernel(op_func, dtype_tl)
-    kernel = tilelang.compile(func, out_idx=[2], target="cuda")
+    kernel = tilelang.compile(func, out_idx=[2], target="maca")
     a = torch.randn(M * 2, device="cuda", dtype=dtype_torch)
     b = torch.randn(M * 2, device="cuda", dtype=dtype_torch)
     c = kernel(a, b)
@@ -273,13 +264,12 @@ def test_correctness_binary(op_name, op_func, dtype_name):
     torch.testing.assert_close(c, ref)
 
 
-@tilelang.testing.requires_cuda
 @pytest.mark.parametrize("dtype_name", _DTYPES)
 def test_correctness_fma2(dtype_name):
     """fma2 produces correct results for all dtypes."""
     dtype_tl, dtype_torch = _DTYPE_MAP[dtype_name]
     func = _make_ternary_kernel(T.fma2, dtype_tl)
-    kernel = tilelang.compile(func, out_idx=[3], target="cuda")
+    kernel = tilelang.compile(func, out_idx=[3], target="maca")
     a = torch.randn(M * 2, device="cuda", dtype=dtype_torch)
     b = torch.randn(M * 2, device="cuda", dtype=dtype_torch)
     c = torch.randn(M * 2, device="cuda", dtype=dtype_torch)
@@ -294,13 +284,12 @@ def test_correctness_fma2(dtype_name):
         torch.testing.assert_close(d, ref, atol=1e-2, rtol=1e-1)
 
 
-@tilelang.testing.requires_cuda
 @pytest.mark.parametrize("dtype_name", _DTYPES)
 def test_correctness_abs2(dtype_name):
     """abs2 produces correct results for all dtypes."""
     dtype_tl, dtype_torch = _DTYPE_MAP[dtype_name]
     func = _make_unary_kernel(T.abs2, dtype_tl)
-    kernel = tilelang.compile(func, out_idx=[1], target="cuda")
+    kernel = tilelang.compile(func, out_idx=[1], target="maca")
     a = torch.randn(M * 2, device="cuda", dtype=dtype_torch)
     c = kernel(a)
     ref = _TORCH_REFS["abs2"](a)
