@@ -85,7 +85,6 @@ class GemmMACAMMA(GemmBase):
             thread_var=thread_var,
         )
 
-        in_dtype = self.in_dtype
         mma_input_dtype = mma_emitter.mma_input_dtype
         warp_rows = mma_emitter.warp_rows
         warp_cols = mma_emitter.warp_cols
