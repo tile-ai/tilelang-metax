@@ -31,7 +31,6 @@ def test_example_gqa_sink_bwd_bhsd_sliding_window():
     example_gqa_sink_bwd_bhsd.main(window_size=128)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_gqa_sink_varlen():
     example_gqa_sink_fwd_varlen.main()  # non-causal
     example_gqa_sink_bwd_varlen.main()  # causal

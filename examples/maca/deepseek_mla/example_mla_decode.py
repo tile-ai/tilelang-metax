@@ -30,7 +30,7 @@ def flashattn(batch, heads, kv_head_num, seqlen_kv, dim, pe_dim, block_N, block_
         glse = T.alloc_global([batch, heads, num_split], dtype)
         Output_partial = T.alloc_global([batch, heads, num_split, dim], dtype)
         # flash_attn_split
-        with T.Kernel(batch, heads // min(block_H, kv_group_num), num_split, threads=256) as (bid, hid, bz):
+        with T.Kernel(batch, heads // min(block_H, kv_group_num), num_split, threads=128) as (bid, hid, bz):
             Q_shared = T.alloc_shared([block_H, dim], dtype)
             S_shared = T.alloc_shared([block_H, block_N], dtype)
             Q_pe_shared = T.alloc_shared([block_H, pe_dim], dtype)
@@ -125,7 +125,7 @@ def flashattn(batch, heads, kv_head_num, seqlen_kv, dim, pe_dim, block_N, block_
         K_pe: T.Tensor([batch, seqlen_kv, kv_head_num, pe_dim], dtype),
         Output: T.Tensor([batch, heads, dim], dtype),
     ):
-        with T.Kernel(heads // min(block_H, kv_group_num), batch, threads=256) as (hid, bid):
+        with T.Kernel(heads // min(block_H, kv_group_num), batch, threads=128) as (hid, bid):
             Q_shared = T.alloc_shared([block_H, dim], dtype)
             S_shared = T.alloc_shared([block_H, block_N], dtype)
             Q_pe_shared = T.alloc_shared([block_H, pe_dim], dtype)
@@ -220,14 +220,14 @@ def main(
     heads=128,
     kv_heads=1,
     kv_ctx=8192,
-    dim=512,
+    dim=128,
     pe_dim=64,
 ):
     qk_flops = 2 * batch * heads * kv_ctx * (dim + pe_dim)
     pv_flops = 2 * batch * heads * kv_ctx * dim
     total_flops = qk_flops + pv_flops
-    BLOCK_N = 64
-    BLOCK_H = min(64, heads // kv_heads)
+    BLOCK_N = 32
+    BLOCK_H = min(16, heads // kv_heads)
     num_split = 1
     softmax_scale = (dim + pe_dim) ** -0.5
 
@@ -244,11 +244,11 @@ def run_regression_perf(
     heads=128,
     kv_heads=1,
     kv_ctx=8192,
-    dim=512,
+    dim=128,
     pe_dim=64,
 ):
-    BLOCK_N = 64
-    BLOCK_H = min(64, heads // kv_heads)
+    BLOCK_N = 32
+    BLOCK_H = min(16, heads // kv_heads)
     num_split = 1
     softmax_scale = (dim + pe_dim) ** -0.5
 

@@ -4,7 +4,6 @@ import tilelang.testing
 import example_mla_decode
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_mla_decode():
     example_mla_decode.main()
 

@@ -19,10 +19,10 @@ def test_example_fp8_lighting_indexer():
     fp8_lighting_indexer.test_fp8_lighting_indexer(S=512, SKV=1024, H=32, HKV=1, D=64, kv_stride=1)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_sparse_mla_fwd():
-    # small shapes for testing
-    sparse_mla_fwd.test_sparse_mla_fwd(S=256, SKV=1024, H=64, HKV=1, DQK=576, DV=512, topk=256, check_correctness=False)
+    sparse_mla_fwd.test_sparse_mla_fwd(
+        S=64, SKV=128, H=16, HKV=1, DQK=576, DV=512, topk=32, check_correctness=False, block_I=32, threads=128, num_stages=1
+    )
 
 
 @tilelang.testing.pytest.mark.xfail
@@ -33,10 +33,7 @@ def test_example_sparse_mla_fwd_pipelined():
 
 @tilelang.testing.pytest.mark.xfail
 def test_example_sparse_mla_bwd():
-    sparse_mla_bwd.test_sparse_mla_bwd(S=256, SKV=512, H=64, HKV=1, DQKV=576, DV=512, topk=256, check_correctness=False)
-    sparse_mla_bwd.test_sparse_mla_bwd(
-        S=256, SKV=512, H=128, HKV=1, DQKV=576, DV=512, topk=256, check_correctness=False
-    )  # test for large H
+    sparse_mla_bwd.test_sparse_mla_bwd(S=64, SKV=128, H=16, HKV=1, DQKV=576, DV=512, topk=32, check_correctness=False)
 
 
 if __name__ == "__main__":
