@@ -97,6 +97,7 @@ For PartitionLoop(For op, Var thread_var, arith::Analyzer *analyzer,
     ICHECK(loop != nullptr)
         << "No extra statements are allowed between nested parallel loops.";
     vmap.Set(loop->loop_var, indices[i]);
+    analyzer->Bind(loop->loop_var, indices[i], true);
     loop_mins.push_back(loop->min);
     loop_extents.push_back(loop->extent);
     body = loop->body;
