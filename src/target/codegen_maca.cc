@@ -48,9 +48,12 @@ static std::string GetTileLangFP8Type(DataType type) {
         << "Only support scalar and vector types of width (2, 4, 8, 16, 32) "
            "for FP8";
   }
-  if (type.is_float8_e4m3() || type.is_float8_e4m3fn()) {
+  if (type.is_float8_e4m3() || type.is_float8_e4m3fn() ||
+      type.is_float8_e4m3fnuz() ||
+      type.code() == DataType::kFloat8_e4m3b11fnuz) {
     stream << "fp8_e4" << vec << "_t";
-  } else if (type.is_float8_e5m2()) {
+  } else if (type.is_float8_e5m2() || type.is_float8_e5m2fnuz() ||
+             type.code() == DataType::kFloat8_e5m2) {
     stream << "fp8_e5" << vec << "_t";
   } else if (type.is_float8_e8m0fnu()) {
     stream << "fp8_e8" << vec << "_t";
@@ -362,6 +365,8 @@ void CodeGenTileLangMACA::PrintType(DataType t, std::ostream &os) { // NOLINT(*)
         ICHECK_EQ(lanes % 2, 0)
             << "only support even lane for float type with lanes > 4";
         os << "ulonglong" << lanes / 2;
+      } else if (lanes == 16 || lanes == 32) {
+        os << "float32x" << lanes;
       } else {
         fail = true;
       }
@@ -375,7 +380,8 @@ void CodeGenTileLangMACA::PrintType(DataType t, std::ostream &os) { // NOLINT(*)
     }
     if (!fail && (t.is_scalar() || t.bits() == 16))
       return;
-    if (!fail && (lanes > 4 && lanes <= 8 && t.bits() == 32))
+    if (!fail && t.bits() == 32 &&
+        ((lanes > 4 && lanes <= 8) || lanes == 16 || lanes == 32))
       return;
     if (!fail && (lanes >= 2 && lanes <= 4)) {
       os << lanes;
@@ -629,7 +635,11 @@ void CodeGenTileLangMACA::PrintVecElemLoad(const std::string &vec, DataType t,
   }
 
   static const char access[] = {'x', 'y', 'z', 'w'};
-  ICHECK(i >= 0 && i < 256 / t.bits())
+  int max_lanes = 256 / t.bits();
+  if (t.is_float() && t.bits() == 32 && (t.lanes() == 16 || t.lanes() == 32)) {
+    max_lanes = t.lanes();
+  }
+  ICHECK(i >= 0 && i < max_lanes)
       << "i: " << i << " t: " << t << " t.bits(): " << t.bits()
       << " t.lanes(): " << t.lanes();
   if (t.bits() == 8 && (t.is_int() || t.is_uint())) {
@@ -692,6 +702,9 @@ void CodeGenTileLangMACA::PrintVecElemLoad(const std::string &vec, DataType t,
       os << "." << access[(i % 4) / 2];
     // fp4_e2_2_t -> method call x() or y()
     os << "." << access[i % 2] << "()";
+  } else if (t.is_float() && t.bits() == 32 &&
+             (t.lanes() == 16 || t.lanes() == 32)) {
+    os << vec << "[" << i << "]";
   } else if (t.lanes() > 4 && t.lanes() <= 8) {
     std::string type_name;
     if (t.bits() == 16) {
@@ -721,7 +734,11 @@ void CodeGenTileLangMACA::PrintVecElemStore(const std::string &vec, DataType t,
                                             int i, const std::string &value) {
   this->PrintIndent();
   static const char access[] = {'x', 'y', 'z', 'w'};
-  ICHECK(i >= 0 && i < 256 / t.bits());
+  int max_lanes = 256 / t.bits();
+  if (t.is_float() && t.bits() == 32 && (t.lanes() == 16 || t.lanes() == 32)) {
+    max_lanes = t.lanes();
+  }
+  ICHECK(i >= 0 && i < max_lanes);
   if (t.bits() == 8 && (t.is_int() || t.is_uint())) {
     if (t.lanes() == 2 || t.lanes() == 3) {
       stream << vec << '.' << access[i % t.lanes()] << "="
@@ -795,6 +812,9 @@ void CodeGenTileLangMACA::PrintVecElemStore(const std::string &vec, DataType t,
     ICHECK(!type_name.empty());
     stream << "((" << type_name << "2*)(&(" << vec << "." << access[i / 2]
            << ")))->" << access[i % 2] << " = " << value << ";\n";
+  } else if (t.is_float() && t.bits() == 32 &&
+             (t.lanes() == 16 || t.lanes() == 32)) {
+    stream << vec << "[" << i << "] = " << value << ";\n";
   } else if (t.is_float4_e2m1fn()) {
     stream << vec;
     // fp4_e2_64_t
@@ -1791,9 +1811,20 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
         {"float16x4", "float16x4"},
         {"bfloat16x4", "bfloat16x4_vec"},
         {"float32x4", "float32x4"},
+        {"float8_e4m3x4", "fp8_e4_4_t"},
+        {"float8_e4m3x8", "long"},
+        {"float8_e4m3fnx4", "fp8_e4_4_t"},
+        {"float8_e4m3fnx8", "long"},
         {"float8_e4m3fnuzx4", "fp8_e4_4_t"},
         {"float8_e4m3fnuzx8", "long"},
-        {"float32x16", "float32x16"}};
+        {"float8_e4m3b11fnuzx4", "fp8_e4_4_t"},
+        {"float8_e4m3b11fnuzx8", "long"},
+        {"float8_e5m2x4", "fp8_e5_4_t"},
+        {"float8_e5m2x8", "long"},
+        {"float8_e5m2fnuzx4", "fp8_e5_4_t"},
+        {"float8_e5m2fnuzx8", "long"},
+        {"float32x16", "float32x16"},
+        {"float32x32", "float32x32"}};
     std::string call_mfma_code = R"({
       *((({C_dtype}*){c_ref}) + {c_bias}) = {mfma_buildin}(*((({A_dtype}*){a_ref}) + {a_bias}),
                     *((({B_dtype}*){b_ref}) + {b_bias}),
@@ -2083,6 +2114,8 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
       os << ", " << PrintExpr(op->args[2]);
     }
     os << ")";
+  } else if (op->op.same_as(tl::tl_shuffle_elect())) {
+    os << "tl::tl_shuffle_elect<" << PrintExpr(op->args[0]) << ">()";
   } else if (op->op.same_as(tl::tl_gemm_sp())) {
     ICHECK(op->args.size() == 5)
         << "tl_gemm_sp expects 5 arguments <op_instance, A_ptr, B_ptr, C_ptr, "
@@ -2450,27 +2483,77 @@ void CodeGenTileLangMACA::VisitExpr_(const BroadcastNode *op,
     if (lanes == 4) {
       // make_int8x4
       const int64_t *p = as_const_int(op->value);
-      ICHECK(p);
-      int64_t v = *p & 0xFF;
-      v = (v << 24) | (v << 16) | (v << 8) | v;
-      if (op->dtype.is_uint()) {
-        os << "(uint)" << v;
+      if (p) {
+        int64_t v = *p & 0xFF;
+        v = (v << 24) | (v << 16) | (v << 8) | v;
+        if (op->dtype.is_uint()) {
+          os << "(uint)" << v;
+        } else {
+          os << "(int)" << v;
+        }
       } else {
-        os << "(int)" << v;
+        std::string scalar = PrintExpr(op->value);
+        std::string byte = "((" + scalar + ") & 0xFF)";
+        os << "(" << (op->dtype.is_uint() ? "uint" : "int") << ")("
+           << byte << " | (" << byte << " << 8) | (" << byte << " << 16) | ("
+           << byte << " << 24))";
       }
+      return;
+    } else if (lanes == 8 || lanes == 16) {
+      const int64_t *p = as_const_int(op->value);
+      std::string packed32;
+      if (p) {
+        int64_t v = *p & 0xFF;
+        v = (v << 24) | (v << 16) | (v << 8) | v;
+        std::ostringstream oss;
+        oss << "(" << (op->dtype.is_uint() ? "uint" : "int") << ")" << v;
+        packed32 = oss.str();
+      } else {
+        std::string scalar = PrintExpr(op->value);
+        std::string byte = "((" + scalar + ") & 0xFF)";
+        packed32 = "(" + byte + " | (" + byte + " << 8) | (" + byte +
+                   " << 16) | (" + byte + " << 24))";
+        packed32 = "(" + std::string(op->dtype.is_uint() ? "uint" : "int") +
+                   ")" + packed32;
+      }
+      os << "make_";
+      PrintType(op->dtype, os);
+      os << '(';
+      for (int i = 0; i < lanes / 4; ++i) {
+        if (i != 0)
+          os << ", ";
+        os << packed32;
+      }
+      os << ')';
       return;
     } else if (lanes == 32) {
       // make_int8x32
       const int64_t *p = as_const_int(op->value);
-      ICHECK(p);
-      int64_t v = *p & 0xFF;
-      v = (v << 24) | (v << 16) | (v << 8) | v;
-      if (op->dtype.is_uint()) {
-        os << "make_ulonglong4(" << v << ", " << v << ", " << v << ", " << v
-           << ")";
+      if (p) {
+        int64_t v = *p & 0xFF;
+        v = (v << 24) | (v << 16) | (v << 8) | v;
+        if (op->dtype.is_uint()) {
+          os << "make_ulonglong4(" << v << ", " << v << ", " << v << ", " << v
+             << ")";
+        } else {
+          os << "make_longlong4(" << v << ", " << v << ", " << v << ", " << v
+             << ")";
+        }
       } else {
-        os << "make_longlong4(" << v << ", " << v << ", " << v << ", " << v
-           << ")";
+        std::string scalar = PrintExpr(op->value);
+        std::string byte = "((" + scalar + ") & 0xFF)";
+        std::string packed32 = "(" + byte + " | (" + byte + " << 8) | (" +
+                               byte + " << 16) | (" + byte + " << 24))";
+        std::string packed64 =
+            "(((unsigned long long)" + packed32 +
+            ") | (((unsigned long long)" + packed32 + ") << 32))";
+        if (op->dtype.is_uint()) {
+          os << "make_ulonglong4(" << packed64 << ", " << packed64 << ", "
+             << packed64 << ", " << packed64 << ")";
+        } else {
+          os << "make_longlong4(" << packed64 << ", " << packed64 << ", "
+             << packed64 << ", " << packed64 << ")";
+        }
       }
       return;
     }
@@ -2529,7 +2612,7 @@ void CodeGenTileLangMACA::VisitExpr_(const BroadcastNode *op,
     for (int i = 0; i < 4; ++i) {
       if (i != 0)
         os << ", ";
-      os << "*(unsigned long long*)&make_float2(" << v << ", " << v << ")";
+      os << "pack_float2(" << v << ", " << v << ")";
     }
     os << ')';
     return;
@@ -2538,37 +2621,64 @@ void CodeGenTileLangMACA::VisitExpr_(const BroadcastNode *op,
   if ((op->dtype.is_int() || op->dtype.is_uint()) && op->dtype.bits() == 4) {
     bool fail = false;
     const int64_t *p = as_const_int(op->value);
-    ICHECK(p);
-    int64_t v = *p & 0xF;
-
-    if (lanes == 4) {
-      v = (v << 12) | (v << 8) | (v << 4) | v;
-      if (op->dtype.is_uint()) {
-        os << "(uint16_t)" << v;
+    if (p) {
+      int64_t v = *p & 0xF;
+      if (lanes == 4) {
+        v = (v << 12) | (v << 8) | (v << 4) | v;
+        if (op->dtype.is_uint()) {
+          os << "(uint16_t)" << v;
+        } else {
+          os << "(int16_t)" << v;
+        }
       } else {
-        os << "(int16_t)" << v;
+        v = (v << 28) | (v << 24) | (v << 20) | (v << 16) | (v << 12) |
+            (v << 8) | (v << 4) | v;
+        if (lanes == 8) {
+          if (op->dtype.is_uint()) {
+            os << "(uint)" << v;
+          } else {
+            os << "(int)" << v;
+          }
+        } else if (lanes == 16 || lanes == 32 || lanes == 64) {
+          os << "make_";
+          PrintType(op->dtype, os);
+          os << '(';
+          for (int i = 0; i < lanes / 8; ++i) {
+            if (i != 0)
+              os << ", ";
+            if (op->dtype.is_uint()) {
+              os << "(uint)" << v;
+            } else {
+              os << "(int)" << v;
+            }
+          }
+          os << ')';
+        } else {
+          fail = true;
+        }
       }
     } else {
-      v = (v << 28) | (v << 24) | (v << 20) | (v << 16) | (v << 12) | (v << 8) |
-          (v << 4) | v;
-      if (lanes == 8) {
-        if (op->dtype.is_uint()) {
-          os << "(uint)" << v;
-        } else {
-          os << "(int)" << v;
-        }
-      } else if (lanes == 16 || lanes == 32) {
+      std::string scalar = PrintExpr(op->value);
+      std::string nibble = "((" + scalar + ") & 0xF)";
+      std::string packed32 = "(" + nibble + " | (" + nibble + " << 4) | (" +
+                             nibble + " << 8) | (" + nibble + " << 12) | (" +
+                             nibble + " << 16) | (" + nibble + " << 20) | (" +
+                             nibble + " << 24) | (" + nibble + " << 28))";
+      if (lanes == 4) {
+        os << "(" << (op->dtype.is_uint() ? "uint16_t" : "int16_t") << ")("
+           << nibble << " | (" << nibble << " << 4) | (" << nibble
+           << " << 8) | (" << nibble << " << 12))";
+      } else if (lanes == 8) {
+        os << "(" << (op->dtype.is_uint() ? "uint" : "int") << ")" << packed32;
+      } else if (lanes == 16 || lanes == 32 || lanes == 64) {
         os << "make_";
         PrintType(op->dtype, os);
         os << '(';
         for (int i = 0; i < lanes / 8; ++i) {
           if (i != 0)
             os << ", ";
-          if (op->dtype.is_uint()) {
-            os << "(uint)" << v;
-          } else {
-            os << "(int)" << v;
-          }
+          os << "(" << (op->dtype.is_uint() ? "uint" : "int") << ")"
+             << packed32;
         }
         os << ')';
       } else {

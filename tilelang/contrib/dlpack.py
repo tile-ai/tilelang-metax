@@ -38,10 +38,10 @@ def convert_func(tvm_func, tensor_type, to_dlpack_func):
     import torch
 
     float8_dtype_map = {
-        torch.float8_e4m3fn: "float8_e4m3",
+        torch.float8_e4m3fn: "float8_e4m3fn",
         torch.float8_e4m3fnuz: "float8_e4m3fnuz",
         torch.float8_e5m2: "float8_e5m2",
-        torch.float8_e5m2fnuz: "float8_e5m2",
+        torch.float8_e5m2fnuz: "float8_e5m2fnuz",
     }
 
     def adapt_tensor(arg):
