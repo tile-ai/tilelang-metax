@@ -2,7 +2,7 @@ from __future__ import annotations
 import os
 import torch
 import warnings
-from functools import lru_cache
+from functools import cache
 from math import prod
 from tilelang.contrib import nvcc
 from tilelang.utils.tensor import is_float8_dtype, fp8_remove_negative_zeros_
@@ -45,7 +45,7 @@ def _gen_stride(shape_ik: list[int], order: list[int]) -> list[int]:
     return stride_ik
 
 
-@lru_cache(maxsize=None)
+@cache
 def _sm90_metadata_layout_offsets(rows: int, cols: int, bits: int, block_k: int) -> tuple[int, ...]:
     if block_k > 128:
         block_k = 128
