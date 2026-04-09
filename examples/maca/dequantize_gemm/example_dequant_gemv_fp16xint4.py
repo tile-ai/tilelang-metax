@@ -127,7 +127,9 @@ def dequantize_gemv(
                     )
                 else:
                     for ki in T.serial(micro_size_k):
-                        B_dequantize_local[ki] = convert_packed(num_bits, B_quant_local[ki // num_elems_per_byte], ki % num_elems_per_byte, in_dtype)
+                        B_dequantize_local[ki] = convert_packed(
+                            num_bits, B_quant_local[ki // num_elems_per_byte], ki % num_elems_per_byte, in_dtype
+                        )
 
                 if use_dp4a:
                     for ki in T.serial(micro_size_k // dp4a_size):

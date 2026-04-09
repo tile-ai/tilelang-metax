@@ -134,9 +134,7 @@ def ref_deepgemm_fp8(A_fp8, B_fp8, A_scale, B_scale, out_dtype):
                         out_dtype=torch.bfloat16,
                     )
                 except RuntimeError:
-                    c = (a_tile.to(torch.float32) * scale_a) @ (
-                        b_tile.to(torch.float32) * scale_b
-                    ).T
+                    c = (a_tile.to(torch.float32) * scale_a) @ (b_tile.to(torch.float32) * scale_b).T
                 c_acc += c.to(torch.float32)
             C[i * 128 : (i + 1) * 128, j * 128 : (j + 1) * 128] = c_acc.to(out_dtype)
     return C
