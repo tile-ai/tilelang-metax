@@ -63,9 +63,10 @@ def _tir_u8_to_f4_to_bf16(nbit: int, val: tir.PrimExpr, pos: tir.PrimExpr, scale
     e_f4 = (f4 & tir.const(6, T.uint16)) >> tir.const(1, T.uint16)
     # Exponential bias between f4 and bf16 is 2^(8-1) - 2^(2-1) = 126
     e_bf16 = e_f4 + tir.const(126, T.uint16)
-    # Scale is the exponential part, within the representation of uint8
-    # To handle the overflow, we use the max function to limit the exponential part to 8 bits
-    e_bf16 = min(e_bf16 + scale, tir.const((1 << 8) - 1, T.uint16))
+    # Scale is the exponent offset stored as uint8. Clamp the adjusted exponent to bf16 range.
+    tir_u16_max = tir.const((1 << 8) - 1, T.uint16)
+    scaled_e_bf16 = e_bf16 + tir.Cast(T.uint16, scale)
+    e_bf16 = tir.Select(scaled_e_bf16 > tir_u16_max, tir_u16_max, scaled_e_bf16)
     m_f4 = f4 & tir.const(1, T.uint16)
     val_bf16 = tir.reinterpret(T.bfloat16,
                                ((((s << tir.const(8, T.uint16)) | e_bf16) << tir.const(7, T.uint16))
