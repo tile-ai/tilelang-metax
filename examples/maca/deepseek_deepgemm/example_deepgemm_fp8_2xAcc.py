@@ -5,6 +5,7 @@ import tilelang.testing
 import tilelang
 import tilelang.language as T
 from tilelang.utils.tensor import map_torch_type
+from tilelang.utils.target import determine_target, target_is_maca
 
 tilelang.testing.set_random_seed(42)
 
@@ -30,6 +31,7 @@ def tl_gemm(
     group_size = 128
     block_M = 128
     block_K = 128
+    num_stages = 1 if target_is_maca(determine_target("auto", return_object=True)) else 4
 
     A_shape = (M, K)
     Scales_A_shape = (M, T.ceildiv(K, group_size))
@@ -50,7 +52,6 @@ def tl_gemm(
         with T.Kernel(T.ceildiv(N, block_N), T.ceildiv(M, block_M), threads=128) as (bx, by):
             A_shared = T.alloc_shared(A_shared_shape, in_dtype)
             B_shared = T.alloc_shared(B_shared_shape, in_dtype)
-            C_shared = T.alloc_shared(C_shared_shape, out_dtype)
             Scale_C_shared = T.alloc_shared((block_M), T.float32)
             C_local = T.alloc_fragment(C_shared_shape, accum_dtype)
             C_local_accum = T.alloc_fragment(C_shared_shape, accum_dtype)
@@ -61,7 +62,7 @@ def tl_gemm(
             T.clear(C_local)
             T.clear(C_local_accum)
             K_iters = T.ceildiv(K, block_K)
-            for k in T.Pipelined(K_iters, num_stages=4):
+            for k in T.Pipelined(K_iters, num_stages=num_stages):
                 # Load A into shared memory
                 T.copy(A[by * block_M, k * block_K], A_shared)
                 # Load B into shared memory
@@ -76,9 +77,7 @@ def tl_gemm(
                 for i, j in T.Parallel(block_M, block_N):
                     C_local_accum[i, j] += C_local[i, j] * Scale_C_shared[i]
                 T.clear(C_local)
-            # TMA store
-            T.copy(C_local_accum, C_shared)
-            T.copy(C_shared, C[by * block_M, bx * block_N])
+            T.copy(C_local_accum, C[by * block_M, bx * block_N])
 
     return main
 
@@ -122,13 +121,22 @@ def ref_deepgemm_fp8(A_fp8, B_fp8, A_scale, B_scale, out_dtype):
         for j in range(ceildiv(N, 128)):
             c_acc.zero_()
             for k in range(ceildiv(K, 128)):
-                c = torch._scaled_mm(
-                    A_fp8[i * 128 : (i + 1) * 128, k * 128 : (k + 1) * 128],
-                    B_fp8[j * 128 : (j + 1) * 128, k * 128 : (k + 1) * 128].T,
-                    scale_a=A_scales[i, k].view(128, 1).contiguous(),
-                    scale_b=B_scales[j, k].view(1, 128).contiguous(),
-                    out_dtype=torch.bfloat16,
-                )
+                a_tile = A_fp8[i * 128 : (i + 1) * 128, k * 128 : (k + 1) * 128]
+                b_tile = B_fp8[j * 128 : (j + 1) * 128, k * 128 : (k + 1) * 128]
+                scale_a = A_scales[i, k].view(128, 1).contiguous()
+                scale_b = B_scales[j, k].view(128, 1).contiguous()
+                try:
+                    c = torch._scaled_mm(
+                        a_tile,
+                        b_tile.T,
+                        scale_a=scale_a,
+                        scale_b=scale_b.view(1, 128),
+                        out_dtype=torch.bfloat16,
+                    )
+                except RuntimeError:
+                    c = (a_tile.to(torch.float32) * scale_a) @ (
+                        b_tile.to(torch.float32) * scale_b
+                    ).T
                 c_acc += c.to(torch.float32)
             C[i * 128 : (i + 1) * 128, j * 128 : (j + 1) * 128] = c_acc.to(out_dtype)
     return C

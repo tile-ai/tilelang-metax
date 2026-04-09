@@ -5,6 +5,13 @@ from tvm import tir
 import itertools
 import torch
 import argparse
+from tilelang.utils.target import determine_target, target_is_maca
+
+
+def reinterpret_u16_as_float16(bits: torch.Tensor) -> torch.Tensor:
+    bits_i32 = (bits & 0xFFFF).to(torch.int32)
+    bits_i16 = torch.where(bits_i32 >= 0x8000, bits_i32 - 0x10000, bits_i32).to(torch.int16)
+    return bits_i16.view(torch.float16)
 
 
 def _tir_u8_to_f4_to_f16(nbit: int, val: tir.PrimExpr, pos: tir.PrimExpr, dtype: str):
@@ -45,8 +52,7 @@ def torch_convert(tensor):
         m_f4 = f4 & 1
         m_f16 = m_f4
         val_f16 = (((e_f16 | (s << 5)) << 10) | (m_f16 << 9)) & 0xFFFF
-        lower_16_bits = (val_f16 & 0xFFFF).to(torch.uint16)
-        return lower_16_bits.view(torch.float16)
+        return reinterpret_u16_as_float16(val_f16)
 
     N = tensor.shape[0]
     K = tensor.shape[1]
@@ -249,8 +255,17 @@ def main(m=256, n=256, k=256, tune=False):
     total_flops = 2 * m * n * k
 
     if not tune:
+        if target_is_maca(determine_target("auto", return_object=True)):
+            block_M, block_N, block_K, num_stages, threads, split = 64, 64, 64, 1, 128, 1
+        else:
+            block_M, block_N, block_K, num_stages, threads, split = 128, 128, 128, 2, 256, 1
         kernel = matmul(m, n, k, T.float16, T.float16, T.float32, num_bits=4, tune=tune)(
-            block_M=128, block_N=128, block_K=128, num_stages=2, threads=256, split=1
+            block_M=block_M,
+            block_N=block_N,
+            block_K=block_K,
+            num_stages=num_stages,
+            threads=threads,
+            split=split,
         )
         profiler = kernel.get_profiler(tilelang.TensorSupplyType.Integer)
         profiler.assert_allclose(ref_program, rtol=0.01, atol=0.01)
@@ -271,8 +286,17 @@ def main(m=256, n=256, k=256, tune=False):
 
 
 def run_regression_perf(m=4096, n=4096, k=4096):
+    if target_is_maca(determine_target("auto", return_object=True)):
+        block_M, block_N, block_K, num_stages, threads, split = 64, 64, 64, 1, 128, 1
+    else:
+        block_M, block_N, block_K, num_stages, threads, split = 128, 128, 128, 2, 256, 1
     kernel = matmul(m, n, k, "float16", "float16", "float32", num_bits=4, tune=False)(
-        block_M=128, block_N=128, block_K=128, num_stages=2, threads=256, split=1
+        block_M=block_M,
+        block_N=block_N,
+        block_K=block_K,
+        num_stages=num_stages,
+        threads=threads,
+        split=split,
     )
     profiler = kernel.get_profiler(tilelang.TensorSupplyType.Integer)
     return profiler.do_bench(backend="cupti")

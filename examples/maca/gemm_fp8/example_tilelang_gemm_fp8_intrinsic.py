@@ -5,9 +5,11 @@ from tvm import DataType
 import tilelang.language as T
 from tilelang.intrinsics import get_swizzle_layout
 from tilelang.intrinsics.mma_macro_generator import TensorCoreIntrinEmitter
+from tilelang.intrinsics.maca_mma_macro_generator import TensorCoreIntrinEmitter as MacaTensorCoreIntrinEmitter
 from tilelang.intrinsics.mfma_macro_generator import MatrixCoreIntrinEmitter
 from tilelang.utils.tensor import map_torch_type
 from tilelang.utils import determine_fp8_type
+from tilelang.utils.target import determine_target, target_is_maca
 
 tilelang.testing.set_random_seed(0)
 
@@ -70,9 +72,23 @@ def tl_matmul(
     A_shared_shape = (block_M, block_K)
     B_shared_shape = (block_N, block_K)
     is_hip = torch.version.hip is not None
+    is_maca = target_is_maca(determine_target("auto", return_object=True))
     # MMA Wrapper to Auto Generate Code for MMA/MFMA
     if is_hip:
         mma_emitter = MatrixCoreIntrinEmitter(
+            a_dtype=in_dtype,
+            b_dtype=in_dtype,
+            accum_dtype=accum_dtype,
+            a_transposed=False,
+            b_transposed=True,
+            block_row_warps=block_row_warps,
+            block_col_warps=block_col_warps,
+            warp_row_tiles=warp_row_tiles,
+            warp_col_tiles=warp_col_tiles,
+            chunk=chunk,
+        )
+    elif is_maca:
+        mma_emitter = MacaTensorCoreIntrinEmitter(
             a_dtype=in_dtype,
             b_dtype=in_dtype,
             accum_dtype=accum_dtype,
@@ -114,6 +130,7 @@ def tl_matmul(
     local_size_c = mma_emitter.local_size_out
     warp_rows = mma_emitter.warp_rows
     warp_cols = mma_emitter.warp_cols
+    local_in_dtype = getattr(mma_emitter, "mma_input_dtype", in_dtype)
 
     @T.prim_func
     def gemm_fp8_intrinsic(
@@ -125,8 +142,8 @@ def tl_matmul(
             A_shared = T.alloc_shared(A_shared_shape, in_dtype, scope=shared_scope)
             B_shared = T.alloc_shared(B_shared_shape, in_dtype, scope=shared_scope)
             C_shared = T.alloc_shared(C_shared_shape, out_dtype, scope=shared_scope)
-            A_local = T.alloc_local((warp_rows * local_size_a), in_dtype)
-            B_local = T.alloc_local((warp_cols * local_size_b), in_dtype)
+            A_local = T.alloc_local((warp_rows * local_size_a), local_in_dtype)
+            B_local = T.alloc_local((warp_cols * local_size_b), local_in_dtype)
             C_local = T.alloc_local((warp_rows * warp_cols * local_size_c), accum_dtype)
 
             T.annotate_layout(

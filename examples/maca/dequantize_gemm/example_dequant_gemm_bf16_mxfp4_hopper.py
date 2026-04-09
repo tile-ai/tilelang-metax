@@ -4,6 +4,7 @@ from tilelang import tvm as tvm
 from tvm import DataType
 from tvm import tir
 import torch
+from tilelang.utils.target import determine_target, target_is_maca
 from dequantize_utils import torch_convert_bit_twiddling, torch_convert
 
 
@@ -494,6 +495,12 @@ def main(m=256, n=256, k=256, scale_size=32, fast_dequant=True, with_bias=False,
     """
     total_flops = 2 * m * n * k
 
+    if target_is_maca(determine_target("auto", return_object=True)):
+        fast_dequant = False
+        block_M, block_N, block_K, num_stages, threads, split = 64, 64, 64, 1, 128, 1
+    else:
+        block_M, block_N, block_K, num_stages, threads, split = 256, 128, 128, 2, 256, 1
+
     if tune:
         kernel = matmul(
             m, n, k, T.bfloat16, T.bfloat16, T.float32, num_bits=4, scale_size=scale_size, fast_dequant=fast_dequant, with_bias=with_bias
@@ -508,12 +515,12 @@ def main(m=256, n=256, k=256, scale_size=32, fast_dequant=True, with_bias=False,
             T.float32,
             num_bits=4,
             scale_size=scale_size,
-            block_M=256,
-            block_N=128,
-            block_K=128,
-            num_stages=2,
-            threads=256,
-            split=1,
+            block_M=block_M,
+            block_N=block_N,
+            block_K=block_K,
+            num_stages=num_stages,
+            threads=threads,
+            split=split,
             fast_dequant=fast_dequant,
             with_bias=with_bias,
         )
@@ -537,6 +544,11 @@ def main(m=256, n=256, k=256, scale_size=32, fast_dequant=True, with_bias=False,
 
 
 def run_regression_perf(m=4096, n=4096, k=4096, scale_size=32, fast_dequant=True, with_bias=False):
+    if target_is_maca(determine_target("auto", return_object=True)):
+        fast_dequant = False
+        block_M, block_N, block_K, num_stages, threads, split = 64, 64, 64, 1, 128, 1
+    else:
+        block_M, block_N, block_K, num_stages, threads, split = 256, 128, 128, 2, 256, 1
     kernel = matmul(
         m,
         n,
@@ -546,12 +558,12 @@ def run_regression_perf(m=4096, n=4096, k=4096, scale_size=32, fast_dequant=True
         "float32",
         num_bits=4,
         scale_size=scale_size,
-        block_M=256,
-        block_N=128,
-        block_K=128,
-        num_stages=2,
-        threads=256,
-        split=1,
+        block_M=block_M,
+        block_N=block_N,
+        block_K=block_K,
+        num_stages=num_stages,
+        threads=threads,
+        split=split,
         fast_dequant=fast_dequant,
         with_bias=with_bias,
     )

@@ -4,8 +4,9 @@ from tilelang.quantize import _tir_u8_to_f4_to_bf16
 from tilelang import tvm as tvm
 from tvm import DataType
 import torch
-from dequantize_utils import torch_convert_bit_twiddling, assert_similar
+from dequantize_utils import torch_convert, torch_convert_bit_twiddling, assert_similar
 from tilelang.autotuner import set_autotune_inputs
+from tilelang.utils.target import determine_target, target_is_maca
 import argparse
 
 
@@ -246,7 +247,7 @@ def matmul(
                         i, k * block_K // scale_size + j // scale_size
                     ],  # Scale is the exponential part, within the representation of uint8
                     dtype=out_dtype,
-                ) * T.shift_left(1, (Scale_shared[i, k * block_K // scale_size + j // scale_size]))
+                )
             T.copy(B_dequantize_local, B_dequantize_shared)
 
         return simple_dequant_bf16_fp4
@@ -343,45 +344,73 @@ def matmul(
     return main
 
 
-def ref_moe(A, qB, Scale, Bias, topk_weights, sorted_token_ids, expert_ids, block_M=256):
+def ref_moe(A, qB, Scale, Bias, topk_weights, sorted_token_ids, expert_ids, block_M=256, fast_dequant=True):
     dtypeC = T.bfloat16
     M, K = A.shape
     E, N, QK = qB.shape
     topk = topk_weights.shape[0] // M
     scale_size = K // Scale.shape[2]
     assert scale_size == 32  # MXFP4
+    maca_mode = target_is_maca(determine_target("auto", return_object=True))
+
+    work_A = A
+    work_qB = qB
+    work_Scale = Scale
+    work_Bias = Bias
+    work_topk_weights = topk_weights
+    work_sorted_token_ids = sorted_token_ids
+    work_expert_ids = expert_ids
+    accum_dtype = torch.bfloat16
+
+    if maca_mode:
+        # The MACA path is correctness-oriented here; keeping the reference on CPU
+        # avoids the heavy post-kernel GPU work that was getting the example stuck.
+        work_A = A.cpu()
+        work_qB = qB.cpu()
+        work_Scale = Scale.cpu()
+        work_Bias = Bias.cpu()
+        work_topk_weights = topk_weights.cpu()
+        work_sorted_token_ids = sorted_token_ids.cpu()
+        work_expert_ids = expert_ids.cpu()
+        accum_dtype = torch.float32
 
     # Initialize output tensor
-    C = torch.ones((M, topk, N), dtype=getattr(torch, dtypeC), device="cuda")
+    C = torch.empty((M, topk, N), dtype=accum_dtype, device=work_A.device)
 
-    # Iterate over sorted_token_ids
-    for idx in range(len(sorted_token_ids)):  # padding_M
-        token_id = sorted_token_ids[idx]
-        if token_id == -1:
+    expert_weights = []
+    for expert in range(E):
+        if fast_dequant:
+            B = torch_convert_bit_twiddling(work_qB[expert])  # shape: (N, K)
+        else:
+            B = torch_convert(work_qB[expert])  # shape: (N, K)
+        B *= 2 ** (work_Scale[expert][:, (torch.arange(B.shape[1], device=B.device) // scale_size)].to(torch.bfloat16))
+        expert_weights.append(B.to(accum_dtype))
+
+    block_count = work_expert_ids.numel()
+    block_idx = 0
+    while block_idx < block_count:
+        expert_id = int(work_expert_ids[block_idx].item())
+        group_end = block_idx + 1
+        while group_end < block_count and int(work_expert_ids[group_end].item()) == expert_id:
+            group_end += 1
+
+        token_ids = work_sorted_token_ids[block_idx * block_M : group_end * block_M]
+        valid_mask = token_ids != -1
+        token_ids = token_ids[valid_mask]
+        if token_ids.numel() == 0:
+            block_idx = group_end
             continue
-        expert_id = expert_ids[idx // block_M]
-        topk_idx = token_id % topk
 
-        # Get the token embedding
-        token_embedding = A[token_id // topk]
+        token_rows = torch.div(token_ids, topk, rounding_mode="floor")
+        topk_rows = torch.remainder(token_ids, topk)
+        token_embeddings = work_A[token_rows].to(accum_dtype)
+        output = torch.matmul(token_embeddings, expert_weights[expert_id].T)
+        output = output + work_Bias[expert_id].to(accum_dtype)
+        output = output * work_topk_weights[token_ids].to(accum_dtype).unsqueeze(1)
+        C[token_rows, topk_rows] = output
+        block_idx = group_end
 
-        # Dequantize the expert weights
-        B = torch_convert_bit_twiddling(qB[expert_id])  # shape: (N, K)
-        B *= 2 ** (Scale[expert_id][:, (torch.arange(B.shape[1], device=B.device) // scale_size)].to(torch.bfloat16))
-
-        # Compute the output for this token-expert pair
-        # token_embedding @ B.T + bias
-        output = torch.matmul(token_embedding.to(torch.bfloat16), B.T.to(torch.bfloat16)) + Bias[expert_id]
-        output = output.to(torch.__getattribute__(dtypeC))
-
-        # Apply the topk weight
-        weight = topk_weights[token_id]
-        output = output * weight
-
-        # Store the result
-        C[token_id // topk, topk_idx] = output
-
-    return C
+    return C.to(device=A.device, dtype=torch.__getattribute__(dtypeC))
 
 
 def get_data(m, n, k, qk, scale_size, topk, E, block_M):
@@ -428,10 +457,18 @@ def get_data(m, n, k, qk, scale_size, topk, E, block_M):
 
 def main(m=256, n=256, k=256, scale_size=32, topk=4, E=32, fast_dequant=True, with_bias=False, tune=False):
     # Tunable parameters
-    block_M, block_N, block_K = 128, 256, 128  # noqa: F841
-    num_stages = 1  # noqa: F841
-    threads = 512  # noqa: F841
-    split = 1  # noqa: F841
+    maca_mode = target_is_maca(determine_target("auto", return_object=True))
+    if maca_mode:
+        fast_dequant = False
+        block_M, block_N, block_K = 64, 64, 64  # noqa: F841
+        num_stages = 1  # noqa: F841
+        threads = 128  # noqa: F841
+        split = 1  # noqa: F841
+    else:
+        block_M, block_N, block_K = 128, 256, 128  # noqa: F841
+        num_stages = 1  # noqa: F841
+        threads = 512  # noqa: F841
+        split = 1  # noqa: F841
 
     total_flops = 2 * m * n * k * topk
     num_bits = 4
@@ -491,11 +528,24 @@ def main(m=256, n=256, k=256, scale_size=32, topk=4, E=32, fast_dequant=True, wi
     )
     print("Tilelang kernel run finished.")
 
-    ref_output = ref_moe(A, qB, Scale, Bias, topk_weights, sorted_token_ids, expert_ids, block_M=block_M)  # Maybe a little bit slow...
+    ref_output = ref_moe(
+        A,
+        qB,
+        Scale,
+        Bias,
+        topk_weights,
+        sorted_token_ids,
+        expert_ids,
+        block_M=block_M,
+        fast_dequant=fast_dequant,
+    )  # Maybe a little bit slow...
 
-    latency = tilelang.profiler.do_bench(lambda: kernel(A, qB, Scale, Bias, topk_weights, sorted_token_ids, expert_ids), warmup=100)
-    print("Tilelang: {:.2f} ms".format(latency))
-    print("Tilelang: {:.2f} TFlops".format(total_flops / latency * 1e-9))
+    if maca_mode:
+        print("Tilelang benchmark skipped on MACA in correctness mode.")
+    else:
+        latency = tilelang.profiler.do_bench(lambda: kernel(A, qB, Scale, Bias, topk_weights, sorted_token_ids, expert_ids), warmup=100)
+        print("Tilelang: {:.2f} ms".format(latency))
+        print("Tilelang: {:.2f} TFlops".format(total_flops / latency * 1e-9))
 
     diff = (output - ref_output).abs()
     max_val = diff.max()
@@ -506,10 +556,17 @@ def main(m=256, n=256, k=256, scale_size=32, topk=4, E=32, fast_dequant=True, wi
 
 
 def run_regression_perf(m=4096, n=4096, k=4096, scale_size=32, topk=4, E=32, fast_dequant=True, with_bias=False, tune=False):
-    block_M, block_N, block_K = 128, 256, 128
-    num_stages = 1
-    threads = 512
-    split = 1
+    if target_is_maca(determine_target("auto", return_object=True)):
+        fast_dequant = False
+        block_M, block_N, block_K = 64, 64, 64
+        num_stages = 1
+        threads = 128
+        split = 1
+    else:
+        block_M, block_N, block_K = 128, 256, 128
+        num_stages = 1
+        threads = 512
+        split = 1
     num_bits = 4
     num_elems_per_byte = 8 // num_bits
     qk = k // num_elems_per_byte
