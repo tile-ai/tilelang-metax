@@ -195,9 +195,7 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
             # tvm_ffi cannot ingest float8 tensors directly via DLPack today.
             # Reuse the existing float8 bridge pattern: pass the storage as int8
             # and recover the logical dtype through a TVM tensor view.
-            return runtime.from_dlpack(torch.utils.dlpack.to_dlpack(arg.view(torch.int8)))._create_view(
-                arg.shape, dtype=float8_dtype
-            )
+            return runtime.from_dlpack(torch.utils.dlpack.to_dlpack(arg.view(torch.int8)))._create_view(arg.shape, dtype=float8_dtype)
 
         # Prepare helpers for friendly dtype error messages
         prim_func = self.prim_func
