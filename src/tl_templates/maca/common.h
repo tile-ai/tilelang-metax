@@ -166,24 +166,24 @@ using float32x32 = __attribute__((__vector_size__(32 * sizeof(float)))) float;
 using float64x4 = __attribute__((__vector_size__(4 * sizeof(double)))) double;
 using int8x4 = __attribute__((__vector_size__(4 * sizeof(int8_t)))) int8_t;
 
-TL_DEVICE float32x16 make_float32x16(
-    float x0, float x1, float x2, float x3, float x4, float x5, float x6,
-    float x7, float x8, float x9, float x10, float x11, float x12, float x13,
-    float x14, float x15) {
-  return float32x16{x0, x1, x2, x3, x4, x5, x6, x7,
+TL_DEVICE float32x16 make_float32x16(float x0, float x1, float x2, float x3,
+                                     float x4, float x5, float x6, float x7,
+                                     float x8, float x9, float x10, float x11,
+                                     float x12, float x13, float x14,
+                                     float x15) {
+  return float32x16{x0, x1, x2,  x3,  x4,  x5,  x6,  x7,
                     x8, x9, x10, x11, x12, x13, x14, x15};
 }
 
 TL_DEVICE float32x32 make_float32x32(
     float x0, float x1, float x2, float x3, float x4, float x5, float x6,
     float x7, float x8, float x9, float x10, float x11, float x12, float x13,
-    float x14, float x15, float x16, float x17, float x18, float x19,
-    float x20, float x21, float x22, float x23, float x24, float x25,
-    float x26, float x27, float x28, float x29, float x30, float x31) {
-  return float32x32{x0,  x1,  x2,  x3,  x4,  x5,  x6,  x7,
-                    x8,  x9,  x10, x11, x12, x13, x14, x15,
-                    x16, x17, x18, x19, x20, x21, x22, x23,
-                    x24, x25, x26, x27, x28, x29, x30, x31};
+    float x14, float x15, float x16, float x17, float x18, float x19, float x20,
+    float x21, float x22, float x23, float x24, float x25, float x26, float x27,
+    float x28, float x29, float x30, float x31) {
+  return float32x32{x0,  x1,  x2,  x3,  x4,  x5,  x6,  x7,  x8,  x9,  x10,
+                    x11, x12, x13, x14, x15, x16, x17, x18, x19, x20, x21,
+                    x22, x23, x24, x25, x26, x27, x28, x29, x30, x31};
 }
 
 template <int thread_extent> TL_DEVICE bool tl_shuffle_elect() {

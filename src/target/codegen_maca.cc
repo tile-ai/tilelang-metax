@@ -2494,9 +2494,9 @@ void CodeGenTileLangMACA::VisitExpr_(const BroadcastNode *op,
       } else {
         std::string scalar = PrintExpr(op->value);
         std::string byte = "((" + scalar + ") & 0xFF)";
-        os << "(" << (op->dtype.is_uint() ? "uint" : "int") << ")("
-           << byte << " | (" << byte << " << 8) | (" << byte << " << 16) | ("
-           << byte << " << 24))";
+        os << "(" << (op->dtype.is_uint() ? "uint" : "int") << ")(" << byte
+           << " | (" << byte << " << 8) | (" << byte << " << 16) | (" << byte
+           << " << 24))";
       }
       return;
     } else if (lanes == 8 || lanes == 16) {
@@ -2544,9 +2544,9 @@ void CodeGenTileLangMACA::VisitExpr_(const BroadcastNode *op,
         std::string byte = "((" + scalar + ") & 0xFF)";
         std::string packed32 = "(" + byte + " | (" + byte + " << 8) | (" +
                                byte + " << 16) | (" + byte + " << 24))";
-        std::string packed64 =
-            "(((unsigned long long)" + packed32 +
-            ") | (((unsigned long long)" + packed32 + ") << 32))";
+        std::string packed64 = "(((unsigned long long)" + packed32 +
+                               ") | (((unsigned long long)" + packed32 +
+                               ") << 32))";
         if (op->dtype.is_uint()) {
           os << "make_ulonglong4(" << packed64 << ", " << packed64 << ", "
              << packed64 << ", " << packed64 << ")";
