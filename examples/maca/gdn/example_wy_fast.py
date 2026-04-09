@@ -12,9 +12,10 @@ try:
 
     print(fla.__file__)
     from fla.ops.gated_delta_rule.wy_fast import recompute_w_u_fwd
-except ImportError:
-    print("fla not found, using tilelang implementation")
+except Exception as exc:
+    print(f"fla unavailable, using tilelang implementation: {exc}")
     fla = None
+    recompute_w_u_fwd = None
 
 import torch
 
@@ -23,11 +24,11 @@ torch.random.manual_seed(1)
 
 def prepare_input(B, S, H, DK, DV, chunk_size, input_dtype, output_dtype, gate_dtype=torch.float32):
     BS = chunk_size
-    K = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
-    V = torch.randn(B, S, H, DV, dtype=input_dtype).cuda()
+    K = torch.randn(B, S, H, DK, dtype=input_dtype).cuda().contiguous()
+    V = torch.randn(B, S, H, DV, dtype=input_dtype).cuda().contiguous()
     Beta = torch.randn(B, S, H, dtype=input_dtype).cuda()
     G = torch.randn(B, S, H, dtype=gate_dtype).cuda()
-    A = torch.randn(B, S, H, BS, dtype=output_dtype).cuda()
+    A = torch.randn(B, S, H, BS, dtype=output_dtype).cuda().contiguous()
     return K, V, Beta, G, A
 
 

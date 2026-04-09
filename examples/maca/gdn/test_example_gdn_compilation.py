@@ -24,7 +24,6 @@ threads = 128
 num_stages = 0
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_wy_fast_compilation():
     from example_wy_fast import tilelang_recompute_w_u_fwd, prepare_input
 
@@ -127,7 +126,6 @@ def test_example_wy_fast_bwd_split_compilation():
     dg_tilelang = dg_tilelang + dg_tilelang_A_positive.sum(dim=-1) - dg_tilelang_A_negative.sum(dim=-1)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_chunk_o_compilation():
     from example_chunk_o import tilelang_chunk_fwd_o, prepare_input
 
@@ -167,7 +165,6 @@ def test_example_chunk_o_compilation():
     O_tilelang = kernel(Q, K, V, HIDDEN, G)  # noqa: F841
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_chunk_o_bwd_compilation():
     from example_chunk_o_bwd import tilelang_chunk_o_bwd_dqkwg, prepare_input
 
@@ -210,7 +207,6 @@ def test_example_chunk_o_bwd_compilation():
         dg_tilelang = dg_tilelang.sum(dim=0)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_chunk_scaled_dot_kkt_compilation():
     from example_chunk_scaled_dot_kkt import tilelang_chunk_scaled_dot_kkt_fwd, prepare_input
 
@@ -222,7 +218,6 @@ def test_example_chunk_scaled_dot_kkt_compilation():
     A_tilelang = kernel(K, Beta, G)  # noqa: F841
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_cumsum_compilation():
     from example_cumsum import tilelang_chunk_local_cumsum_scalar, prepare_cumsum_input, prepare_cumsum_output
 
@@ -285,7 +280,6 @@ def test_example_chunk_delta_h_compilation():
     h_tilelang, final_state_tilelang, V_new_tilelang = kernel(K, W, U, G, initial_state)  # noqa: F841
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_chunk_delta_bwd_compilation():
     from example_chunk_delta_bwd import tilelang_chunk_gated_delta_rule_bwd_dhu, prepare_input
 

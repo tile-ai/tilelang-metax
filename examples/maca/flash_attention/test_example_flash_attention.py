@@ -11,7 +11,6 @@ import example_gqa_bwd_tma_reduce_varlen
 import example_gqa_fwd_varlen
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_gqa_bwd_tma_reduce_varlen():
     example_gqa_bwd_tma_reduce_varlen.main()
 

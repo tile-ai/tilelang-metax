@@ -15,9 +15,10 @@ try:
 
     print(fla.__file__)
     from fla.ops.common.chunk_o import chunk_bwd_dqkwg
-except ImportError:
-    print("fla not found, using tilelang implementation")
+except Exception as exc:
+    print(f"fla unavailable, using tilelang implementation: {exc}")
     fla = None
+    chunk_bwd_dqkwg = None
 
 import torch
 from test_utils import assert_similar
@@ -40,15 +41,15 @@ def prepare_input_fake(
     state_dtype,
 ):
     BS = S // chunk_size
-    Q = torch.ones(B, S, H, DK, dtype=input_dtype).cuda()
-    K = torch.ones(B, S, H, DK, dtype=input_dtype).cuda()
-    V = torch.ones(B, S, H, DV, dtype=input_dtype).cuda()
+    Q = torch.ones(B, S, H, DK, dtype=input_dtype).cuda().contiguous()
+    K = torch.ones(B, S, H, DK, dtype=input_dtype).cuda().contiguous()
+    V = torch.ones(B, S, H, DV, dtype=input_dtype).cuda().contiguous()
     h = torch.ones(B, BS, H, DK, DV, dtype=input_dtype).cuda()
     G = torch.ones(B, S, H, dtype=gate_dtype).cuda()
-    dO = torch.ones(B, S, H, DV, dtype=input_dtype).cuda()
+    dO = torch.ones(B, S, H, DV, dtype=input_dtype).cuda().contiguous()
     dh = torch.ones(B, BS, H, DK, DV, dtype=input_dtype).cuda()
-    dv = torch.ones(B, S, H, DV, dtype=output_dtype).cuda()
-    W = torch.ones(B, S, H, DK, dtype=input_dtype).cuda()
+    dv = torch.ones(B, S, H, DV, dtype=output_dtype).cuda().contiguous()
+    W = torch.ones(B, S, H, DK, dtype=input_dtype).cuda().contiguous()
     return Q, K, V, h, G, dO, dh, dv, W
 
 
@@ -67,15 +68,15 @@ def prepare_input(
 ):
     BS = S // chunk_size
 
-    Q = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
-    K = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
-    V = torch.randn(B, S, H, DV, dtype=input_dtype).cuda()
+    Q = torch.randn(B, S, H, DK, dtype=input_dtype).cuda().contiguous()
+    K = torch.randn(B, S, H, DK, dtype=input_dtype).cuda().contiguous()
+    V = torch.randn(B, S, H, DV, dtype=input_dtype).cuda().contiguous()
     h = torch.randn(B, BS, H, DK, DV, dtype=input_dtype).cuda()
     G = torch.randn(B, S, H, dtype=gate_dtype).cuda()
-    dO = torch.randn(B, S, H, DV, dtype=input_dtype).cuda()
+    dO = torch.randn(B, S, H, DV, dtype=input_dtype).cuda().contiguous()
     dh = torch.randn(B, BS, H, DK, DV, dtype=input_dtype).cuda()
-    dv = torch.randn(B, S, H, DV, dtype=output_dtype).cuda()
-    W = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
+    dv = torch.randn(B, S, H, DV, dtype=output_dtype).cuda().contiguous()
+    W = torch.randn(B, S, H, DK, dtype=input_dtype).cuda().contiguous()
     return Q, K, V, h, G, dO, dh, dv, W
 
 

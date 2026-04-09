@@ -12,9 +12,10 @@ try:
 
     print(fla.__file__)
     from fla.ops.common.chunk_o import chunk_fwd_o
-except ImportError:
-    print("fla not found, using tilelang implementation")
+except Exception as exc:
+    print(f"fla unavailable, using tilelang implementation: {exc}")
     fla = None
+    chunk_fwd_o = None
 
 import torch
 
@@ -34,9 +35,9 @@ def prepare_input(
     gate_dtype,
 ):
     BS = chunk_size
-    Q = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
-    K = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
-    V = torch.randn(B, S, H, DV, dtype=input_dtype).cuda()
+    Q = torch.randn(B, S, H, DK, dtype=input_dtype).cuda().contiguous()
+    K = torch.randn(B, S, H, DK, dtype=input_dtype).cuda().contiguous()
+    V = torch.randn(B, S, H, DV, dtype=input_dtype).cuda().contiguous()
     HIDDEN = torch.randn(B, S // BS, H, DK, DV, dtype=input_dtype).cuda()
     G = torch.randn(B, S, H, dtype=gate_dtype).cuda()
     return Q, K, V, HIDDEN, G

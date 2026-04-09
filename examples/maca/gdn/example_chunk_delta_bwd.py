@@ -5,6 +5,7 @@ import sys  # noqa: F401
 import tilelang
 import tilelang.language as T
 from tilelang.profiler import do_bench
+from tilelang.utils.target import determine_target, target_is_maca
 
 print(tilelang.__file__, flush=True)
 
@@ -16,9 +17,10 @@ try:
 
     print(fla.__file__, flush=True)
     from fla.ops.common.chunk_delta_h import chunk_gated_delta_rule_bwd_dhu
-except ImportError:
-    print("fla not found, using tilelang implementation")
+except Exception as exc:
+    print(f"fla unavailable, using tilelang implementation: {exc}")
     fla = None
+    chunk_gated_delta_rule_bwd_dhu = None
 
 import torch
 import torch.nn.functional as F
@@ -42,10 +44,10 @@ def prepare_input(
     gate_dtype,
     state_dtype,
 ):
-    Q = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
-    K = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
-    K = F.normalize(K, dim=-1, p=2)
-    W = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
+    Q = torch.randn(B, S, H, DK, dtype=input_dtype).cuda().contiguous()
+    K = torch.randn(B, S, H, DK, dtype=input_dtype).cuda().contiguous()
+    K = F.normalize(K, dim=-1, p=2).contiguous()
+    W = torch.randn(B, S, H, DK, dtype=input_dtype).cuda().contiguous()
     # Note: G should be in logspace and do chunkwise cumsum
     G = torch.randn(B, S, H, dtype=gate_dtype).cuda()
     G = F.logsigmoid(G)
@@ -53,13 +55,13 @@ def prepare_input(
         from fla.ops.utils.cumsum import chunk_local_cumsum
 
         G = chunk_local_cumsum(G, chunk_size)
-    except ImportError:
-        print("fla not found, skip cumsum")
+    except Exception as exc:
+        print(f"fla unavailable, skip cumsum: {exc}")
 
-    h0 = torch.randn(B, H, DK, DV, dtype=input_dtype).cuda()
-    dht = torch.randn(B, H, DK, DV, dtype=input_dtype).cuda()
-    dO = torch.randn(B, S, H, DV, dtype=input_dtype).cuda()
-    dv = torch.randn(B, S, H, DV, dtype=input_dtype).cuda()
+    h0 = torch.randn(B, H, DK, DV, dtype=input_dtype).cuda().contiguous()
+    dht = torch.randn(B, H, DK, DV, dtype=input_dtype).cuda().contiguous()
+    dO = torch.randn(B, S, H, DV, dtype=input_dtype).cuda().contiguous()
+    dv = torch.randn(B, S, H, DV, dtype=input_dtype).cuda().contiguous()
     return Q, K, W, G, h0, dht, dO, dv
 
 
@@ -76,14 +78,14 @@ def prepare_input_fake(
     gate_dtype,
     state_dtype,
 ):
-    Q = torch.ones(B, S, H, DK, dtype=input_dtype).cuda()
-    K = torch.ones(B, S, H, DK, dtype=input_dtype).cuda()
-    W = torch.ones(B, S, H, DK, dtype=input_dtype).cuda()
+    Q = torch.ones(B, S, H, DK, dtype=input_dtype).cuda().contiguous()
+    K = torch.ones(B, S, H, DK, dtype=input_dtype).cuda().contiguous()
+    W = torch.ones(B, S, H, DK, dtype=input_dtype).cuda().contiguous()
     G = torch.ones(B, S, H, dtype=gate_dtype).cuda()
-    h0 = torch.ones(B, H, DK, DV, dtype=input_dtype).cuda()
-    dht = torch.ones(B, H, DK, DV, dtype=input_dtype).cuda()
-    dO = torch.ones(B, S, H, DV, dtype=input_dtype).cuda()
-    dv = torch.ones(B, S, H, DV, dtype=input_dtype).cuda()
+    h0 = torch.ones(B, H, DK, DV, dtype=input_dtype).cuda().contiguous()
+    dht = torch.ones(B, H, DK, DV, dtype=input_dtype).cuda().contiguous()
+    dO = torch.ones(B, S, H, DV, dtype=input_dtype).cuda().contiguous()
+    dv = torch.ones(B, S, H, DV, dtype=input_dtype).cuda().contiguous()
     return Q, K, W, G, h0, dht, dO, dv
 
 
@@ -206,6 +208,10 @@ def tilelang_chunk_gated_delta_rule_bwd_dhu(
     threads=256,
     num_stages=0,
 ):
+    is_maca = target_is_maca(determine_target("auto", return_object=True))
+    if is_maca:
+        block_DV = min(block_DV, 16)
+
     block_S = chunk_size
     # Should support cu_seqlen
     BS = S // block_S
@@ -265,14 +271,16 @@ def tilelang_chunk_gated_delta_rule_bwd_dhu(
             Q_fragment = T.alloc_fragment((block_S, DK), dtype=accum_dtype)
             Q_fragment_t = T.alloc_fragment((DK, block_S), dtype=accum_dtype)
 
-            T.use_swizzle(10)
+            if not is_maca:
+                T.use_swizzle(10)
 
-            T.annotate_layout(
-                {
-                    dO_shared: tilelang.layout.make_swizzled_layout(dO_shared),
-                    Q_shared: tilelang.layout.make_swizzled_layout(Q_shared),
-                }
-            )
+            if not is_maca:
+                T.annotate_layout(
+                    {
+                        dO_shared: tilelang.layout.make_swizzled_layout(dO_shared),
+                        Q_shared: tilelang.layout.make_swizzled_layout(Q_shared),
+                    }
+                )
 
             if use_final_state_gradient:
                 T.copy(dht[bb, bh, 0:DK, bv * block_DV : (bv + 1) * block_DV], b_dh_shared)
