@@ -1,10 +1,20 @@
 import torch
 import tilelang
 import tilelang.language as T
+from tilelang.utils.target import determine_target, target_is_maca
 
 pass_configs = {
     tilelang.PassConfigKey.TL_DISABLE_THREAD_STORAGE_SYNC: True,
 }
+
+
+def _maca_histogram_reset_config(radix: int, block_size: int):
+    assert block_size == radix, "MACA histogram reset assumes one thread per radix bucket"
+    return {
+        "thread_clear_limit": radix,
+        "sentinel_thread": 0,
+        "sentinel_bucket": radix,
+    }
 
 
 def convert_to_uint16(x):
@@ -29,7 +39,13 @@ def tl_topk_impl(topk, in_dtype=T.float32, out_dtype=T.int32):
     batch = T.dynamic("batch")
     seq_len = T.dynamic("seq_len")
     RADIX = 1 << 8
-    BLOCK_SIZE = 1024
+    is_maca = target_is_maca(determine_target("auto", return_object=True))
+    BLOCK_SIZE = RADIX if is_maca else 1024
+    if is_maca:
+        maca_histogram_reset = _maca_histogram_reset_config(radix=RADIX, block_size=BLOCK_SIZE)
+        maca_thread_clear_limit = maca_histogram_reset["thread_clear_limit"]
+        maca_sentinel_thread = maca_histogram_reset["sentinel_thread"]
+        maca_sentinel_bucket = maca_histogram_reset["sentinel_bucket"]
     SMEM_INPUT_SIZE = 4096  # assume the threshold bucket size after first pass is less than 4K
 
     @T.prim_func
@@ -64,8 +80,15 @@ def tl_topk_impl(topk, in_dtype=T.float32, out_dtype=T.int32):
             l_end_idx = ends[bx]
 
             # stage 1: use 8bit to do quick topk
-            T.fill(s_histogram, 0)
-            T.fill(s_num_input[0], 0)
+            if is_maca:
+                if tx < maca_thread_clear_limit:
+                    s_histogram[tx] = 0
+                if tx == maca_sentinel_thread:
+                    s_histogram[maca_sentinel_bucket] = 0
+                    s_num_input[0] = 0
+            else:
+                T.fill(s_histogram, 0)
+                T.fill(s_num_input[0], 0)
 
             T.sync_threads()
             for s in T.serial(T.ceildiv(seq_len, BLOCK_SIZE)):
@@ -79,15 +102,15 @@ def tl_topk_impl(topk, in_dtype=T.float32, out_dtype=T.int32):
             if tx < RADIX:
                 for i in T.serial(8):
                     offset = 1 << i
-                    T.sync_threads(3, RADIX)
+                    T.sync_threads() if is_maca else T.sync_threads(3, RADIX)
                     if tx < RADIX - offset:
                         l_val = s_histogram[tx] + s_histogram[tx + offset]
-                    T.sync_threads(3, RADIX)
+                    T.sync_threads() if is_maca else T.sync_threads(3, RADIX)
                     if tx < RADIX - offset:
                         s_histogram[tx] = l_val
 
                 # find threshold bin id
-                T.sync_threads(3, RADIX)
+                T.sync_threads() if is_maca else T.sync_threads(3, RADIX)
                 if s_histogram[tx] > l_new_topk and s_histogram[tx + 1] <= l_new_topk:
                     s_threshold_bin_id[0] = tx
             T.sync_threads()
@@ -121,9 +144,16 @@ def tl_topk_impl(topk, in_dtype=T.float32, out_dtype=T.int32):
                 l_start_pos = topk - l_new_topk
 
                 T.sync_threads()
-                T.fill(s_histogram, 0)
-                if tx == 0:
-                    s_num_input[r_idx ^ 1] = 0
+                if is_maca:
+                    if tx < maca_thread_clear_limit:
+                        s_histogram[tx] = 0
+                    if tx == maca_sentinel_thread:
+                        s_histogram[maca_sentinel_bucket] = 0
+                        s_num_input[r_idx ^ 1] = 0
+                else:
+                    T.fill(s_histogram, 0)
+                    if tx == 0:
+                        s_num_input[r_idx ^ 1] = 0
                 T.sync_threads()
 
                 l_num_input = s_num_input[r_idx]
@@ -138,15 +168,15 @@ def tl_topk_impl(topk, in_dtype=T.float32, out_dtype=T.int32):
                 if tx < RADIX:
                     for i in T.serial(8):
                         offset = 1 << i
-                        T.sync_threads(3, RADIX)
+                        T.sync_threads() if is_maca else T.sync_threads(3, RADIX)
                         if tx < RADIX - offset:
                             l_val = s_histogram[tx] + s_histogram[tx + offset]
-                        T.sync_threads(3, RADIX)
+                        T.sync_threads() if is_maca else T.sync_threads(3, RADIX)
                         if tx < RADIX - offset:
                             s_histogram[tx] = l_val
 
                     # find threshold bin id
-                    T.sync_threads(3, RADIX)
+                    T.sync_threads() if is_maca else T.sync_threads(3, RADIX)
                     if s_histogram[tx] > l_new_topk and s_histogram[tx + 1] <= l_new_topk:
                         s_threshold_bin_id[0] = tx
                 T.sync_threads()

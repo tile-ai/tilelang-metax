@@ -3,6 +3,25 @@ import torch
 import tilelang
 from tilelang import language as T
 from utils import assert_tensors_similar
+from tilelang.utils.target import determine_target, target_is_maca
+
+
+def _head_partition_config(head_kv: int, padded_H: int, is_maca: bool):
+    max_block_h = 16 if is_maca else 64
+    if head_kv > max_block_h:
+        assert head_kv % max_block_h == 0, f"head_kv should be a multiple of {max_block_h}"
+        replicate_h = head_kv // max_block_h
+    else:
+        replicate_h = 1
+
+    h_per_block = padded_H if replicate_h == 1 else max_block_h
+    head_block_stride = 0 if replicate_h == 1 else max_block_h
+    return {
+        "max_block_h": max_block_h,
+        "replicate_h": replicate_h,
+        "h_per_block": h_per_block,
+        "head_block_stride": head_block_stride,
+    }
 
 
 @tilelang.jit(
@@ -21,6 +40,7 @@ def sparse_mla_fwd(
     sm_scale=None,
     is_causal=True,
     CP0=True,
+    q_offset=0,
     block_I=64,
     num_stages=2,
     threads=256,
@@ -51,6 +71,7 @@ def sparse_mla_fwd(
     G = kv_group
     H = head_kv
     padded_H = max(tilelang.math.next_power_of_2(head_kv), 16)
+    is_maca = target_is_maca(determine_target("auto", return_object=True))
     if padded_H != H:
         assert kv_group == 1, (
             "here we solve the H padding automatically, other wise you should handle Q copy and Output copy with your mask (when kv_group == 1, use g_i * padded_H:(g_i+1) * padded_H would be handled automatically)"
@@ -60,13 +81,10 @@ def sparse_mla_fwd(
     D = dim
     D_tail = tail_dim
 
-    if head_kv > 64:
-        assert head_kv % 64 == 0, "head_kv should be a multiple of 64"
-        REPLICATE_H = head_kv // 64
-    else:
-        REPLICATE_H = 1
-
-    H_per_block = padded_H if REPLICATE_H == 1 else 64
+    head_cfg = _head_partition_config(head_kv=head_kv, padded_H=padded_H, is_maca=is_maca)
+    REPLICATE_H = head_cfg["replicate_h"]
+    H_per_block = head_cfg["h_per_block"]
+    head_block_stride = head_cfg["head_block_stride"]
 
     @T.prim_func
     def main(
@@ -104,10 +122,10 @@ def sparse_mla_fwd(
 
             b_i, g_i = by, bz
             s_i = bx if REPLICATE_H == 1 else (bx // REPLICATE_H)
-            q_i = s_i
+            q_i = s_i + q_offset
             max_kv_i = q_i
 
-            H0 = g_i * padded_H + (0 if REPLICATE_H == 1 else (bx % REPLICATE_H) * 64)
+            H0 = g_i * padded_H + (bx % REPLICATE_H) * head_block_stride
             H1 = H0 + H_per_block
 
             T.copy(Q[b_i, s_i, H0:H1, :D], Q_shared)
@@ -167,7 +185,18 @@ def sparse_mla_fwd(
     return main
 
 
-def sparse_mla_fwd_interface(q, kv, indices, sm_scale=None, return_p_sum: bool = False, d_v=512, block_I=64, num_stages=2, threads=256):
+def sparse_mla_fwd_interface(
+    q,
+    kv,
+    indices,
+    sm_scale=None,
+    return_p_sum: bool = False,
+    d_v=512,
+    block_I=64,
+    num_stages=2,
+    threads=256,
+    q_offset=0,
+):
     is_casual = True
     assert return_p_sum == False, "This kernel file is for fwd only"
     assert q.is_contiguous() and kv.is_contiguous() and indices.is_contiguous()
@@ -182,9 +211,13 @@ def sparse_mla_fwd_interface(q, kv, indices, sm_scale=None, return_p_sum: bool =
     assert kv.shape[0] == batch
     _, _, _, topk = indices.shape
     assert indices.shape == (batch, seq_len, kv_group, topk)
+    if target_is_maca(determine_target("auto", return_object=True)):
+        block_I = min(block_I, 16)
+        num_stages = 1
+        threads = 64
 
     kernel = sparse_mla_fwd(
-        heads, dim, tail_dim, topk, kv_group, sm_scale, is_casual, block_I=block_I, num_stages=num_stages, threads=threads
+        heads, dim, tail_dim, topk, kv_group, sm_scale, is_casual, True, q_offset, block_I=block_I, num_stages=num_stages, threads=threads
     )
     out, lse = kernel(q, kv, indices)
     return out, lse
