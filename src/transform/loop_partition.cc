@@ -24,7 +24,6 @@
 
 #include "loop_partition.h"
 
-#include <tvm/tir/analysis.h>
 #include <tvm/tir/stmt_functor.h>
 
 #include <utility>
@@ -37,32 +36,6 @@ namespace tl {
 
 using namespace tir;
 
-namespace {
-
-bool IntroducesUnexpectedFreeVars(const Stmt &original, const Stmt &rewritten) {
-  Array<Var> no_defined_vars;
-  Array<Var> original_free_vars = UndefinedVars(original, no_defined_vars);
-  Array<Var> rewritten_free_vars = UndefinedVars(rewritten, no_defined_vars);
-  for (const Var &var : rewritten_free_vars) {
-    bool found = false;
-    for (const Var &allowed : original_free_vars) {
-      if (var.same_as(allowed)) {
-        found = true;
-        break;
-      }
-    }
-    if (!found) {
-      return true;
-    }
-  }
-  return false;
-}
-
-} // namespace
-
-// Uses PartitionLoop's analyzer directly (all Bind facts visible). Only
-// rewrites buffer indices; does not push per-For/Let scopes (same as
-// loop_partition_org.cc).
 class BufferIndiceSimplify : public StmtExprMutator {
 public:
   BufferIndiceSimplify(arith::Analyzer *analyzer) : analyzer_(analyzer) {}
@@ -85,74 +58,6 @@ private:
     return n;
   }
   arith::Analyzer *analyzer_;
-};
-
-// Fresh analyzer with scoped For/Let bindings; avoids stale outer equalities
-// but may miss some global facts. Used when the direct-analyzer path leaks
-// vars.
-class ScopedBufferIndiceSimplify : public StmtExprMutator {
-public:
-  ScopedBufferIndiceSimplify()
-      : analyzer_(std::make_unique<arith::Analyzer>()) {}
-
-private:
-  Stmt VisitStmt_(const ForNode *node) final {
-    auto parent = std::move(analyzer_);
-    analyzer_ = parent->Clone();
-    analyzer_->Bind(node->loop_var,
-                    Range::FromMinExtent(node->min, node->extent));
-    Stmt new_body = this->VisitStmt(node->body);
-    analyzer_ = std::move(parent);
-    if (new_body.same_as(node->body)) {
-      return tvm::ffi::GetRef<Stmt>(node);
-    }
-    For n = tvm::ffi::GetRef<For>(node);
-    n.CopyOnWrite()->body = std::move(new_body);
-    return n;
-  }
-
-  Stmt VisitStmt_(const LetStmtNode *node) final {
-    PrimExpr new_value = this->VisitExpr(node->value);
-    auto parent = std::move(analyzer_);
-    analyzer_ = parent->Clone();
-    analyzer_->Bind(node->var, new_value, /*allow_override=*/true);
-    Stmt new_body = this->VisitStmt(node->body);
-    analyzer_ = std::move(parent);
-    if (new_value.same_as(node->value) && new_body.same_as(node->body)) {
-      return tvm::ffi::GetRef<Stmt>(node);
-    }
-    return LetStmt(node->var, std::move(new_value), std::move(new_body));
-  }
-
-  PrimExpr VisitExpr_(const BufferLoadNode *node) final {
-    auto visited = StmtExprMutator::VisitExpr_(node);
-    auto n = Downcast<BufferLoad>(visited);
-    auto nptr = n.CopyOnWrite();
-    auto old_indices = nptr->indices;
-    Array<PrimExpr> new_indices;
-    new_indices.reserve(old_indices.size());
-    for (size_t i = 0; i < old_indices.size(); ++i) {
-      const auto &e = old_indices[i];
-      new_indices.push_back(analyzer_->Simplify(e));
-    }
-    nptr->indices = std::move(new_indices);
-    return n;
-  }
-  Stmt VisitStmt_(const BufferStoreNode *node) final {
-    auto visited = StmtExprMutator::VisitStmt_(node);
-    auto n = Downcast<BufferStore>(visited);
-    auto nptr = n.CopyOnWrite();
-    auto old_indices = nptr->indices;
-    Array<PrimExpr> new_indices;
-    new_indices.reserve(old_indices.size());
-    for (size_t i = 0; i < old_indices.size(); ++i) {
-      const auto &e = old_indices[i];
-      new_indices.push_back(analyzer_->Simplify(e));
-    }
-    nptr->indices = std::move(new_indices);
-    return n;
-  }
-  std::unique_ptr<arith::Analyzer> analyzer_;
 };
 
 // Rewrite the parallel loop into a common loop, which is mapped to threads
@@ -251,16 +156,7 @@ For PartitionLoop(For op, Var thread_var, arith::Analyzer *analyzer,
     analyzer->Bind(vars[i], Range(0, inv_loop->InputShape()[i]));
   }
 
-  // Prefer PartitionLoop's analyzer (same as loop_partition_org.cc): all Bind
-  // facts apply, but stale outer equalities may rewrite indices to use vars not
-  // in this body. If so, fall back to ScopedBufferIndiceSimplify (fresh
-  // analyzer
-  // + per-For/Let scopes).
-  Stmt fallback_simplified = ScopedBufferIndiceSimplify()(body);
-  Stmt context_simplified = BufferIndiceSimplify(analyzer)(body);
-  body = IntroducesUnexpectedFreeVars(body, context_simplified)
-             ? fallback_simplified
-             : context_simplified;
+  body = BufferIndiceSimplify(analyzer)(body);
 
   if (has_thread_offset) {
     body = Substitute(body, thread_offset_map);
