@@ -248,6 +248,8 @@ def _tl_vs_sparse_flashattn(batch, heads, seq_len, dim, vertical_size, slash_siz
             for i, j in T.Parallel(block_N, dim):
                 V_shared[i, j] = T.if_then_else(k + i < column_count, V[bz, by, column_index[k + i], j], 0)
 
+            T.tvm_storage_sync("shared")
+
         @T.macro
         def ComputeSync(
             acc_s: T.FragmentBuffer([block_M, block_N], accum_dtype),
