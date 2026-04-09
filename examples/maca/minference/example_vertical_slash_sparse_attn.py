@@ -305,8 +305,6 @@ def _tl_vs_sparse_flashattn(batch, heads, seq_len, dim, vertical_size, slash_siz
                 Q_shared = T.alloc_shared([block_M, dim], dtype)
                 K_shared_1 = T.alloc_shared([block_N, dim], dtype)
                 V_shared_1 = T.alloc_shared([block_N, dim], dtype)
-                K_shared_2 = T.alloc_shared([block_N, dim], dtype)
-                V_shared_2 = T.alloc_shared([block_N, dim], dtype)
                 O_shared = T.alloc_shared([block_M, dim], dtype)
                 acc_s = T.alloc_fragment([block_M, block_N], accum_dtype)
                 acc_s_cast = T.alloc_fragment([block_M, block_N], dtype)
