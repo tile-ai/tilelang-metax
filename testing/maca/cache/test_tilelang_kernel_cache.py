@@ -38,7 +38,7 @@ BACKENDS = [
 
 def _get_target_from_backend(backend: str):
     """Map backend to target string."""
-    return "cutedsl" if backend == "cutedsl" else "auto"
+    return "auto"
 
 
 class PostProcCounter:
@@ -50,8 +50,8 @@ class PostProcCounter:
 
     def register_callback(self, backend: str):
         """Register postproc callback for the given backend."""
-        comment_prefix = "#" if backend == "cutedsl" else "//"
-        global_func = "tilelang_callback_cutedsl_postproc" if backend == "cutedsl" else "tilelang_callback_maca_postproc"
+        comment_prefix = "//"
+        global_func = "tilelang_callback_maca_postproc"
 
         def callback(code, _):
             self.count += 1
