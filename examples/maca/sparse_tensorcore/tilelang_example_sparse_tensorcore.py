@@ -4,6 +4,7 @@ from tilelang.utils.sparse import compress_sm90
 from tilelang.layout import make_cutlass_metadata_layout
 from tilelang import language as T
 import tilelang.testing
+from tilelang.utils.target import determine_target, target_is_maca
 
 
 @tilelang.jit(out_idx=[-1])
@@ -54,6 +55,44 @@ def matmul_sp(
     return main
 
 
+@tilelang.jit(out_idx=[-1])
+def matmul_dense(
+    M,
+    N,
+    K,
+    block_M,
+    block_N,
+    block_K,
+    in_dtype,
+    out_dtype,
+    accum_dtype,
+    num_stages,
+    threads,
+):
+    @T.prim_func
+    def main(
+        A: T.Tensor((M, K), in_dtype),
+        B: T.Tensor((K, N), in_dtype),
+        C: T.Tensor((M, N), out_dtype),
+    ):
+        with T.Kernel(T.ceildiv(N, block_N), T.ceildiv(M, block_M), threads=threads) as (bx, by):
+            A_shared = T.alloc_shared((block_M, block_K), in_dtype)
+            B_shared = T.alloc_shared((block_K, block_N), in_dtype)
+            C_local = T.alloc_fragment((block_M, block_N), accum_dtype)
+            T.clear(C_local)
+            for k in T.Pipelined(T.ceildiv(K, block_K), num_stages=num_stages):
+                T.copy(A[by * block_M, k * block_K], A_shared)
+                T.copy(B[k * block_K, bx * block_N], B_shared)
+                T.gemm(A_shared, B_shared, C_local)
+            T.copy(C_local, C[by * block_M, bx * block_N])
+
+    return main
+
+
+def is_maca_target() -> bool:
+    return target_is_maca(determine_target("auto", return_object=True))
+
+
 def generate_2_to_4_sparse_tensor(shape, dtype=torch.float32, device="cpu"):
     if shape[-1] % 4 != 0:
         raise ValueError("Last dimension must be divisible by 4 for 2:4 sparsity.")
@@ -85,7 +124,14 @@ def run_gemm_sp(
     num_stages,
     num_threads,
 ):
-    kernel = matmul_sp(
+    maca_mode = is_maca_target()
+    kernel_fn = matmul_sp
+    if maca_mode:
+        kernel_fn = matmul_dense
+        block_K = min(block_K, 64)
+        num_stages = 1
+
+    kernel = kernel_fn(
         M,
         N,
         K,
@@ -100,10 +146,14 @@ def run_gemm_sp(
     )
 
     A = generate_2_to_4_sparse_tensor((M, K), dtype=torch.float16, device="cuda")
-    A_sparse, E = compress_sm90(A, block_k=block_K, transposed=False)
     B = torch.randn((K, N), device="cuda", dtype=torch.float16)
 
-    C_sp = kernel(A_sparse, E, B).half()
+    if maca_mode:
+        C_sp = kernel(A, B).half()
+    else:
+        A_sparse, E = compress_sm90(A, block_k=block_K, transposed=False)
+        C_sp = kernel(A_sparse, E, B).half()
+
     C = torch.matmul(A, B)
     torch.testing.assert_close(C_sp, C, atol=1e-3, rtol=1e-3)
     print("pass")
@@ -127,7 +177,14 @@ def run_regression_perf():
         2,
         128,
     )
-    kernel = matmul_sp(
+    maca_mode = is_maca_target()
+    kernel_fn = matmul_sp
+    if maca_mode:
+        kernel_fn = matmul_dense
+        block_K = min(block_K, 64)
+        num_stages = 1
+
+    kernel = kernel_fn(
         M,
         N,
         K,
@@ -141,13 +198,18 @@ def run_regression_perf():
         num_threads,
     )
     A = generate_2_to_4_sparse_tensor((M, K), dtype=torch.float16, device="cuda")
-    A_sparse, E = compress_sm90(A, block_k=block_K, transposed=False)
     B = torch.randn((K, N), device="cuda", dtype=torch.float16)
+    A_sparse = E = None
+    if not maca_mode:
+        A_sparse, E = compress_sm90(A, block_k=block_K, transposed=False)
 
     from tilelang.profiler import do_bench
 
     def run_kernel_only():
-        kernel(A_sparse, E, B)
+        if maca_mode:
+            kernel(A, B)
+        else:
+            kernel(A_sparse, E, B)
 
     return do_bench(run_kernel_only, backend="cupti")
 
