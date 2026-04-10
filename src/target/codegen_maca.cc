@@ -2286,35 +2286,35 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     std::string func_name = math_func(op->dtype, "rsqrt");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::__exp())) {
-    MACAMath math_func;
+    MACAFastMath math_func;
     std::string func_name = math_func(op->dtype, "exp");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::__exp10())) {
-    MACAMath math_func;
+    MACAFastMath math_func;
     std::string func_name = math_func(op->dtype, "exp10");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::__log())) {
-    MACAMath math_func;
+    MACAFastMath math_func;
     std::string func_name = math_func(op->dtype, "log");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::__log2())) {
-    MACAMath math_func;
+    MACAFastMath math_func;
     std::string func_name = math_func(op->dtype, "log2");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::__log10())) {
-    MACAMath math_func;
+    MACAFastMath math_func;
     std::string func_name = math_func(op->dtype, "log10");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::__tan())) {
-    MACAMath math_func;
+    MACAFastMath math_func;
     std::string func_name = math_func(op->dtype, "tan");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::__cos())) {
-    MACAMath math_func;
+    MACAFastMath math_func;
     std::string func_name = math_func(op->dtype, "cos");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::__sin())) {
-    MACAMath math_func;
+    MACAFastMath math_func;
     std::string func_name = math_func(op->dtype, "sin");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::ieee_add())) {
