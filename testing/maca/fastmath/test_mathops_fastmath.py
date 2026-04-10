@@ -269,7 +269,6 @@ def run_fastmath_mathop_test(mathop_name, mathop_func, M=128, N=128, block_M=32,
         ("nearbyint", T.nearbyint),
     ],
 )
-
 def test_mathops_generate_no_fastmath(name, func):
     """Test that our tl.* mathops generate fastmath MACA code (__expf etc.)"""
     run_single_arg_mathop_test(name, func, dtype=T.float32)
@@ -283,7 +282,6 @@ def test_mathops_generate_no_fastmath(name, func):
         ("fmod", T.fmod),
     ],
 )
-
 def test_two_arg_mathops_fastmath(name, func):
     """Test all two-argument mathops"""
     run_two_arg_mathop_test(name, func, dtype=T.float32)
@@ -307,7 +305,6 @@ def test_abs_maps_to_fabs():
         ("__sin", T.__sin),
     ],
 )
-
 def test_fastmath_versions(name, func):
     """Test that __exp, __exp10, __log, __log2, __log10, __tan, __cos, __sin generate fastmath MACA code"""
     run_fastmath_mathop_test(name, func, dtype=T.float32)

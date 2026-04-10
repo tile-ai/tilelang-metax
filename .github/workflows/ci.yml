@@ -461,6 +461,7 @@ jobs:
             --ignore=./python/language/test_tilelang_memory_leak.py \
             --ignore=./python/language/test_tilelang_language_reshape.py \
             ./python/language
+          "${PYTEST[@]}" --maxfail=3 --timeout=180 ./maca
 
       # Apple Metal tests
       - name: Run Metal tests with Python ${{ matrix.python-version }} (${{ matrix.runner.toolkit }})
