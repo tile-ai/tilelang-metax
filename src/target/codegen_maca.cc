@@ -80,7 +80,7 @@ struct MACAIEEEMath {
     if (t.is_float() && t.bits() == 32) {
       return "__" + name + '_' + rounding_mode;
     } else if (t.is_float() && t.bits() == 64) {
-      return '__d' + name + '_' + rounding_mode;
+      return "__d" + name + "_" + rounding_mode;
     }
     return "";
   }
