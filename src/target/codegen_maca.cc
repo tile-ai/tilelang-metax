@@ -2286,69 +2286,77 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     std::string func_name = math_func(op->dtype, "rsqrt");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::__exp())) {
-    std::string func_name = GetMACAFastMath(op->dtype, "exp");
+    MACAMath math_func;
+    std::string func_name = math_func(op->dtype, "exp");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::__exp10())) {
-    std::string func_name = GetMACAFastMath(op->dtype, "exp10");
+    MACAMath math_func;
+    std::string func_name = math_func(op->dtype, "exp10");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::__log())) {
-    std::string func_name = GetMACAFastMath(op->dtype, "log");
+    MACAMath math_func;
+    std::string func_name = math_func(op->dtype, "log");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::__log2())) {
-    std::string func_name = GetMACAFastMath(op->dtype, "log2");
+    MACAMath math_func;
+    std::string func_name = math_func(op->dtype, "log2");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::__log10())) {
-    std::string func_name = GetMACAFastMath(op->dtype, "log10");
+    MACAMath math_func;
+    std::string func_name = math_func(op->dtype, "log10");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::__tan())) {
-    std::string func_name = GetMACAFastMath(op->dtype, "tan");
+    MACAMath math_func;
+    std::string func_name = math_func(op->dtype, "tan");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::__cos())) {
-    std::string func_name = GetMACAFastMath(op->dtype, "cos");
+    MACAMath math_func;
+    std::string func_name = math_func(op->dtype, "cos");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::__sin())) {
-    std::string func_name = GetMACAFastMath(op->dtype, "sin");
+    MACAMath math_func;
+    std::string func_name = math_func(op->dtype, "sin");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::ieee_add())) {
-    MACAIEEEMAth math_func;
+    MACAIEEEMath math_func;
     std::string rounding_mode = Downcast<StringImm>(op->args[2])->value;
     std::string func_name = math_func(op->dtype, "fadd", rounding_mode);
     os << func_name << "(" << PrintExpr(op->args[0]) << ", "
        << PrintExpr(op->args[1]) << ")";
   } else if (op->op.same_as(tl::ieee_sub())) {
-    MACAIEEEMAth math_func;
+    MACAIEEEMath math_func;
     std::string rounding_mode = Downcast<StringImm>(op->args[2])->value;
     std::string func_name = math_func(op->dtype, "fsub", rounding_mode);
     os << func_name << "(" << PrintExpr(op->args[0]) << ", "
        << PrintExpr(op->args[1]) << ")";
   } else if (op->op.same_as(tl::ieee_mul())) {
-    MACAIEEEMAth math_func;
+    MACAIEEEMath math_func;
     std::string rounding_mode = Downcast<StringImm>(op->args[2])->value;
     std::string func_name = math_func(op->dtype, "fmul", rounding_mode);
     os << func_name << "(" << PrintExpr(op->args[0]) << ", "
        << PrintExpr(op->args[1]) << ")";
   } else if (op->op.same_as(tl::ieee_fmaf())) {
-    MACAIEEEMAth math_func;
+    MACAIEEEMath math_func;
     std::string rounding_mode = Downcast<StringImm>(op->args[3])->value;
     std::string func_name = math_func(op->dtype, "fmaf", rounding_mode);
     os << func_name << "(" << PrintExpr(op->args[0]) << ", "
        << PrintExpr(op->args[1]) << ", " << PrintExpr(op->args[2]) << ")";
   } else if (op->op.same_as(tl::ieee_frcp())) {
-    MACAIEEEMAth math_func;
+    MACAIEEEMath math_func;
     std::string rounding_mode = Downcast<StringImm>(op->args[1])->value;
     std::string func_name = math_func(op->dtype, "frcp", rounding_mode);
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::ieee_fsqrt())) {
-    MACAIEEEMAth math_func;
+    MACAIEEEMath math_func;
     std::string rounding_mode = Downcast<StringImm>(op->args[1])->value;
     std::string func_name = math_func(op->dtype, "fsqrt", rounding_mode);
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::ieee_frsqrt())) {
-    MACAIEEEMAth math_func;
-    std::string func_name = math_func(op->dtype, "frsqrt", rounding_mode);
+    MACAIEEEMath math_func;
+    std::string func_name = math_func(op->dtype, "frsqrt", "rn");
     os << func_name << "(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::ieee_fdiv())) {
-    MACAIEEEMAth math_func;
+    MACAIEEEMath math_func;
     std::string rounding_mode = Downcast<StringImm>(op->args[2])->value;
     std::string func_name = math_func(op->dtype, "fdiv", rounding_mode);
     os << func_name << "(" << PrintExpr(op->args[0]) << ", "
