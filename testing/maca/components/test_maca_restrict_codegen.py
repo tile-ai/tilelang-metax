@@ -12,7 +12,7 @@ def _get_sig_line(code: str) -> str:
     raise AssertionError("Kernel signature not found in generated code")
 
 
-def test_cuda_restrict_default_has_restrict():
+def test_maca_restrict_default_has_restrict():
     N = 128
 
     @T.prim_func
@@ -20,13 +20,13 @@ def test_cuda_restrict_default_has_restrict():
         with T.Kernel(N, threads=32) as pid:
             y[pid] = x[pid] + 1.0
 
-    artifact = tilelang.lower(kernel, target="cuda")
+    artifact = tilelang.lower(kernel, target="maca")
     sig = _get_sig_line(artifact.kernel_source)
     # By default, kNoAlias is set and both pointers are restrict-qualified
     assert "__restrict__" in sig
 
 
-def test_cuda_restrict_annotation_removes_restrict():
+def test_maca_restrict_annotation_removes_restrict():
     N = 128
 
     @T.prim_func
@@ -36,7 +36,7 @@ def test_cuda_restrict_annotation_removes_restrict():
             T.annotate_restrict_buffers(x, y)
             y[pid] = x[pid] + 1.0
 
-    art1 = tilelang.lower(kernel_body_annot, target="cuda")
+    art1 = tilelang.lower(kernel_body_annot, target="maca")
     sig1 = _get_sig_line(art1.kernel_source)
     # No parameter should be emitted with __restrict__
     assert "__restrict__" not in sig1

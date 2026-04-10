@@ -148,8 +148,8 @@ _DTYPES = ["float32", "bfloat16", "float16"]
 
 # Native cast types expected in codegen for 16-bit packed types
 _NATIVE_CAST_TYPE = {
-    "bfloat16": "__nv_bfloat162",
-    "float16": "__half2",
+    "bfloat16": "bfloat16x2",
+    "float16": "float16x2",
 }
 
 # Torch reference functions
