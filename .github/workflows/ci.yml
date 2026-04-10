@@ -456,8 +456,7 @@ jobs:
             --ignore=./python/language \
             ./python
 
-          "${PYTEST[@]}" --maxfail=3 --timeout=180 \
-            ./maca
+          "${PYTEST[@]}" --maxfail=3 --timeout=180 ./maca
 
           "${PYTEST[@]}" --maxfail=3 --numprocesses=1 \
             --ignore=./python/language/test_tilelang_language_frontend_v2.py \
