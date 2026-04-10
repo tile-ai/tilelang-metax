@@ -188,7 +188,7 @@ TVM_REGISTER_OP("tir.erf").set_attr<FLowerIntrinsic>(
     "maca.FLowerIntrinsic", DispatchPureExtern<MACAMath>);
 
 TVM_REGISTER_OP("tir.log").set_attr<FLowerIntrinsic>(
-    "maca.FLowerIntrinsic", DispatchPureExtern<MACAFastMath>);
+    "maca.FLowerIntrinsic", DispatchPureExtern<MACAMath>);
 
 TVM_REGISTER_OP("tir.log2")
     .set_attr<FLowerIntrinsic>("maca.FLowerIntrinsic",
@@ -202,14 +202,14 @@ TVM_REGISTER_OP("tir.tan").set_attr<FLowerIntrinsic>(
     "maca.FLowerIntrinsic", DispatchPureExtern<MACAMath>);
 
 TVM_REGISTER_OP("tir.cos").set_attr<FLowerIntrinsic>(
-    "maca.FLowerIntrinsic", DispatchPureExtern<MACAFastMath>);
+    "maca.FLowerIntrinsic", DispatchPureExtern<MACAMath>);
 
 TVM_REGISTER_OP("tir.cosh")
     .set_attr<FLowerIntrinsic>("maca.FLowerIntrinsic",
                                DispatchPureExtern<MACAMath>);
 
 TVM_REGISTER_OP("tir.sin").set_attr<FLowerIntrinsic>(
-    "maca.FLowerIntrinsic", DispatchPureExtern<MACAFastMath>);
+    "maca.FLowerIntrinsic", DispatchPureExtern<MACAMath>);
 
 TVM_REGISTER_OP("tir.sinh")
     .set_attr<FLowerIntrinsic>("maca.FLowerIntrinsic",
