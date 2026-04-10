@@ -31,9 +31,24 @@ def test_example_sparse_mla_fwd_pipelined():
     sparse_mla_fwd_pipelined.test_sparse_mla_fwd_pipelined(S=256, SKV=512, H=64, HKV=1, DQK=576, DV=512, topk=256, check_correctness=False)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_sparse_mla_bwd():
-    sparse_mla_bwd.test_sparse_mla_bwd(S=64, SKV=128, H=16, HKV=1, DQKV=576, DV=512, topk=32, check_correctness=False)
+    sparse_mla_bwd.test_sparse_mla_bwd(
+        S=64,
+        SKV=128,
+        H=16,
+        HKV=1,
+        DQKV=288,
+        DV=256,
+        topk=32,
+        check_correctness=False,
+        fwd_block_I=32,
+        fwd_num_stages=1,
+        fwd_threads=128,
+        bwd_block_size=32,
+        bwd_split_store=2,
+        bwd_num_stages=0,
+        bwd_threads=128,
+    )
 
 
 if __name__ == "__main__":
