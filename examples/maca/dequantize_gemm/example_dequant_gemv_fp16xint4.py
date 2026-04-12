@@ -56,9 +56,7 @@ def dequantize_gemv(
     import_source: Optional[str] = None
     func_name: str = ""
     if fast_decoding is True:
-        # Lazy import to decrease the startup time
-        # as intrin registry may take a while to load
-        from tilelang.quantize import get_lop3_intrin_group
+        from tilelang.quantize.lop3_maca import get_lop3_intrin_group
 
         lop3_intrin_info = get_lop3_intrin_group(
             out_dtype=in_dtype,
@@ -70,9 +68,6 @@ def dequantize_gemv(
         )
         import_source = lop3_intrin_info["c_source"]
         func_name = lop3_intrin_info["func_name"]
-        assert import_source is not None, "lop3_intrin_info is not found"
-        assert func_name is not None, "lop3_intrin_info is not found"
-        import_source = import_source
 
     @T.prim_func
     def main(
