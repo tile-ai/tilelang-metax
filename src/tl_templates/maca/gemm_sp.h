@@ -74,18 +74,16 @@ struct DispatchSharedMemoryLayoutA;
 
 template <typename T, int M, int K>
 struct DispatchSharedMemoryLayoutA<T, false, M, K> {
-  using SmemLayoutA =
-      mctlass::layout::MacaRowMajorTensorOpMultiplicandCrosswise<
-          mctlass::sizeof_bits<T>::value, K / kSparse>;
+  using SmemLayoutA = mctlass::layout::RowMajorTensorOpMultiplicandCrosswise<
+      mctlass::sizeof_bits<T>::value, K / kSparse>;
 };
 
 template <typename T, int M, int K>
 struct DispatchSharedMemoryLayoutA<T, true, M, K> {
   static int const Crosswise_A =
       mctlass::platform::min(int(128 / sizeof(T)), M);
-  using SmemLayoutA =
-      mctlass::layout::MacaColumnMajorTensorOpMultiplicandCongruous<
-          mctlass::sizeof_bits<T>::value, Crosswise_A>;
+  using SmemLayoutA = mctlass::layout::ColumnMajorTensorOpMultiplicandCongruous<
+      mctlass::sizeof_bits<T>::value, Crosswise_A>;
 };
 
 template <typename T, bool transpose, int N, int K>
@@ -98,9 +96,8 @@ struct DispatchSharedMemoryLayoutB<T, false, N, K> {
       "int8, uint8, float8 only support column major layout for matrix B");
   static int const Crosswise_B =
       mctlass::platform::min(int(128 / sizeof(T)), N);
-  using SmemLayoutB =
-      mctlass::layout::MacaRowMajorTensorOpMultiplicandCongruous<
-          mctlass::sizeof_bits<T>::value, Crosswise_B>;
+  using SmemLayoutB = mctlass::layout::RowMajorTensorOpMultiplicandCongruous<
+      mctlass::sizeof_bits<T>::value, Crosswise_B>;
 };
 
 template <typename T, int N, int K>
@@ -108,9 +105,8 @@ struct DispatchSharedMemoryLayoutB<T, true, N, K> {
   static int const kCrosswiseB = (K > (1024 / mctlass::sizeof_bits<T>::value))
                                      ? (1024 / mctlass::sizeof_bits<T>::value)
                                      : K;
-  using SmemLayoutB =
-      mctlass::layout::MacaColumnMajorTensorOpMultiplicandCrosswise<
-          mctlass::sizeof_bits<T>::value, kCrosswiseB>;
+  using SmemLayoutB = mctlass::layout::ColumnMajorTensorOpMultiplicandCrosswise<
+      mctlass::sizeof_bits<T>::value, kCrosswiseB>;
 };
 
 template <typename T> struct DispatchType {
@@ -121,15 +117,7 @@ template <> struct DispatchType<mctlass::half_t> {
   using Type = mctlass::half_t;
 };
 
-template <> struct DispatchType<half_t> {
-  using Type = mctlass::half_t;
-};
-
 template <> struct DispatchType<mctlass::bfloat16_t> {
-  using Type = mctlass::bfloat16_t;
-};
-
-template <> struct DispatchType<bfloat16_t> {
   using Type = mctlass::bfloat16_t;
 };
 
