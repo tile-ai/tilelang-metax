@@ -46,7 +46,7 @@ def native_sparse_attention(
     BS = block_S
     BK = BV = block_T
     num_stages = 0
-    threads = 32
+    threads = 64
 
     @T.prim_func
     def native_sparse_attention(
