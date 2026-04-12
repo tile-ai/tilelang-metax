@@ -14,9 +14,10 @@ try:
 
     print(fla.__file__)
     from fla.ops.common.chunk_delta_h import chunk_gated_delta_rule_fwd_h
-except ImportError:
-    print("fla not found, using tilelang implementation")
+except Exception as exc:
+    print(f"fla unavailable, using tilelang implementation: {exc}")
     fla = None
+    chunk_gated_delta_rule_fwd_h = None
 
 import torch
 import torch.nn.functional as F
@@ -48,22 +49,22 @@ def prepare_input(
     accum_dtype,
     gate_dtype,
 ):
-    K = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
-    K = F.normalize(K, dim=-1, p=2)
-    W = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
-    W = F.normalize(W, dim=-1, p=2)
-    U = torch.randn(B, S, H, DV, dtype=input_dtype).cuda()
-    U = F.normalize(U, dim=-1, p=2)
+    K = torch.randn(B, S, H, DK, dtype=input_dtype).cuda().contiguous()
+    K = F.normalize(K, dim=-1, p=2).contiguous()
+    W = torch.randn(B, S, H, DK, dtype=input_dtype).cuda().contiguous()
+    W = F.normalize(W, dim=-1, p=2).contiguous()
+    U = torch.randn(B, S, H, DV, dtype=input_dtype).cuda().contiguous()
+    U = F.normalize(U, dim=-1, p=2).contiguous()
     G = torch.randn(B, S, H, dtype=gate_dtype).cuda()
     G = F.logsigmoid(G)
     try:
         from fla.ops.utils.cumsum import chunk_local_cumsum
 
         G = chunk_local_cumsum(G, chunk_size)
-    except ImportError:
-        print("fla not found, skip cumsum")
+    except Exception as exc:
+        print(f"fla unavailable, skip cumsum: {exc}")
 
-    initial_state = torch.randn(B, H, DK, DV, dtype=input_dtype).cuda()
+    initial_state = torch.randn(B, H, DK, DV, dtype=input_dtype).cuda().contiguous()
     return K, W, U, G, initial_state
 
 

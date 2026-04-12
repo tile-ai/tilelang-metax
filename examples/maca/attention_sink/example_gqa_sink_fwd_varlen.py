@@ -7,12 +7,19 @@ import tilelang
 import tilelang.language as T
 import tilelang.testing
 from tilelang.profiler import do_bench
+from tilelang.utils.target import determine_target, target_is_maca
 from typing import Optional
 import sys
 import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../flash_attention"))
 from varlen_utils import generate_random_padding_mask, generate_qkv
+
+
+def get_fwd_configs():
+    if target_is_maca(determine_target("auto", return_object=True)):
+        return 64, 32, 1, 128
+    return 128, 128, 2, 256
 
 
 @tilelang.jit(
@@ -352,8 +359,20 @@ def main(
     UQ = q_unpad.shape[0]
     UKV = k_unpad.shape[0]
 
+    block_M, block_N, num_stages, threads = get_fwd_configs()
     kernel = flashattn_sink(
-        batch, groups, UQ, UKV, heads, dim, is_causal, window_size=window_size, block_M=128, block_N=128, num_stages=2, threads=256
+        batch,
+        groups,
+        UQ,
+        UKV,
+        heads,
+        dim,
+        is_causal,
+        window_size=window_size,
+        block_M=block_M,
+        block_N=block_N,
+        num_stages=num_stages,
+        threads=threads,
     )
 
     out_unpad = kernel(q_unpad, k_unpad, v_unpad, cu_seqlens_q, cu_seqlens_k, max_seqlen_q, sinks)

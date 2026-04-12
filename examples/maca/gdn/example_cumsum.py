@@ -13,9 +13,10 @@ try:
 
     print(fla.__file__)
     from fla.ops.utils.cumsum import chunk_local_cumsum_scalar
-except ImportError:
-    print("fla not found, using tilelang implementation")
+except Exception as exc:
+    print(f"fla unavailable, using tilelang implementation: {exc}")
     fla = None
+    chunk_local_cumsum_scalar = None
 
 import torch
 

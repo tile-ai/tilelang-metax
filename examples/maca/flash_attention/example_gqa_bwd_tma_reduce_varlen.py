@@ -3,6 +3,7 @@ import torch.nn.functional as F
 import tilelang
 import tilelang.language as T
 from tilelang.contrib import nvcc
+from tilelang.utils.target import determine_target, target_is_maca
 import argparse
 from einops import rearrange, repeat
 from bert_padding import pad_input, unpad_input
@@ -18,6 +19,22 @@ def generate_random_padding_mask(max_seqlen, batch_size, device, mode="random"):
         lengths = torch.randint(max_seqlen // 3, max_seqlen + 1, (batch_size, 1), device=device)
     padding_mask = repeat(torch.arange(max_seqlen, device=device), "s -> b s", b=batch_size) < lengths
     return padding_mask
+
+
+def is_maca_target():
+    return target_is_maca(determine_target("auto", return_object=True))
+
+
+def get_varlen_fwd_configs():
+    if is_maca_target():
+        return 64, 32
+    return 128, 64
+
+
+def get_varlen_bwd_configs(use_atomic):
+    if is_maca_target():
+        return 32, 32, 128, 1, False
+    return 128, 32, 256, 2, use_atomic
 
 
 @tilelang.jit(
@@ -491,8 +508,7 @@ class _attention(torch.autograd.Function):
     ):
         BATCH, N_CTX, H, D_HEAD_QK = q.shape
         D_HEAD_V = v.shape[-1]
-        block_M = 128
-        block_N = 64
+        block_M, block_N = get_varlen_fwd_configs()
         q_unpad, indices_q, _, _ = unpad_input(q, (torch.arange(N_CTX, device=q.device).unsqueeze(0) < seqlens_q.unsqueeze(1)))
         k_unpad, indices_k, _, _ = unpad_input(k, (torch.arange(N_CTX, device=k.device).unsqueeze(0) < seqlens_k.unsqueeze(1)))
         v_unpad, _, _, _ = unpad_input(v, (torch.arange(N_CTX, device=v.device).unsqueeze(0) < seqlens_k.unsqueeze(1)))
@@ -506,6 +522,7 @@ class _attention(torch.autograd.Function):
         ctx.save_for_backward(q_unpad, k_unpad, v_unpad, o_unpad, lse, seqlens_q, seqlens_k, cu_seqlens_q, cu_seqlens_k)
         ctx.batch = BATCH
         ctx.causal = causal
+        _, _, _, _, use_atomic = get_varlen_bwd_configs(use_atomic)
         ctx.use_atomic = use_atomic
         ctx.max_seqlen_q = max_seqlen_q
         ctx.max_seqlen_k = max_seqlen_k
@@ -530,12 +547,11 @@ class _attention(torch.autograd.Function):
             return x
 
         do, q, k, v, o = [maybe_contiguous(x) for x in (do_unpad, q, k, v, o)]
-        block_M = 128
-        block_N = 32
+        block_M, block_N, threads, num_stages, use_atomic = get_varlen_bwd_configs(ctx.use_atomic)
         mod_prep = flashattn_bwd_preprocess(BATCH, H, total_q, N_CTX, ctx.max_seqlen_q, D_HEAD_V)
         delta = mod_prep(o, do, cu_seqlens_q)
 
-        if ctx.use_atomic:
+        if use_atomic:
             kernel = flashattn_bwd_atomic_add(
                 BATCH,
                 total_q,
@@ -548,8 +564,8 @@ class _attention(torch.autograd.Function):
                 ctx.causal,
                 block_M,
                 block_N,
-                threads=256,
-                num_stages=2,
+                threads=threads,
+                num_stages=num_stages,
                 groups=groups,
             )
             dq = torch.zeros_like(q, dtype=torch.float32)
@@ -569,8 +585,8 @@ class _attention(torch.autograd.Function):
                 ctx.causal,
                 block_M,
                 block_N,
-                threads=256,
-                num_stages=2,
+                threads=threads,
+                num_stages=num_stages,
                 groups=groups,
             )
             mod_post = flashattn_bwd_postprocess(total_q, total_kv, H, HEAD_KV, D_HEAD_QK, D_HEAD_V)

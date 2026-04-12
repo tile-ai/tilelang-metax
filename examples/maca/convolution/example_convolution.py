@@ -83,8 +83,10 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
     N, C, H, W, F, K, S, D, P = args.n, args.c, args.h, args.w, args.f, args.k, args.s, args.d, args.p
-    a = torch.randn(N, H, W, C).cuda().half()
-    b = torch.randn(K, K, C, F).cuda().half()
+    # MACA may default to non-standard 4D strides here; TileLang expects
+    # dense NHWC/HWCF tensors.
+    a = torch.randn(N, H, W, C).cuda().half().contiguous()
+    b = torch.randn(K, K, C, F).cuda().half().contiguous()
 
     block_m = 64
     block_n = 128

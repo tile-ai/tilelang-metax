@@ -5,6 +5,7 @@ from tilelang.autotuner import *
 import tilelang.language as T
 from einops import rearrange, einsum
 import argparse
+from tilelang.utils.target import determine_target, target_is_maca
 
 
 @tilelang.jit(
@@ -20,6 +21,9 @@ def flashattn(batch, heads, kv_head_num, seqlen_kv, dim, pe_dim, block_N, block_
     kv_group_num = heads // kv_head_num
     VALID_BLOCK_H = min(block_H, kv_group_num)
     assert kv_head_num == 1, "kv_head_num must be 1"
+    is_maca = target_is_maca(determine_target("auto", return_object=True))
+    pipeline_stages = 1 if is_maca else 2
+    main_threads = 64 if is_maca else 256
 
     @T.prim_func
     def main_split(
@@ -32,7 +36,7 @@ def flashattn(batch, heads, kv_head_num, seqlen_kv, dim, pe_dim, block_N, block_
         Output: T.Tensor([batch, heads, dim], dtype),
     ):
         # flash_attn_split
-        with T.Kernel(batch, heads // min(block_H, kv_group_num), num_split, threads=256) as (bid, hid, bz):
+        with T.Kernel(batch, heads // min(block_H, kv_group_num), num_split, threads=main_threads) as (bid, hid, bz):
             Q_shared = T.alloc_shared([block_H, dim], dtype)
             S_shared = T.alloc_shared([block_H, block_N], dtype)
             Q_pe_shared = T.alloc_shared([block_H, pe_dim], dtype)
@@ -58,7 +62,7 @@ def flashattn(batch, heads, kv_head_num, seqlen_kv, dim, pe_dim, block_N, block_
             T.fill(scores_max, -T.infinity(accum_dtype))
 
             loop_range = T.ceildiv((seqlen_kv // num_split), block_N)
-            for k in T.Pipelined(loop_range, num_stages=2):
+            for k in T.Pipelined(loop_range, num_stages=pipeline_stages):
                 kv_start = (seqlen_kv // num_split) * bz + k * block_N
                 kv_end = (seqlen_kv // num_split) * bz + (k + 1) * block_N
                 T.copy(KV[bid, kv_start:kv_end, cur_kv_head, :], KV_shared)
@@ -129,7 +133,7 @@ def flashattn(batch, heads, kv_head_num, seqlen_kv, dim, pe_dim, block_N, block_
         Output_partial: T.Tensor([batch, heads, num_split, dim], dtype),
         Output: T.Tensor([batch, heads, dim], dtype),
     ):
-        with T.Kernel(heads // min(block_H, kv_group_num), batch, threads=256) as (hid, bid):
+        with T.Kernel(heads // min(block_H, kv_group_num), batch, threads=main_threads) as (hid, bid):
             Q_shared = T.alloc_shared([block_H, dim], dtype)
             S_shared = T.alloc_shared([block_H, block_N], dtype)
             Q_pe_shared = T.alloc_shared([block_H, pe_dim], dtype)
@@ -153,7 +157,7 @@ def flashattn(batch, heads, kv_head_num, seqlen_kv, dim, pe_dim, block_N, block_
             T.fill(scores_max, -T.infinity(accum_dtype))
 
             loop_range = T.ceildiv(seqlen_kv, block_N)
-            for k in T.Pipelined(loop_range, num_stages=2):
+            for k in T.Pipelined(loop_range, num_stages=pipeline_stages):
                 T.copy(KV[bid, k * block_N : (k + 1) * block_N, cur_kv_head, :], KV_shared)
                 T.copy(K_pe[bid, k * block_N : (k + 1) * block_N, cur_kv_head, :], K_pe_shared)
                 T.gemm(Q_shared, KV_shared, acc_s, transpose_B=True, policy=T.GemmWarpPolicy.FullCol, clear_accum=True)
@@ -232,8 +236,10 @@ def main(
     qk_flops = 2 * batch * heads * kv_ctx * (dim + pe_dim)
     pv_flops = 2 * batch * heads * kv_ctx * dim
     total_flops = qk_flops + pv_flops
-    BLOCK_N = 64
-    BLOCK_H = min(64, heads // kv_heads)
+    target = determine_target("auto", return_object=True)
+    is_maca = target_is_maca(target)
+    BLOCK_N = 16 if is_maca else 64
+    BLOCK_H = min(16 if is_maca else 64, heads // kv_heads)
     num_split = 1
     softmax_scale = (dim + pe_dim) ** -0.5
 
@@ -253,8 +259,10 @@ def run_regression_perf(
     dim=512,
     pe_dim=64,
 ):
-    BLOCK_N = 64
-    BLOCK_H = min(64, heads // kv_heads)
+    target = determine_target("auto", return_object=True)
+    is_maca = target_is_maca(target)
+    BLOCK_N = 16 if is_maca else 64
+    BLOCK_H = min(16 if is_maca else 64, heads // kv_heads)
     num_split = 1
     softmax_scale = (dim + pe_dim) ** -0.5
 

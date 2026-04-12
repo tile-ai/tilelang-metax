@@ -2,6 +2,7 @@ import torch
 import tilelang
 from tilelang.profiler import do_bench
 import tilelang.language as T
+from tilelang.utils.target import determine_target, target_is_maca
 import argparse
 from typing import Optional
 import sys
@@ -12,6 +13,8 @@ from varlen_utils import generate_random_padding_mask, generate_qkv
 
 
 def get_bwd_configs():
+    if target_is_maca(determine_target("auto", return_object=True)):
+        return 32, 16, 1, 128
     sm_major, sm_minor = torch.cuda.get_device_capability()
     sm_version = sm_major * 10 + sm_minor
     if sm_version == 80:

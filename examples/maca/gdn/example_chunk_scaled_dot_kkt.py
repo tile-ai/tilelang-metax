@@ -12,9 +12,10 @@ try:
 
     print(fla.__file__)
     from fla.ops.common.chunk_scaled_dot_kkt import chunk_scaled_dot_kkt_fwd
-except ImportError:
-    print("fla not found, using tilelang implementation")
+except Exception as exc:
+    print(f"fla unavailable, using tilelang implementation: {exc}")
     fla = None
+    chunk_scaled_dot_kkt_fwd = None
 
 import torch
 
@@ -31,7 +32,7 @@ def prepare_input(
     output_dtype,
     accum_dtype,
 ):
-    K = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
+    K = torch.randn(B, S, H, DK, dtype=input_dtype).cuda().contiguous()
     Beta = torch.randn(B, S, H, dtype=input_dtype).cuda()
     G = torch.randn(B, S, H, dtype=accum_dtype).cuda()
     return K, Beta, G
