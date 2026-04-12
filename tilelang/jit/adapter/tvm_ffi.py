@@ -176,6 +176,27 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
         dynamic_symbolic_map = self._process_dynamic_symbolic()
         executable = self.executable
 
+        float8_dtype_map = {
+            getattr(torch, "float8_e4m3fn", None): "float8_e4m3fn",
+            getattr(torch, "float8_e4m3fnuz", None): "float8_e4m3fnuz",
+            getattr(torch, "float8_e5m2", None): "float8_e5m2",
+            getattr(torch, "float8_e5m2fnuz", None): "float8_e5m2fnuz",
+        }
+        float8_dtype_map = {k: v for k, v in float8_dtype_map.items() if k is not None}
+
+        def adapt_tensor_for_tvm(arg: torch.Tensor | Any):
+            if not isinstance(arg, torch.Tensor):
+                return arg
+
+            float8_dtype = float8_dtype_map.get(arg.dtype)
+            if float8_dtype is None:
+                return arg
+
+            # tvm_ffi cannot ingest float8 tensors directly via DLPack today.
+            # Reuse the existing float8 bridge pattern: pass the storage as int8
+            # and recover the logical dtype through a TVM tensor view.
+            return runtime.from_dlpack(torch.utils.dlpack.to_dlpack(arg.view(torch.int8)))._create_view(arg.shape, dtype=float8_dtype)
+
         # Prepare helpers for friendly dtype error messages
         prim_func = self.prim_func
         buffer_map = prim_func.buffer_map
@@ -241,7 +262,7 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
                     ins_idx += 1
                 tensor_list.append(tensor)
 
-            executable(*tensor_list)
+            executable(*(adapt_tensor_for_tvm(tensor) for tensor in tensor_list))
 
             # Return outputs in the requested form
             if len(self.result_idx) == 1:

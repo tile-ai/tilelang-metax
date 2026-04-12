@@ -3,6 +3,7 @@ import tilelang
 from tilelang import language as T
 import torch
 from utils import assert_tensors_similar
+from tilelang.utils.target import determine_target, target_is_maca
 
 
 @tilelang.jit(out_idx=[-1])
@@ -122,13 +123,17 @@ def bwd(
 
     H = H_kv
     padded_H = max(tilelang.math.next_power_of_2(H_kv), 16)
-    block_H = min(64, padded_H)
+    is_maca = target_is_maca(determine_target("auto", return_object=True))
+    if is_maca:
+        block_size = min(block_size, 16)
+        threads = 64
+    block_H = min(16 if is_maca else 64, padded_H)
     assert padded_H % block_H == 0
     NH = padded_H // block_H
     BS = block_size
     NS = tilelang.cdiv(topk, block_size)
 
-    split_store = 2
+    split_store = 4 if is_maca else 2
 
     @T.prim_func
     def sparse_mla_bwd_kernel(
@@ -221,18 +226,31 @@ def bwd(
                         if bi_i < BS // split_store:
                             acc_dkv_tail_shared[bi_i, d_i] = acc_dkv_tail[bi_i + s * (BS // split_store), d_i]
 
-                    for bi_i, d_i in T.Parallel(BS // split_store, D // 4):
-                        T.atomic_addx4(
-                            dKV[by, Indices[by, s_i, bz // NH, i_i * BS + bi_i + s * (BS // split_store)], bz // NH, d_i * 4],
-                            acc_dkv_shared[bi_i, d_i * 4],
-                        )
+                    if is_maca:
+                        for bi_i, d_i in T.Parallel(BS // split_store, D):
+                            T.atomic_add(
+                                dKV[by, Indices[by, s_i, bz // NH, i_i * BS + bi_i + s * (BS // split_store)], bz // NH, d_i],
+                                acc_dkv_shared[bi_i, d_i],
+                            )
 
-                    # Atomically update dKV, dKV_tail tensors
-                    for bi_i, d_i in T.Parallel(BS // split_store, D_tail // 4):
-                        T.atomic_addx4(
-                            dKV[by, Indices[by, s_i, bz // NH, i_i * BS + bi_i + s * (BS // split_store)], bz // NH, D + d_i * 4],
-                            acc_dkv_tail_shared[bi_i, d_i * 4],
-                        )
+                        for bi_i, d_i in T.Parallel(BS // split_store, D_tail):
+                            T.atomic_add(
+                                dKV[by, Indices[by, s_i, bz // NH, i_i * BS + bi_i + s * (BS // split_store)], bz // NH, D + d_i],
+                                acc_dkv_tail_shared[bi_i, d_i],
+                            )
+                    else:
+                        for bi_i, d_i in T.Parallel(BS // split_store, D // 4):
+                            T.atomic_addx4(
+                                dKV[by, Indices[by, s_i, bz // NH, i_i * BS + bi_i + s * (BS // split_store)], bz // NH, d_i * 4],
+                                acc_dkv_shared[bi_i, d_i * 4],
+                            )
+
+                        # Atomically update dKV, dKV_tail tensors
+                        for bi_i, d_i in T.Parallel(BS // split_store, D_tail // 4):
+                            T.atomic_addx4(
+                                dKV[by, Indices[by, s_i, bz // NH, i_i * BS + bi_i + s * (BS // split_store)], bz // NH, D + d_i * 4],
+                                acc_dkv_tail_shared[bi_i, d_i * 4],
+                            )
 
             # Store the accumulated dQ
             T.copy(acc_dq, dQ_shared)

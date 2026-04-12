@@ -85,7 +85,7 @@ class GemmMACAMMA(GemmBase):
             thread_var=thread_var,
         )
 
-        in_dtype = self.in_dtype
+        mma_input_dtype = mma_emitter.mma_input_dtype
         warp_rows = mma_emitter.warp_rows
         warp_cols = mma_emitter.warp_cols
         local_size_a = mma_emitter.local_size_a
@@ -117,8 +117,8 @@ class GemmMACAMMA(GemmBase):
                 B_shared into local fragments, then issues Tensor Core mma ops,
                 accumulating into C_local.
                 """
-                A_local = T.alloc_local((warp_rows * local_size_a), in_dtype)
-                B_local = T.alloc_local((warp_cols * local_size_b), in_dtype)
+                A_local = T.alloc_local((warp_rows * local_size_a), mma_input_dtype)
+                B_local = T.alloc_local((warp_cols * local_size_b), mma_input_dtype)
                 if clear_accum:
                     T.clear(C_buf)
                 for ki in T.serial(0, (block_K // micro_size_k)):
@@ -152,7 +152,7 @@ class GemmMACAMMA(GemmBase):
                 B_shared into local fragments, then issues Tensor Core mma ops,
                 accumulating into C_local.
                 """
-                A_local = T.alloc_local((warp_rows * local_size_a), in_dtype)
+                A_local = T.alloc_local((warp_rows * local_size_a), mma_input_dtype)
 
                 for ki in T.serial(0, (block_K // micro_size_k)):
                     if clear_accum:
@@ -182,7 +182,7 @@ class GemmMACAMMA(GemmBase):
                 B_shared into local fragments, then issues Tensor Core mma ops,
                 accumulating into C_local.
                 """
-                B_local = T.alloc_local((warp_cols * local_size_b), in_dtype)
+                B_local = T.alloc_local((warp_cols * local_size_b), mma_input_dtype)
                 if clear_accum:
                     T.clear(C_buf)
                 for ki in T.serial(0, (block_K // micro_size_k)):

@@ -3,6 +3,7 @@ import torch
 import tilelang
 from tilelang import language as T
 from tilelang.engine.callback import register_cuda_postproc_callback
+from tilelang.utils.target import determine_target, target_is_maca
 import argparse
 
 
@@ -335,6 +336,28 @@ def sparse_mla_fwd_interface(
         )
     CP0 = q_start_index_s == 0
 
+    if target_is_maca(determine_target("auto", return_object=True)):
+        from sparse_mla_fwd import sparse_mla_fwd_interface as sparse_mla_fwd_fallback
+
+        def fallback_kernel(q_in, kv_in, indices_in, _q_start_index_s):
+            return sparse_mla_fwd_fallback(
+                q_in,
+                kv_in,
+                indices_in,
+                sm_scale=sm_scale,
+                d_v=dim,
+                block_I=16,
+                num_stages=1,
+                threads=64,
+                q_offset=q_start_index_s,
+            )
+
+        if print_kernel:
+            print("MACA fallback: sparse_mla_fwd_pipelined -> sparse_mla_fwd")
+        if return_kernel:
+            return fallback_kernel
+        return fallback_kernel(q, kv, indices, None)
+
     kernel = sparse_mla_fwd(batch, seq_len, seq_len_kv, heads, dim, tail_dim, topk, kv_stride, kv_group, sm_scale, is_casual, CP0)
     if print_kernel:
         print(kernel.get_kernel_source())
@@ -415,9 +438,9 @@ def test_sparse_mla_fwd_pipelined(
         return out, lse
 
     tl_out, tl_lse = fn()
-    ref_out = ref_sparse_mla_fwd_interface(q, kv, indices, q_start_s_index, KV_stride)
-
-    torch.testing.assert_close(tl_out, ref_out, rtol=1e-3, atol=1e-3)
+    if check_correctness:
+        ref_out = ref_sparse_mla_fwd_interface(q, kv, indices, q_start_s_index, KV_stride)
+        torch.testing.assert_close(tl_out, ref_out, rtol=1e-3, atol=1e-3)
 
     from tilelang.profiler import do_bench
 
