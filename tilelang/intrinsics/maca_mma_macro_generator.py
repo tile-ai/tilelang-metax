@@ -57,6 +57,14 @@ class TensorCoreIntrinEmitter:
     k_pack = 1
     # Represent the thread binding in the form of (tx, warp_n, warp_m)
     is_m_first = False
+    fp8_dtypes = {
+        "float8_e4m3",
+        "float8_e5m2",
+        "float8_e4m3fn",
+        "float8_e5m2fn",
+        "float8_e4m3fnuz",
+        "float8_e5m2fnuz",
+    }
 
     def __init__(
         self,
@@ -88,6 +96,7 @@ class TensorCoreIntrinEmitter:
         self.warp_row_tiles = warp_row_tiles
         self.warp_col_tiles = warp_col_tiles
         self.chunk = chunk
+        self.mma_input_dtype = self._resolve_mma_input_dtype(a_dtype)
         self._initialize_k_dim(a_dtype)
         self._initialize_abbrev(a_dtype, b_dtype, accum_dtype)
         self._initialize_local_size(self.M_DIM, self.N_DIM, self.k_dim, self.WARP_SIZE)
@@ -106,8 +115,6 @@ class TensorCoreIntrinEmitter:
 
     def _initialize_k_dim(self, a_dtype=T.float16):
         if isinstance(a_dtype, str):
-            if a_dtype in ["float8_e4m3fnuz", "float8_e5m2fnuz"]:
-                return
             a_dtype = DataType(a_dtype)
 
         if a_dtype.bits == 32:
@@ -130,13 +137,21 @@ class TensorCoreIntrinEmitter:
             raise KeyError(f"Unsupported dtype for MACA MMA: {dtype!r}")
         return self.dtype_abbrv[s]
 
+    def _resolve_mma_input_dtype(self, dtype):
+        s = str(dtype)
+        if s.startswith("dtype('") and s.endswith("')"):
+            s = s[7:-2]
+        if s in self.fp8_dtypes:
+            return T.float16
+        return dtype
+
     def _initialize_abbrev(self, a_dtype, b_dtype, accum_dtype):
         self.a_dtype_abbrv = self._dtype_abbrv_lookup(a_dtype)
         self.b_dtype_abbrv = self._dtype_abbrv_lookup(b_dtype)
         self.accum_dtype_abbrv = self._dtype_abbrv_lookup(accum_dtype)
 
     def _initialize_mma_prefix(self, k_dim=16):
-        in_dtype = self.a_dtype
+        in_dtype = self.mma_input_dtype
         M_DIM, N_DIM = self.M_DIM, self.N_DIM
 
         in_dtype_key = str(in_dtype)
@@ -148,6 +163,8 @@ class TensorCoreIntrinEmitter:
             "float32": "f32",
             "int8": "i8",
             "int32": "i32",
+            "float8_e4m3": "f16",
+            "float8_e5m2": "f16",
             "float8_e4m3fnuz": "fp8",
             "float8_e5m2fnuz": "fp8",
             "float8_e4m3fn": "fp8",
@@ -281,6 +298,7 @@ class TensorCoreIntrinEmitter:
         # legalize shared buffer to region
         A_region = self._legalize_to_buffer_region(A_shared_buf)
         A_buf = A_region.buffer
+        A_prefix = [region.min for region in A_region.region[:-2]]
         A_base0 = A_region.region[-2].min
         A_base1 = A_region.region[-1].min
 
@@ -298,13 +316,13 @@ class TensorCoreIntrinEmitter:
                     for local_id in T.vectorized(k_pack * local_size_a):
                         row, col = T.meta_var(reverse_index_map(tx, local_id))
                         l, r = (rk * chunk + ki * (k_pack * micro_size_k), warp_m * warp_row_tiles + i * micro_size_x)
-                        A_local_buf[i * k_pack * local_size_a + local_id] = A_buf[A_base0 + l + row, A_base1 + r + col]
+                        A_local_buf[i * k_pack * local_size_a + local_id] = A_buf[tuple(A_prefix + [A_base0 + l + row, A_base1 + r + col])]
             else:
                 for i in T.serial(warp_rows):
                     for local_id in T.vectorized(k_pack * local_size_a):
                         row, col = T.meta_var(reverse_index_map(tx, local_id))
                         l, r = (warp_m * warp_row_tiles + i * micro_size_x, rk * chunk + ki * (k_pack * micro_size_k))
-                        A_local_buf[i * k_pack * local_size_a + local_id] = A_buf[A_base0 + l + row, A_base1 + r + col]
+                        A_local_buf[i * k_pack * local_size_a + local_id] = A_buf[tuple(A_prefix + [A_base0 + l + row, A_base1 + r + col])]
 
         return _warp_ldmatrix_a(A_local_buf, A_shared_buf, ki, thread_binding, rk)
 
@@ -323,6 +341,7 @@ class TensorCoreIntrinEmitter:
         # legalize shared buffer to region
         B_region = self._legalize_to_buffer_region(B_shared_buf)
         B_buf = B_region.buffer
+        B_prefix = [region.min for region in B_region.region[:-2]]
         B_base0 = B_region.region[-2].min
         B_base1 = B_region.region[-1].min
 
@@ -343,7 +362,7 @@ class TensorCoreIntrinEmitter:
                             warp_n * warp_col_tiles + j * micro_size_y,
                             rk * chunk + ki * (k_pack * micro_size_k),
                         )
-                        B_local_buf[j * k_pack * local_size_b + local_id] = B_buf[B_base0 + l + row, B_base1 + r + col]
+                        B_local_buf[j * k_pack * local_size_b + local_id] = B_buf[tuple(B_prefix + [B_base0 + l + row, B_base1 + r + col])]
 
             else:
                 for j in T.serial(warp_cols):
@@ -353,7 +372,7 @@ class TensorCoreIntrinEmitter:
                             rk * chunk + ki * (k_pack * micro_size_k),
                             warp_n * warp_col_tiles + j * micro_size_y,
                         )
-                        B_local_buf[j * k_pack * local_size_b + local_id] = B_buf[B_base0 + l + row, B_base1 + r + col]
+                        B_local_buf[j * k_pack * local_size_b + local_id] = B_buf[tuple(B_prefix + [B_base0 + l + row, B_base1 + r + col])]
 
         return _warp_ldmatrix_b(B_local_buf, B_shared_buf, ki, thread_binding, rk)
 
@@ -365,9 +384,10 @@ class TensorCoreIntrinEmitter:
         local_size_out = self.local_size_out
         k_pack = self.k_pack
         mma_suffix = self.mma_suffix
-        a_dtype, b_dtype, out_dtype = self.a_dtype, self.b_dtype, self.accum_dtype
-        compute_a_dtype = a_dtype if local_size_a == 1 else f"{a_dtype}x{local_size_a}"
-        compute_b_dtype = b_dtype if local_size_b == 1 else f"{b_dtype}x{local_size_b}"
+        out_dtype = self.accum_dtype
+        mma_input_dtype = self.mma_input_dtype
+        compute_a_dtype = mma_input_dtype if local_size_a == 1 else f"{mma_input_dtype}x{local_size_a}"
+        compute_b_dtype = mma_input_dtype if local_size_b == 1 else f"{mma_input_dtype}x{local_size_b}"
         compute_out_dtype = out_dtype if local_size_out == 1 else f"{out_dtype}x{local_size_out}"
 
         a_is_fragment = is_fragment(A_local_buf)

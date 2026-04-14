@@ -1,6 +1,12 @@
 import torch
 
 
+def reinterpret_u16_as_bfloat16(bits: torch.Tensor) -> torch.Tensor:
+    bits_i32 = (bits & 0xFFFF).to(torch.int32)
+    bits_i16 = torch.where(bits_i32 >= 0x8000, bits_i32 - 0x10000, bits_i32).to(torch.int16)
+    return bits_i16.view(torch.bfloat16)
+
+
 def torch_convert_bit_twiddling(tensor):
     """
     This function expects `tensor` to be a 2-D torch.Tensor of dtype `torch.uint8`. Each output element is produced by combining two input bytes and extracting a bf16-like 16-bit pattern according to one of four positional bit layouts (pos 0..3). The result is scaled by 2**126 to adjust the exponent bias and returned as dtype `torch.bfloat16`.
@@ -45,8 +51,7 @@ def torch_convert_bit_twiddling(tensor):
     bf16 = torch.where(pos == 0, res0, torch.where(pos == 1, res1, torch.where(pos == 2, res2, res3)))
 
     # Convert to uint16 for .view(torch.bfloat16)
-    bf16_uint16 = (bf16 & 0xFFFF).to(torch.uint16)
-    bf16_bf16 = bf16_uint16.view(torch.bfloat16)
+    bf16_bf16 = reinterpret_u16_as_bfloat16(bf16)
 
     # Avoid integer overflow by using a float32 multiplier for the exponent scaling
     bf16_new = bf16_bf16 * (2.0**126)
@@ -69,32 +74,23 @@ def torch_convert(tensor, scale_size=None, Scale=None):
         torch.Tensor: A new tensor of shape (N, K*2) and dtype torch.bfloat16 containing the decoded bf16 values.
     """
 
-    def _convert(val, pos, scale=None):
-        assert val.dtype == torch.uint8
-        # val = val.view(torch.int8)
-        mask = (1 << 4) - 1
-        f4 = ((val >> (pos * 4)) & mask).to(torch.int16)
-        s = f4 >> 3
-        e_f4 = (f4 & 6) >> 1
-        e_f16 = e_f4 + 126
-        if scale is not None:
-            e_f16 = min(e_f16 + scale, (1 << 8) - 1)
-        m_f4 = f4 & 1
-        m_f16 = m_f4
-        val_f16 = (((e_f16 | (s << 8)) << 7) | (m_f16 << 6)) & 0xFFFF
-        lower_16_bits = (val_f16 & 0xFFFF).to(torch.uint16)
-        return lower_16_bits.view(torch.bfloat16)
+    assert tensor.dim() == 2 and tensor.dtype == torch.uint8
 
-    N = tensor.shape[0]
-    K = tensor.shape[1]
-    new_tensor = torch.empty(N, K * 2, dtype=torch.bfloat16, device=tensor.device)
-    for i in range(new_tensor.shape[0]):
-        for j in range(new_tensor.shape[1]):
-            if scale_size is not None:
-                new_tensor[i][j] = _convert(tensor[i][j // 2], j % 2, Scale[i][j // scale_size])
-            else:
-                new_tensor[i][j] = _convert(tensor[i][j // 2], j % 2)
-    return new_tensor
+    low = (tensor & 0x0F).to(torch.int16)
+    high = ((tensor >> 4) & 0x0F).to(torch.int16)
+    f4 = torch.stack((low, high), dim=-1).reshape(tensor.shape[0], tensor.shape[1] * 2)
+
+    sign = f4 >> 3
+    exponent = ((f4 & 0x6) >> 1) + 126
+    if scale_size is not None:
+        if Scale is None:
+            raise ValueError("Scale must be provided when scale_size is set")
+        scale_idx = torch.arange(f4.shape[1], device=tensor.device) // scale_size
+        exponent = torch.clamp(exponent + Scale[:, scale_idx].to(torch.int16), max=(1 << 8) - 1)
+
+    mantissa = f4 & 0x1
+    val_f16 = (((exponent | (sign << 8)) << 7) | (mantissa << 6)) & 0xFFFF
+    return reinterpret_u16_as_bfloat16(val_f16)
 
 
 def print_bit(name, val):

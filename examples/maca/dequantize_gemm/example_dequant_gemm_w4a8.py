@@ -87,8 +87,11 @@ def torch_convert(tensor):
 def ref_program(A, qB):
     dtypeC = T.int32
     B = torch_convert(qB)
-    C = torch.matmul(A.to(torch.float), B.T.to(torch.float))
-    C = C.to(torch.__getattribute__(dtypeC))
+    # CUDA/MACA does not provide exact int32 matmul here, and float32 matmul
+    # followed by cast introduces many +/-1 mismatches. Compute the reference
+    # with exact integer accumulation on CPU instead.
+    C = torch.matmul(A.cpu().to(torch.int32), B.cpu().to(torch.int32).T)
+    C = C.to(torch.__getattribute__(dtypeC)).to(A.device)
     return C.transpose(0, 1)
 
 

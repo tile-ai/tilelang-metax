@@ -20,7 +20,6 @@ def matmul(M, N, K, block_M, block_N, block_K, dtype, accum_dtype=T.float32):
         with T.Kernel(T.ceildiv(N, block_N), T.ceildiv(M, block_M), threads=128) as (bx, by):
             A_shared = T.alloc_shared((block_M, block_K), dtype)
             B_shared = T.alloc_shared((block_N, block_K), dtype)
-            C_shared = T.alloc_shared((block_M, block_N), accum_dtype)
             C_local = T.alloc_fragment((block_M, block_N), accum_dtype)
             C_local_accum = T.alloc_fragment((block_M, block_N), accum_dtype)
 
@@ -40,9 +39,7 @@ def matmul(M, N, K, block_M, block_N, block_K, dtype, accum_dtype=T.float32):
             if K_iters % update_interval != 0:
                 for i, j in T.Parallel(block_M, block_N):
                     C_local_accum[i, j] += C_local[i, j]
-            # TMA store
-            T.copy(C_local_accum, C_shared)
-            T.copy(C_shared, C[by * block_M, bx * block_N])
+            T.copy(C_local_accum, C[by * block_M, bx * block_N])
 
     return gemm_fp8_2xAcc
 

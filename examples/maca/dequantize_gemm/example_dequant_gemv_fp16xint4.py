@@ -3,8 +3,10 @@ from tilelang import language as T
 from typing import Optional, Callable, Any
 import torch
 from tilelang import DataType
+from tilelang.utils.target import determine_target, target_is_maca
 from tilelang.quantize import (
     _tir_packed_int_to_int_convert,
+    _tir_packed_to_unsigned_convert,
 )
 
 
@@ -55,6 +57,12 @@ def dequantize_gemv(
 
     import_source: Optional[str] = None
     func_name: str = ""
+    if source_format == "uint":
+        convert_packed = _tir_packed_to_unsigned_convert(storage_type, storage_nbit)
+    elif source_format in {"int", "sint"}:
+        convert_packed = _tir_packed_int_to_int_convert(storage_type, storage_nbit)
+    else:
+        raise ValueError(f"Unsupported source_format: {source_format}")
     if fast_decoding is True:
         # Lazy import to decrease the startup time
         # as intrin registry may take a while to load
@@ -119,7 +127,7 @@ def dequantize_gemv(
                     )
                 else:
                     for ki in T.serial(micro_size_k):
-                        B_dequantize_local[ki] = _tir_packed_int_to_int_convert(storage_type, storage_nbit)(
+                        B_dequantize_local[ki] = convert_packed(
                             num_bits, B_quant_local[ki // num_elems_per_byte], ki % num_elems_per_byte, in_dtype
                         )
 
@@ -167,7 +175,7 @@ def main() -> None:
     source_format = "uint"
     n_partition = 4
     reduce_thread = 32
-    fast_decoding = True
+    fast_decoding = not target_is_maca(determine_target("auto", return_object=True))
     trans_A = False
     trans_B = True
     group_size = -1
@@ -229,7 +237,7 @@ def run_regression_perf():
     source_format = "uint"
     n_partition = 4
     reduce_thread = 32
-    fast_decoding = True
+    fast_decoding = not target_is_maca(determine_target("auto", return_object=True))
     trans_A = False
     trans_B = True
     group_size = -1
