@@ -61,9 +61,7 @@ def get_lop3_intrin_group(
     if out_dtype not in [T.float16, T.int8, T.int4]:
         raise ValueError(f"Invalid out_dtype: {out_dtype}. Expected 'float16' or 'int8' or 'int4'.")
     if source_format not in [T.int, T.uint]:
-        raise ValueError(
-            f"Invalid source_format. Expected 'int' or 'uint', but got {source_format}, {type(source_format)}."
-        )
+        raise ValueError(f"Invalid source_format. Expected 'int' or 'uint', but got {source_format}, {type(source_format)}.")
     if storage_dtype not in [T.int8, T.int32]:
         raise ValueError(f"Invalid storage_dtype: {storage_dtype}. Expected 'int8' or 'int32'.")
     if with_zeros and source_format == T.int:

@@ -7,6 +7,7 @@
 #include <common/maca_fp16.h>
 #include <cute/arch/mma.hpp>
 #include <cute/underscore.hpp>
+#include <maca_cooperative_groups.h>
 #include <mcr/mc_runtime.h>
 #include <mctlass/fast_math.h>
 

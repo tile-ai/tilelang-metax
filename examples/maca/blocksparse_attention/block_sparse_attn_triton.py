@@ -346,7 +346,7 @@ def test_topk_sparse_attention_qlt_kl():
     ref_output = torch.einsum("bhst,bhtd->bhsd", attn, v)
 
     # Verify accuracy.
-    assert torch.allclose(triton_output, ref_output, atol=1e-2, rtol=1e-2), "Triton output doesn't match reference when qlen < klen"
+    torch.testing.assert_close(triton_output, ref_output, atol=1e-2, rtol=1e-2), "Triton output doesn't match reference when qlen < klen"
 
     print("Pass topk sparse attention test with qlen < klen")
 

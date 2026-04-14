@@ -239,7 +239,22 @@ def bwd(
     return sparse_mla_bwd_kernel
 
 
-def sparse_mla_bwd(q, kv, o, do, indices, lse, sm_scale=None, is_casual=True, return_kernel=False, delta=None, block_size=32, split_store=2, num_stages=0, threads=256):
+def sparse_mla_bwd(
+    q,
+    kv,
+    o,
+    do,
+    indices,
+    lse,
+    sm_scale=None,
+    is_casual=True,
+    return_kernel=False,
+    delta=None,
+    block_size=32,
+    split_store=2,
+    num_stages=0,
+    threads=256,
+):
     assert q.is_contiguous()
     assert kv.is_contiguous()
     assert indices.is_contiguous()
@@ -318,7 +333,16 @@ def test_sparse_mla_bwd(
     tl_out, tl_lse = sparse_mla_fwd_interface(q, kv, indices, d_v=DV, block_I=fwd_block_I, num_stages=fwd_num_stages, threads=fwd_threads)
 
     tl_dq, tl_dkv = sparse_mla_bwd(
-        q, kv, tl_out, do, indices, tl_lse, block_size=bwd_block_size, split_store=bwd_split_store, num_stages=bwd_num_stages, threads=bwd_threads
+        q,
+        kv,
+        tl_out,
+        do,
+        indices,
+        tl_lse,
+        block_size=bwd_block_size,
+        split_store=bwd_split_store,
+        num_stages=bwd_num_stages,
+        threads=bwd_threads,
     )
 
     if check_correctness:
@@ -340,7 +364,16 @@ def test_sparse_mla_bwd(
 
     def fn():
         return sparse_mla_bwd(
-            q, kv, tl_out, do, indices, tl_lse, block_size=bwd_block_size, split_store=bwd_split_store, num_stages=bwd_num_stages, threads=bwd_threads
+            q,
+            kv,
+            tl_out,
+            do,
+            indices,
+            tl_lse,
+            block_size=bwd_block_size,
+            split_store=bwd_split_store,
+            num_stages=bwd_num_stages,
+            threads=bwd_threads,
         )
 
     ms = do_bench(fn, rep=100, warmup=250)
