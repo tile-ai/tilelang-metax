@@ -312,7 +312,6 @@ def test_pipeline_planning_orders_cp_async_groups_by_group_last_use():
     )
 
 
-@tilelang.testing.requires_cuda
 def test_pipeline_predicated_copy_preserves_shared_fill_correctness():
     @T.prim_func
     def main(
@@ -339,9 +338,10 @@ def test_pipeline_predicated_copy_preserves_shared_fill_correctness():
                 T.ptx_wait_group(0)
                 T.copy(S, B[0:16])
 
-    kernel = tl.compile(main, out_idx=[1], target="cuda")
+    kernel = tl.compile(main, out_idx=[1], target="maca")
     src = kernel.get_kernel_source()
-    assert "cp_async_gs_conditional<16>" in src, "Expected predicated cp.async in generated CUDA source"
+    assert "cp_async_gs_conditional<16>" in src, "Expected predicated cp.async in generated MACA source"
+    assert "tl::cp_async_wait_token" in src, "Expected MACA predicated cp.async wait to use the memcpy_async token"
 
     a = torch.randn((8,), dtype=torch.float16, device="cuda")
     b = kernel(a)
