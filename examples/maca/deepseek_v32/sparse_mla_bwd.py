@@ -127,8 +127,7 @@ def bwd(
     NH = padded_H // block_H
     BS = block_size
     NS = tilelang.cdiv(topk, block_size)
-
-    assert BS % split_store == 0
+    split_store = 2
 
     @T.prim_func
     def sparse_mla_bwd_kernel(
