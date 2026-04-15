@@ -10,6 +10,7 @@
 #include <tvm/ffi/function.h>
 #include <tvm/tir/index_map.h>
 #include <tvm/tir/op.h>
+#include <tvm/tir/stmt_functor.h>
 
 #include <cmath>
 #include <string>
@@ -197,6 +198,101 @@ void CodeGenTileLangMACA::PrintFuncPrefix(std::ostream &os) {
   os << "extern \"C\" __global__ ";
 }
 
+void CodeGenTileLangMACA::RegisterMACACPAsyncToken(const CallNode *op) {
+  if (maca_cp_async_tokens_.count(op)) {
+    return;
+  }
+  ICHECK(op->args.size() == 3 || op->args.size() == 4)
+      << "ptx_cp_async expects 3 or 4 arguments (dst_access_ptr, "
+         "src_access_ptr, bytes, [predicate])";
+  const auto *bytes = op->args[2].as<IntImmNode>();
+  ICHECK(bytes) << "MACA memcpy_async requires a static copy size, got "
+                << op->args[2];
+
+  std::string token_type;
+  if (bytes->value == 16) {
+    token_type = "b128vectype";
+  } else if (bytes->value == 8) {
+    token_type = "b64vectype";
+  } else if (bytes->value == 4) {
+    token_type = "b32vectype";
+  } else {
+    LOG(FATAL) << "MACA memcpy_async only supports 4, 8, or 16 bytes, got "
+               << bytes->value;
+  }
+
+  std::string token = name_supply_->FreshName("__tl_maca_cp_async_token");
+  maca_cp_async_tokens_[op] = {token, token_type};
+  maca_cp_async_token_order_.push_back(op);
+}
+
+void CodeGenTileLangMACA::DeclareMACACPAsyncTokens() {
+  for (const CallNode *op : maca_cp_async_token_order_) {
+    const auto &entry = maca_cp_async_tokens_.at(op);
+    this->stream << "  " << entry.second << " " << entry.first << ";\n";
+  }
+}
+
+void CodeGenTileLangMACA::EmitMACACPAsync(const CallNode *op) {
+  ICHECK(op->args.size() == 3 || op->args.size() == 4)
+      << "ptx_cp_async expects 3 or 4 arguments (dst_access_ptr, "
+         "src_access_ptr, bytes, [predicate])";
+
+  std::string dst = this->PrintExpr(op->args[0]);
+  std::string src = this->PrintExpr(op->args[1]);
+  std::string size = this->PrintExpr(op->args[2]);
+  auto token_it = maca_cp_async_tokens_.find(op);
+  ICHECK(token_it != maca_cp_async_tokens_.end())
+      << "Missing predeclared MACA memcpy_async token";
+  const std::string &token = token_it->second.first;
+
+  this->PrintIndent();
+  this->stream << token << " = ";
+  if (op->args.size() == 3) {
+    this->stream << "tl::cp_async_gs<" << size << ">(" << dst << ", " << src
+                 << ");\n";
+  } else {
+    std::string condition = this->PrintExpr(op->args[3]);
+    this->stream << "tl::cp_async_gs_conditional<" << size << ">(" << dst
+                 << ", " << src << ", " << condition << ");\n";
+  }
+  maca_cp_async_current_group_.push_back(token);
+}
+
+void CodeGenTileLangMACA::EmitMACACPAsyncCommit() {
+  if (!maca_cp_async_current_group_.empty()) {
+    maca_cp_async_committed_groups_.push_back(maca_cp_async_current_group_);
+    maca_cp_async_current_group_.clear();
+  }
+  this->PrintIndent();
+  this->stream << "tl::cp_async_commit();\n";
+}
+
+void CodeGenTileLangMACA::EmitMACACPAsyncWait(int pending_groups) {
+  if (!maca_cp_async_current_group_.empty()) {
+    maca_cp_async_committed_groups_.push_back(maca_cp_async_current_group_);
+    maca_cp_async_current_group_.clear();
+  }
+
+  int wait_groups =
+      static_cast<int>(maca_cp_async_committed_groups_.size()) - pending_groups;
+  if (wait_groups <= 0) {
+    return;
+  }
+
+  for (int i = 0; i < wait_groups; ++i) {
+    const auto &group = maca_cp_async_committed_groups_[i];
+    if (group.empty()) {
+      continue;
+    }
+    this->PrintIndent();
+    this->stream << "tl::cp_async_wait_token(" << group.back() << ");\n";
+  }
+  maca_cp_async_committed_groups_.erase(
+      maca_cp_async_committed_groups_.begin(),
+      maca_cp_async_committed_groups_.begin() + wait_groups);
+}
+
 class LaunchConfigExtractor : public tir::StmtVisitor {
 private:
   void VisitStmt_(const AttrStmtNode *op) final {
@@ -316,8 +412,7 @@ std::string CodeGenTileLangMACA::Finish() {
   if (enable_sparse_gemm_) {
     decl_stream << "#include <tl_templates/maca/gemm_sp.h>\n";
   }
-  // TODO: Add implementation for maca target.
-  // decl_stream << "#include <tl_templates/maca/copy.h>\n";
+  decl_stream << "#include <tl_templates/maca/copy.h>\n";
   decl_stream << "#include <tl_templates/maca/reduce.h>\n";
   decl_stream << "#include <tl_templates/maca/threadblock_swizzle.h>\n";
   decl_stream << "#include <tl_templates/maca/atomic.h>\n";
@@ -1567,55 +1662,14 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     this->stream << ");\n";
   };
   if (op->op.same_as(builtin::ptx_cp_async())) {
-    // args[0] = dst_access_ptr, args[1] = src_access_ptr, args[2] = bytes,
-    // args[3] = predicate (optional)
-    ICHECK(op->args.size() == 3 || op->args.size() == 4)
-        << "ptx_cp_async expects 3 or 4 arguments (dst_access_ptr, "
-           "src_access_ptr, bytes, [predicate])";
-
-    std::string dst = this->PrintExpr(op->args[0]);
-    std::string src = this->PrintExpr(op->args[1]);
-    std::string size = this->PrintExpr(op->args[2]);
-
-    this->PrintIndent();
-    if (op->args.size() == 3) {
-      // Non-predicated version
-      this->stream << "tl::cp_async_gs<" << size << ">(" << dst << ", " << src
-                   << ");\n";
-    } else {
-      // Predicated version
-      std::string condition = this->PrintExpr(op->args[3]);
-      this->stream << "tl::cp_async_gs_conditional<" << size << ">(" << dst
-                   << ", " << src << ", " << condition << ");\n";
-    }
+    EmitMACACPAsync(op);
   } else if (op->op.same_as(tl::ptx_cp_async())) {
-    // TileLang version: args[0] = dst_access_ptr, args[1] = src_access_ptr,
-    // args[2] = bytes, args[3] = predicate (optional)
-    ICHECK(op->args.size() == 3 || op->args.size() == 4)
-        << "tl::ptx_cp_async expects 3 or 4 arguments (dst_access_ptr, "
-           "src_access_ptr, bytes, [predicate])";
-
-    std::string dst = this->PrintExpr(op->args[0]);
-    std::string src = this->PrintExpr(op->args[1]);
-    std::string size = this->PrintExpr(op->args[2]);
-
-    this->PrintIndent();
-    if (op->args.size() == 3) {
-      // Non-predicated version
-      this->stream << "tl::cp_async_gs<" << size << ">(" << dst << ", " << src
-                   << ");\n";
-    } else {
-      // Predicated version
-      std::string condition = this->PrintExpr(op->args[3]);
-      this->stream << "tl::cp_async_gs_conditional<" << size << ">(" << dst
-                   << ", " << src << ", " << condition << ");\n";
-    }
+    EmitMACACPAsync(op);
   } else if (op->op.same_as(builtin::ptx_commit_group())) {
-    print_extern_call_stmt("tl::cp_async_commit");
+    EmitMACACPAsyncCommit();
   } else if (op->op.same_as(builtin::ptx_wait_group())) {
     int n = Downcast<IntImm>(op->args[0])->value;
-    std::string func_name = "tl::cp_async_wait<" + std::to_string(n) + ">";
-    print_extern_call_stmt(func_name, 1);
+    EmitMACACPAsyncWait(n);
   } else if (op->op.same_as(builtin::create_barriers())) {
     this->PrintIndent();
     int barrier_count = Downcast<IntImm>(op->args[0])->value;
@@ -3202,6 +3256,10 @@ void CodeGenTileLangMACA::AddFunction(const GlobalVar &gvar,
   this->InitFuncState(f);
   // reserve keywords
   ReserveKeywordsAsUnique();
+  maca_cp_async_tokens_.clear();
+  maca_cp_async_token_order_.clear();
+  maca_cp_async_current_group_.clear();
+  maca_cp_async_committed_groups_.clear();
 
   auto global_symbol = f->GetAttr<String>(tvm::attr::kGlobalSymbol);
   ICHECK(global_symbol)
@@ -3231,6 +3289,14 @@ void CodeGenTileLangMACA::AddFunction(const GlobalVar &gvar,
 
   // Record cluster dimensions for usage in threadblock swizzle codegen
   this->cluster_dims = ClusterInfoExtractor().extract(f);
+  tir::PostOrderVisit(f->body, [&](const ObjectRef &obj) {
+    if (const auto *call = obj.as<CallNode>()) {
+      if (call->op.same_as(tir::builtin::ptx_cp_async()) ||
+          call->op.same_as(tl::ptx_cp_async())) {
+        RegisterMACACPAsyncToken(call);
+      }
+    }
+  });
 
   this->stream << " " << static_cast<std::string>(global_symbol.value()) << "(";
 
@@ -3275,6 +3341,7 @@ void CodeGenTileLangMACA::AddFunction(const GlobalVar &gvar,
   }
   stream << ") {\n";
   this->PreFunctionBody(f);
+  DeclareMACACPAsyncTokens();
   int func_scope = this->BeginScope();
   this->PrintStmt(f->body);
   this->EndScope(func_scope);
