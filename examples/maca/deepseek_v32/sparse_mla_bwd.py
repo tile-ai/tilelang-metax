@@ -92,7 +92,6 @@ def bwd(
     sm_scale=None,
     is_causal=True,
     block_size=32,
-    split_store=2,
     num_stages=0,
     threads=256,
     indices_dtype=T.int32,
@@ -127,6 +126,7 @@ def bwd(
     NH = padded_H // block_H
     BS = block_size
     NS = tilelang.cdiv(topk, block_size)
+
     split_store = 2
 
     @T.prim_func
