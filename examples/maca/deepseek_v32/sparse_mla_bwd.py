@@ -150,6 +150,8 @@ def bwd(
 
             P_shared_cast = T.alloc_shared([block_H, BS], dtype)
             dP_shared_cast = T.alloc_shared([block_H, BS], dtype)
+            dQ_shared = T.alloc_shared([block_H, D], dtype)
+            dQ_tail_shared = T.alloc_shared([block_H, D_tail], dtype)
 
             acc_p = T.alloc_fragment([block_H, BS], accum_dtype)
             acc_dp = T.alloc_fragment([block_H, BS], accum_dtype)
@@ -232,28 +234,16 @@ def bwd(
                         )
 
             # Store the accumulated dQ
-            T.copy(acc_dq, dQ[by, s_i, bz * block_H : (bz + 1) * block_H, :D])
-            T.copy(acc_dq_tail, dQ[by, s_i, bz * block_H : (bz + 1) * block_H, D:])
+            T.copy(acc_dq, dQ_shared)
+            T.copy(acc_dq_tail, dQ_tail_shared)
+
+            T.copy(dQ_shared, dQ[by, s_i, bz * block_H : (bz + 1) * block_H, :D])
+            T.copy(dQ_tail_shared, dQ[by, s_i, bz * block_H : (bz + 1) * block_H, D:])
 
     return sparse_mla_bwd_kernel
 
 
-def sparse_mla_bwd(
-    q,
-    kv,
-    o,
-    do,
-    indices,
-    lse,
-    sm_scale=None,
-    is_casual=True,
-    return_kernel=False,
-    delta=None,
-    block_size=32,
-    split_store=2,
-    num_stages=0,
-    threads=256,
-):
+def sparse_mla_bwd(q, kv, o, do, indices, lse, sm_scale=None, is_casual=True, return_kernel=False, delta=None):
     assert q.is_contiguous()
     assert kv.is_contiguous()
     assert indices.is_contiguous()
@@ -262,7 +252,8 @@ def sparse_mla_bwd(
     _, S_kv, kv_group, _ = kv.shape
     assert kv.shape[-1] == dim_plus_tail_dim
     assert kv.shape[0] == B
-    D = o.shape[-1]
+    # dim should be assigned
+    D = 512
 
     D_tail = dim_plus_tail_dim - D
     topk = indices.shape[-1]
@@ -271,7 +262,7 @@ def sparse_mla_bwd(
 
     # Get kernels
     preprocess_kernel = preprocess(B, S, H, D)
-    bwd_kernel = bwd(B, S, S_kv, H, D, D_tail, topk, kv_group, sm_scale, is_casual, block_size, split_store, num_stages, threads)
+    bwd_kernel = bwd(B, S, S_kv, H, D, D_tail, topk, kv_group, sm_scale, is_casual)
     postprocess_kernel = postprocess(B, S_kv, D, D_tail, kv_group)
 
     if delta is None:
@@ -295,25 +286,7 @@ def ref_sparse_mla_bwd_interface(q, kv, o, do, indices, lse, sm_scale=None, is_c
     return q.grad, kv.grad
 
 
-def test_sparse_mla_bwd(
-    B=1,
-    S=4096,
-    SKV=8192,
-    H=64,
-    HKV=1,
-    DQKV=576,
-    DV=512,
-    topk=2048,
-    dtype=torch.bfloat16,
-    check_correctness=True,
-    fwd_block_I=64,
-    fwd_num_stages=2,
-    fwd_threads=256,
-    bwd_block_size=32,
-    bwd_split_store=2,
-    bwd_num_stages=0,
-    bwd_threads=256,
-):
+def test_sparse_mla_bwd(B=1, S=4096, SKV=8192, H=64, HKV=1, DQKV=576, DV=512, topk=2048, dtype=torch.bfloat16, check_correctness=True):
     # Prepare data
     q = torch.randn((B, S, H, DQKV), dtype=dtype, device="cuda").requires_grad_(True)
     kv = torch.randn((B, SKV, HKV, DQKV), dtype=dtype, device="cuda").requires_grad_(True)
@@ -329,23 +302,12 @@ def test_sparse_mla_bwd(
     # Forward
     from sparse_mla_fwd import sparse_mla_fwd_interface
 
-    tl_out, tl_lse = sparse_mla_fwd_interface(q, kv, indices, d_v=DV, block_I=fwd_block_I, num_stages=fwd_num_stages, threads=fwd_threads)
+    tl_out, tl_lse = sparse_mla_fwd_interface(q, kv, indices)
 
-    tl_dq, tl_dkv = sparse_mla_bwd(
-        q,
-        kv,
-        tl_out,
-        do,
-        indices,
-        tl_lse,
-        block_size=bwd_block_size,
-        split_store=bwd_split_store,
-        num_stages=bwd_num_stages,
-        threads=bwd_threads,
-    )
+    tl_dq, tl_dkv = sparse_mla_bwd(q, kv, tl_out, do, indices, tl_lse)
+    ref_dq, ref_dkv = ref_sparse_mla_bwd_interface(q, kv, None, do, indices, None)
 
     if check_correctness:
-        ref_dq, ref_dkv = ref_sparse_mla_bwd_interface(q, kv, None, do, indices, None)
         assert_tensors_similar(tl_dq, ref_dq, eps=1e-4, name="dq")
         assert_tensors_similar(tl_dkv, ref_dkv, eps=1e-4, name="dkv")
         print("assert_tensors_similar passed")
@@ -362,18 +324,7 @@ def test_sparse_mla_bwd(
     from tilelang.profiler import do_bench
 
     def fn():
-        return sparse_mla_bwd(
-            q,
-            kv,
-            tl_out,
-            do,
-            indices,
-            tl_lse,
-            block_size=bwd_block_size,
-            split_store=bwd_split_store,
-            num_stages=bwd_num_stages,
-            threads=bwd_threads,
-        )
+        return sparse_mla_bwd(q, kv, tl_out, do, indices, tl_lse)
 
     ms = do_bench(fn, rep=100, warmup=250)
     print(f"Average time: {ms:.3f} ms")

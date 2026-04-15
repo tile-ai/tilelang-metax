@@ -171,8 +171,8 @@ def sparse_mla_fwd_interface(q, kv, indices, sm_scale=None, return_p_sum: bool =
     batch, seq_len, heads, dim_plus_tail_dim = q.shape
     _, seq_len_kv, kv_group, _ = kv.shape
 
+    assert dim_plus_tail_dim == 576, "you should assign dim otherwise"
     dim = d_v
-    assert 0 < dim < dim_plus_tail_dim, "d_v must split the last dimension into value and tail parts"
 
     assert kv.shape[-1] == dim_plus_tail_dim
     tail_dim = dim_plus_tail_dim - dim
