@@ -301,8 +301,9 @@ def test_sparse_mla_bwd(B=1, S=4096, SKV=8192, H=64, HKV=1, DQKV=576, DV=512, to
     tl_out, tl_lse = sparse_mla_fwd_interface(q, kv, indices)
 
     tl_dq, tl_dkv = sparse_mla_bwd(q, kv, tl_out, do, indices, tl_lse)
+    ref_dq, ref_dkv = ref_sparse_mla_bwd_interface(q, kv, None, do, indices, None)
+
     if check_correctness:
-        ref_dq, ref_dkv = ref_sparse_mla_bwd_interface(q, kv, None, do, indices, None)
         assert_tensors_similar(tl_dq, ref_dq, eps=1e-4, name="dq")
         assert_tensors_similar(tl_dkv, ref_dkv, eps=1e-4, name="dkv")
         print("assert_tensors_similar passed")

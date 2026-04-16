@@ -7,7 +7,7 @@ from tilelang import language as T
 decode_i4_to_f16 = """
 #include "maca_fp16.h"
 template <typename T1, typename T2, bool isSigned = false>
-__device__ void decode_i4b_to_f16_maca(T1 *_i4s, T2 *B_local_decode, const int N = 8)
+__device__ void decode_i4b_to_f16(T1 *_i4s, T2 *B_local_decode, const int N = 8)
 {
     const unsigned char *src = reinterpret_cast<const unsigned char *>(_i4s);
 #pragma unroll
@@ -22,15 +22,15 @@ __device__ void decode_i4b_to_f16_maca(T1 *_i4s, T2 *B_local_decode, const int N
 }
 
 template <typename T1, typename T2>
-__device__ void decode_i4s_to_f16_maca(T1 *_i4s, T2 *B_local_decode, const int N = 8)
+__device__ void decode_i4s_to_f16(T1 *_i4s, T2 *B_local_decode, const int N = 8)
 {
-    decode_i4b_to_f16_maca<T1, T2, true>(_i4s, B_local_decode, N);
+    decode_i4b_to_f16<T1, T2, true>(_i4s, B_local_decode, N);
 }
 
 template <typename T1, typename T2>
-__device__ void decode_i4u_to_f16_maca(T1 *_i4u, T2 *B_local_decode, const int N = 8)
+__device__ void decode_i4u_to_f16(T1 *_i4u, T2 *B_local_decode, const int N = 8)
 {
-    decode_i4b_to_f16_maca<T1, T2, false>(_i4u, B_local_decode, N);
+    decode_i4b_to_f16<T1, T2, false>(_i4u, B_local_decode, N);
 }
 """
 
@@ -91,7 +91,7 @@ def get_lop3_intrin_group(
         raise ValueError(f"Unsupported target dtype: {out_dtype}")
 
     source_symbol = "u" if source_format == T.uint else "s"
-    func_name = f"decode_i{source_bit}{source_symbol}_to_{d4f}_maca"
+    func_name = f"decode_i{source_bit}{source_symbol}_to_{d4f}"
     if with_scaling:
         func_name += "_scale"
     if with_zeros:
