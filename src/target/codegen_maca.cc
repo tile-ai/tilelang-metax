@@ -421,6 +421,12 @@ void CodeGenTileLangMACA::PrintType(DataType t, std::ostream &os) { // NOLINT(*)
         ICHECK_EQ(lanes % 2, 0)
             << "only support even lane for float type with lanes > 4";
         os << "ulonglong" << lanes / 2;
+      } else if (lanes == 16) {
+        os << "float32x16";
+        return;
+      } else if (lanes == 32) {
+        os << "float32x32";
+        return;
       } else {
         fail = true;
       }
@@ -733,9 +739,11 @@ void CodeGenTileLangMACA::PrintVecElemLoad(const std::string &vec, DataType t,
   }
 
   static const char access[] = {'x', 'y', 'z', 'w'};
-  ICHECK(i >= 0 && i < 256 / t.bits())
-      << "i: " << i << " t: " << t << " t.bits(): " << t.bits()
-      << " t.lanes(): " << t.lanes();
+  ICHECK(i >= 0 && i < (t.bits() == 8                        ? 16
+                        : (t.lanes() == 16)                  ? 16
+                        : (t.lanes() == 32)                  ? 32
+                        : (t.bits() == 16 || t.bits() == 32) ? 8
+                                                             : 4));
   if (t.bits() == 8 && (t.is_int() || t.is_uint())) {
     std::string type_name = t.is_int() ? "char" : "unsigned char";
     if (t.lanes() == 2 || t.lanes() == 3) {
@@ -748,6 +756,9 @@ void CodeGenTileLangMACA::PrintVecElemLoad(const std::string &vec, DataType t,
       std::string ac = vec + "." + access[i / 8];
       os << "((" << type_name << ")(" << ac << " >> " << i % 8 * 8 << "))";
     }
+  } else if ((t.lanes() == 16 || t.lanes() == 32) && t.bits() == 32 &&
+             t.is_float()) {
+    os << vec << "[" << i << "]";
   } else if (t.is_float16()) {
     if (t.lanes() <= 8) {
       os << "((half2*)(&(" << vec << "." << access[i / 2] << ")))->"
@@ -825,7 +836,11 @@ void CodeGenTileLangMACA::PrintVecElemStore(const std::string &vec, DataType t,
                                             int i, const std::string &value) {
   this->PrintIndent();
   static const char access[] = {'x', 'y', 'z', 'w'};
-  ICHECK(i >= 0 && i < 256 / t.bits());
+  ICHECK(i >= 0 && i < (t.bits() == 8                        ? 16
+                        : (t.lanes() == 16)                  ? 16
+                        : (t.lanes() == 32)                  ? 32
+                        : (t.bits() == 16 || t.bits() == 32) ? 8
+                                                             : 4));
   if (t.bits() == 8 && (t.is_int() || t.is_uint())) {
     if (t.lanes() == 2 || t.lanes() == 3) {
       stream << vec << '.' << access[i % t.lanes()] << "="
@@ -848,6 +863,9 @@ void CodeGenTileLangMACA::PrintVecElemStore(const std::string &vec, DataType t,
       }
       stream << "(" << value << " << " << i % 8 * 8 << ");\n";
     }
+  } else if ((t.lanes() == 16 || t.lanes() == 32) && t.bits() == 32 &&
+             t.is_float()) {
+    stream << vec << "[" << i << "] = " << value << ";\n";
   } else if (t.is_float16()) {
     if (t.lanes() <= 8) {
       stream << "((half2*)(&(" << vec << "." << access[i / 2] << ")))->"
@@ -2850,6 +2868,19 @@ void CodeGenTileLangMACA::VisitExpr_(const BroadcastNode *op,
     }
   }
 
+  if (op->dtype.is_float() && op->dtype.bits() == 32 &&
+      (lanes == 16 || lanes == 32)) {
+    std::string v = PrintExpr(op->value);
+    os << "(float32x" << lanes << "){";
+    for (int i = 0; i < lanes; ++i) {
+      if (i != 0)
+        os << ", ";
+      os << v;
+    }
+    os << "}";
+    return;
+  }
+
   std::string v = PrintExpr(op->value);
   os << "make_";
   PrintType(op->dtype, os);
@@ -3049,6 +3080,19 @@ void CodeGenTileLangMACA::PrintVecElemLoadExpr(DataType t, int i,
       } else {
         os << ")";
       }
+    }
+    return;
+  }
+
+  if ((t.lanes() == 16 || t.lanes() == 32) && t.bits() == 32 && t.is_float()) {
+    if (i == 0) {
+      os << "(float32x" << t.lanes() << "){";
+    }
+    os << value;
+    if (i != t.lanes() - 1) {
+      os << ",";
+    } else {
+      os << "}";
     }
     return;
   }
