@@ -1,0 +1,4 @@
+interface:
+  display_name: "MACA Example Fixer"
+  short_description: "Fix MACA example tests with C500-aware rules"
+  default_prompt: "Use $maca-example-fixer to fix failing tests under examples/maca with minimal MACA-specific changes."
