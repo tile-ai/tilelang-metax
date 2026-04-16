@@ -18,9 +18,9 @@ def sparse_mla_fwd(
     sm_scale=None,
     is_causal=True,
     CP0=True,
-    block_I=64,
-    num_stages=2,
-    threads=256,
+    block_I=32,
+    num_stages=1,
+    threads=128,
 ):
     assert dim == tilelang.math.next_power_of_2(dim), f"haven't check padding correctness yet, dim={dim}"
     assert tail_dim == tilelang.math.next_power_of_2(tail_dim), f"haven't check padding correctness yet, dim={tail_dim}"
@@ -57,13 +57,9 @@ def sparse_mla_fwd(
     D = dim
     D_tail = tail_dim
 
-    if head_kv > 64:
-        assert head_kv % 64 == 0, "head_kv should be a multiple of 64"
-        REPLICATE_H = head_kv // 64
-    else:
-        REPLICATE_H = 1
-
-    H_per_block = padded_H if REPLICATE_H == 1 else 64
+    H_per_block = min(16, padded_H)
+    assert padded_H % H_per_block == 0
+    REPLICATE_H = padded_H // H_per_block
 
     @T.prim_func
     def main(
@@ -104,7 +100,7 @@ def sparse_mla_fwd(
             q_i = s_i
             max_kv_i = q_i
 
-            H0 = g_i * padded_H + (0 if REPLICATE_H == 1 else (bx % REPLICATE_H) * 64)
+            H0 = g_i * padded_H + (0 if REPLICATE_H == 1 else (bx % REPLICATE_H) * H_per_block)
             H1 = H0 + H_per_block
 
             T.copy(Q[b_i, s_i, H0:H1, :D], Q_shared)
@@ -164,7 +160,7 @@ def sparse_mla_fwd(
     return main
 
 
-def sparse_mla_fwd_interface(q, kv, indices, sm_scale=None, return_p_sum: bool = False, d_v=512, block_I=64, num_stages=2, threads=256):
+def sparse_mla_fwd_interface(q, kv, indices, sm_scale=None, return_p_sum: bool = False, d_v=512, block_I=32, num_stages=1, threads=128):
     is_casual = True
     assert return_p_sum == False, "This kernel file is for fwd only"
     assert q.is_contiguous() and kv.is_contiguous() and indices.is_contiguous()
@@ -235,9 +231,9 @@ def test_sparse_mla_fwd(
     topk=2048,
     dtype=torch.bfloat16,
     check_correctness=True,
-    block_I=64,
-    num_stages=2,
-    threads=256,
+    block_I=32,
+    num_stages=1,
+    threads=128,
 ):
     torch.random.manual_seed(0)
     q = torch.randn((B, S, H, DQK), dtype=dtype, device="cuda").requires_grad_(True)
@@ -274,7 +270,7 @@ def test_sparse_mla_fwd(
 
 
 def run_regression_perf(
-    B=1, S=4096, SKV=8192, H=128, HKV=1, DQK=576, DV=512, topk=2048, dtype=torch.bfloat16, block_I=64, num_stages=2, threads=256
+    B=1, S=4096, SKV=8192, H=128, HKV=1, DQK=576, DV=512, topk=2048, dtype=torch.bfloat16, block_I=32, num_stages=1, threads=128
 ):
     torch.random.manual_seed(0)
     q = torch.randn((B, S, H, DQK), dtype=dtype, device="cuda").requires_grad_(True)
@@ -315,7 +311,7 @@ if __name__ == "__main__":
         topk=2048,
         dtype=torch.bfloat16,
         check_correctness=True,
-        block_I=64,
-        num_stages=2,
-        threads=256,
+        block_I=32,
+        num_stages=1,
+        threads=128,
     )

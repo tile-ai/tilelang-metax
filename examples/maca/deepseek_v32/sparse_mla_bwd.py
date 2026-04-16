@@ -93,7 +93,7 @@ def bwd(
     is_causal=True,
     block_size=32,
     num_stages=0,
-    threads=256,
+    threads=128,
     indices_dtype=T.int32,
     dtype=T.bfloat16,
     accum_dtype=T.float32,
@@ -121,13 +121,13 @@ def bwd(
 
     H = H_kv
     padded_H = max(tilelang.math.next_power_of_2(H_kv), 16)
-    block_H = min(64, padded_H)
+    block_H = min(16, padded_H)
     assert padded_H % block_H == 0
     NH = padded_H // block_H
     BS = block_size
     NS = tilelang.cdiv(topk, block_size)
 
-    split_store = 2
+    split_store = 4
 
     @T.prim_func
     def sparse_mla_bwd_kernel(
@@ -145,14 +145,12 @@ def bwd(
             Q_tail_shared = T.alloc_shared([block_H, D_tail], dtype)
             KV_shared = T.alloc_shared([BS, D], dtype)
             KV_tail_shared = T.alloc_shared([BS, D_tail], dtype)
-            dO_shared = T.alloc_shared([block_H, D], dtype)
+            dO_dp_local = T.alloc_fragment([block_H, D], dtype)
+            dO_dkv_local = T.alloc_fragment([block_H, D], dtype)
             mask = T.alloc_fragment([BS], "bool")
 
             P_shared_cast = T.alloc_shared([block_H, BS], dtype)
             dP_shared_cast = T.alloc_shared([block_H, BS], dtype)
-            dQ_shared = T.alloc_shared([block_H, D], dtype)
-            dQ_tail_shared = T.alloc_shared([block_H, D_tail], dtype)
-
             acc_p = T.alloc_fragment([block_H, BS], accum_dtype)
             acc_dp = T.alloc_fragment([block_H, BS], accum_dtype)
             acc_dq = T.alloc_fragment([block_H, D], accum_dtype)
@@ -166,7 +164,8 @@ def bwd(
 
             T.copy(Q[by, s_i, bz * block_H : (bz + 1) * block_H, :D], Q_shared)
             T.copy(Q[by, s_i, bz * block_H : (bz + 1) * block_H, D:], Q_tail_shared)
-            T.copy(dO[by, s_i, bz * block_H : (bz + 1) * block_H, :D], dO_shared)
+            T.copy(dO[by, s_i, bz * block_H : (bz + 1) * block_H, :D], dO_dp_local)
+            T.copy(dO[by, s_i, bz * block_H : (bz + 1) * block_H, :D], dO_dkv_local)
 
             T.clear(acc_dq)
             T.clear(acc_dq_tail)
@@ -196,7 +195,7 @@ def bwd(
 
                 T.copy(acc_p, P_shared_cast)
 
-                T.gemm(dO_shared, KV_shared, acc_dp, transpose_B=True, policy=T.GemmWarpPolicy.FullCol, clear_accum=True)
+                T.gemm(dO_dp_local, KV_shared, acc_dp, transpose_B=True, policy=T.GemmWarpPolicy.FullCol, clear_accum=True)
 
                 for h_i, bi_i in T.Parallel(block_H, BS):
                     acc_dp[h_i, bi_i] = acc_p[h_i, bi_i] * (acc_dp[h_i, bi_i] - Delta[by, s_i, bz * block_H + h_i]) * sm_scale
@@ -206,7 +205,7 @@ def bwd(
                 T.gemm(dP_shared_cast, KV_tail_shared, acc_dq_tail, policy=T.GemmWarpPolicy.FullCol)
 
                 T.gemm(dP_shared_cast, Q_shared, acc_dkv, transpose_A=True, policy=T.GemmWarpPolicy.FullCol, clear_accum=True)
-                T.gemm(P_shared_cast, dO_shared, acc_dkv, transpose_A=True, policy=T.GemmWarpPolicy.FullCol)
+                T.gemm(P_shared_cast, dO_dkv_local, acc_dkv, transpose_A=True, policy=T.GemmWarpPolicy.FullCol)
 
                 T.clear(acc_dkv_tail)
                 T.gemm(dP_shared_cast, Q_tail_shared, acc_dkv_tail, transpose_A=True, policy=T.GemmWarpPolicy.FullCol)
@@ -233,12 +232,9 @@ def bwd(
                             acc_dkv_tail_shared[bi_i, d_i * 4],
                         )
 
-            # Store the accumulated dQ
-            T.copy(acc_dq, dQ_shared)
-            T.copy(acc_dq_tail, dQ_tail_shared)
-
-            T.copy(dQ_shared, dQ[by, s_i, bz * block_H : (bz + 1) * block_H, :D])
-            T.copy(dQ_tail_shared, dQ[by, s_i, bz * block_H : (bz + 1) * block_H, D:])
+            # Store the accumulated dQ directly to avoid extra shared-memory staging.
+            T.copy(acc_dq, dQ[by, s_i, bz * block_H : (bz + 1) * block_H, :D])
+            T.copy(acc_dq_tail, dQ[by, s_i, bz * block_H : (bz + 1) * block_H, D:])
 
     return sparse_mla_bwd_kernel
 
@@ -305,9 +301,8 @@ def test_sparse_mla_bwd(B=1, S=4096, SKV=8192, H=64, HKV=1, DQKV=576, DV=512, to
     tl_out, tl_lse = sparse_mla_fwd_interface(q, kv, indices)
 
     tl_dq, tl_dkv = sparse_mla_bwd(q, kv, tl_out, do, indices, tl_lse)
-    ref_dq, ref_dkv = ref_sparse_mla_bwd_interface(q, kv, None, do, indices, None)
-
     if check_correctness:
+        ref_dq, ref_dkv = ref_sparse_mla_bwd_interface(q, kv, None, do, indices, None)
         assert_tensors_similar(tl_dq, ref_dq, eps=1e-4, name="dq")
         assert_tensors_similar(tl_dkv, ref_dkv, eps=1e-4, name="dkv")
         print("assert_tensors_similar passed")
