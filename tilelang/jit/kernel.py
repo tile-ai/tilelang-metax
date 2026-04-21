@@ -19,6 +19,7 @@ from tilelang.jit.adapter import (
     BaseKernelAdapter,
     CythonKernelAdapter,
     CuTeDSLKernelAdapter,
+    MACATVMFFIKernelAdapter,
     TVMFFIKernelAdapter,
     MetalKernelAdapter,
 )
@@ -34,6 +35,10 @@ logger = logging.getLogger(__name__)
 
 _P = ParamSpec("_P")
 _T = TypeVar("_T")
+
+
+def _get_tvm_ffi_adapter_cls(target: Target) -> type[TVMFFIKernelAdapter]:
+    return MACATVMFFIKernelAdapter if target.kind.name == "maca" else TVMFFIKernelAdapter
 
 
 class JITKernel(Generic[_P, _T]):
@@ -259,7 +264,8 @@ class JITKernel(Generic[_P, _T]):
             # Use TVMFFIKernelAdapter for interoperability with PyTorch via DLPack.
             # But we need to ensure that the runtime is enabled and the runtime module is not None.
             assert artifact.rt_mod is not None, "tvm_ffi backend requires a runtime module."
-            adapter = TVMFFIKernelAdapter(
+            adapter_cls = _get_tvm_ffi_adapter_cls(target)
+            adapter = adapter_cls(
                 params=artifact.params,
                 result_idx=out_idx,
                 target=target,
@@ -351,7 +357,8 @@ class JITKernel(Generic[_P, _T]):
 
         # Create an adapter based on the specified execution backend.
         if execution_backend == "tvm_ffi":
-            adapter = TVMFFIKernelAdapter.from_database(
+            adapter_cls = _get_tvm_ffi_adapter_cls(target)
+            adapter = adapter_cls.from_database(
                 params=params,
                 result_idx=result_idx,
                 target=target,

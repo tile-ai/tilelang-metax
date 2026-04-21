@@ -38,17 +38,17 @@ class TensorCoreIntrinEmitter:
     N_DIM = 16
     WARP_SIZE = 64
     dtype_abbrv = {
-        "float16": "fp16",
-        "bfloat16": "bf16",
-        "float32": "fp32",
-        "int8": "int8",
-        "int32": "int32",
-        "float8_e4m3": "e4m3",
-        "float8_e5m2": "e5m2",
-        "float8_e4m3fn": "e4m3",
-        "float8_e5m2fn": "e5m2",
-        "float8_e4m3fnuz": "e4m3fnuz",
-        "float8_e5m2fnuz": "e5m2fnuz",
+        "float16": {"storage": "fp16", "mma": "f16", "mma_input_dtype": T.float16},
+        "bfloat16": {"storage": "bf16", "mma": "bf16", "mma_input_dtype": T.bfloat16},
+        "float32": {"storage": "fp32", "mma": "f32", "mma_input_dtype": T.float32},
+        "int8": {"storage": "int8", "mma": "i8", "mma_input_dtype": T.int8},
+        "int32": {"storage": "int32", "mma": "i32", "mma_input_dtype": T.int32},
+        "float8_e4m3": {"storage": "e4m3", "mma": "fp8", "mma_input_dtype": T.float16},
+        "float8_e5m2": {"storage": "e5m2", "mma": "fp8", "mma_input_dtype": T.float16},
+        "float8_e4m3fn": {"storage": "e4m3", "mma": "fp8", "mma_input_dtype": T.float16},
+        "float8_e5m2fn": {"storage": "e5m2", "mma": "fp8", "mma_input_dtype": T.float16},
+        "float8_e4m3fnuz": {"storage": "e4m3fnuz", "mma": "fp8", "mma_input_dtype": T.float16},
+        "float8_e5m2fnuz": {"storage": "e5m2fnuz", "mma": "fp8", "mma_input_dtype": T.float16},
     }
 
     # k_pack represents the number of elements in a vectorized instruction
@@ -88,6 +88,7 @@ class TensorCoreIntrinEmitter:
         self.warp_row_tiles = warp_row_tiles
         self.warp_col_tiles = warp_col_tiles
         self.chunk = chunk
+        self.mma_input_dtype = self._resolve_mma_input_dtype(a_dtype)
         self._initialize_k_dim(a_dtype)
         self._initialize_abbrev(a_dtype, b_dtype, accum_dtype)
         self._initialize_local_size(self.M_DIM, self.N_DIM, self.k_dim, self.WARP_SIZE)
@@ -106,8 +107,6 @@ class TensorCoreIntrinEmitter:
 
     def _initialize_k_dim(self, a_dtype=T.float16):
         if isinstance(a_dtype, str):
-            if a_dtype in ["float8_e4m3fnuz", "float8_e5m2fnuz"]:
-                return
             a_dtype = DataType(a_dtype)
 
         if a_dtype.bits == 32:
@@ -123,12 +122,24 @@ class TensorCoreIntrinEmitter:
         self.local_size_out = (m_dim * n_dim) // warp_size
 
     def _dtype_abbrv_lookup(self, dtype):
-        s = str(dtype)
-        if s.startswith("dtype('") and s.endswith("')"):
-            s = s[7:-2]
-        if s not in self.dtype_abbrv:
+        return self._dtype_info(dtype)["storage"]
+
+    def _resolve_mma_input_dtype(self, dtype):
+        return self._dtype_info(dtype)["mma_input_dtype"]
+
+    @classmethod
+    def _normalize_dtype_key(cls, dtype):
+        key = str(dtype)
+        if key.startswith("dtype('") and key.endswith("')"):
+            key = key[7:-2]
+        return key
+
+    @classmethod
+    def _dtype_info(cls, dtype):
+        key = cls._normalize_dtype_key(dtype)
+        if key not in cls.dtype_abbrv:
             raise KeyError(f"Unsupported dtype for MACA MMA: {dtype!r}")
-        return self.dtype_abbrv[s]
+        return cls.dtype_abbrv[key]
 
     def _initialize_abbrev(self, a_dtype, b_dtype, accum_dtype):
         self.a_dtype_abbrv = self._dtype_abbrv_lookup(a_dtype)
@@ -136,24 +147,8 @@ class TensorCoreIntrinEmitter:
         self.accum_dtype_abbrv = self._dtype_abbrv_lookup(accum_dtype)
 
     def _initialize_mma_prefix(self, k_dim=16):
-        in_dtype = self.a_dtype
+        in_dtype_abbrv = self._dtype_info(self.a_dtype)["mma"]
         M_DIM, N_DIM = self.M_DIM, self.N_DIM
-
-        in_dtype_key = str(in_dtype)
-        if in_dtype_key.startswith("dtype('") and in_dtype_key.endswith("')"):
-            in_dtype_key = in_dtype_key[7:-2]
-        in_dtype_map = {
-            "bfloat16": "bf16",
-            "float16": "f16",
-            "float32": "f32",
-            "int8": "i8",
-            "int32": "i32",
-            "float8_e4m3fnuz": "fp8",
-            "float8_e5m2fnuz": "fp8",
-            "float8_e4m3fn": "fp8",
-            "float8_e5m2fn": "fp8",
-        }
-        in_dtype_abbrv = in_dtype_map[in_dtype_key]
 
         if in_dtype_abbrv == "fp8":
             self.mma_suffix = f"{M_DIM}x{N_DIM}x{k_dim}fp8"
@@ -281,10 +276,9 @@ class TensorCoreIntrinEmitter:
         # legalize shared buffer to region
         A_region = self._legalize_to_buffer_region(A_shared_buf)
         A_buf = A_region.buffer
+        A_prefix = [region.min for region in A_region.region[:-2]]
         A_base0 = A_region.region[-2].min
         A_base1 = A_region.region[-1].min
-        # Leading dimensions (e.g. pipeline stage axis) – empty for 2-D buffers
-        A_other = [r.min for r in A_region.region[:-2]]
 
         @T.macro
         def _warp_ldmatrix_a(
@@ -300,13 +294,13 @@ class TensorCoreIntrinEmitter:
                     for local_id in T.vectorized(k_pack * local_size_a):
                         row, col = T.meta_var(reverse_index_map(tx, local_id))
                         l, r = (rk * chunk + ki * (k_pack * micro_size_k), warp_m * warp_row_tiles + i * micro_size_x)
-                        A_local_buf[i * k_pack * local_size_a + local_id] = A_buf[tuple(A_other) + (A_base0 + l + row, A_base1 + r + col)]
+                        A_local_buf[i * k_pack * local_size_a + local_id] = A_buf[tuple(A_prefix + [A_base0 + l + row, A_base1 + r + col])]
             else:
                 for i in T.serial(warp_rows):
                     for local_id in T.vectorized(k_pack * local_size_a):
                         row, col = T.meta_var(reverse_index_map(tx, local_id))
                         l, r = (warp_m * warp_row_tiles + i * micro_size_x, rk * chunk + ki * (k_pack * micro_size_k))
-                        A_local_buf[i * k_pack * local_size_a + local_id] = A_buf[tuple(A_other) + (A_base0 + l + row, A_base1 + r + col)]
+                        A_local_buf[i * k_pack * local_size_a + local_id] = A_buf[tuple(A_prefix + [A_base0 + l + row, A_base1 + r + col])]
 
         return _warp_ldmatrix_a(A_local_buf, A_shared_buf, ki, thread_binding, rk)
 
@@ -325,10 +319,9 @@ class TensorCoreIntrinEmitter:
         # legalize shared buffer to region
         B_region = self._legalize_to_buffer_region(B_shared_buf)
         B_buf = B_region.buffer
+        B_prefix = [region.min for region in B_region.region[:-2]]
         B_base0 = B_region.region[-2].min
         B_base1 = B_region.region[-1].min
-        # Leading dimensions (e.g. pipeline stage axis) – empty for 2-D buffers
-        B_other = [r.min for r in B_region.region[:-2]]
 
         @T.macro
         def _warp_ldmatrix_b(
@@ -347,7 +340,7 @@ class TensorCoreIntrinEmitter:
                             warp_n * warp_col_tiles + j * micro_size_y,
                             rk * chunk + ki * (k_pack * micro_size_k),
                         )
-                        B_local_buf[j * k_pack * local_size_b + local_id] = B_buf[tuple(B_other) + (B_base0 + l + row, B_base1 + r + col)]
+                        B_local_buf[j * k_pack * local_size_b + local_id] = B_buf[tuple(B_prefix + [B_base0 + l + row, B_base1 + r + col])]
 
             else:
                 for j in T.serial(warp_cols):
@@ -357,7 +350,7 @@ class TensorCoreIntrinEmitter:
                             rk * chunk + ki * (k_pack * micro_size_k),
                             warp_n * warp_col_tiles + j * micro_size_y,
                         )
-                        B_local_buf[j * k_pack * local_size_b + local_id] = B_buf[tuple(B_other) + (B_base0 + l + row, B_base1 + r + col)]
+                        B_local_buf[j * k_pack * local_size_b + local_id] = B_buf[tuple(B_prefix + [B_base0 + l + row, B_base1 + r + col])]
 
         return _warp_ldmatrix_b(B_local_buf, B_shared_buf, ki, thread_binding, rk)
 
@@ -369,9 +362,10 @@ class TensorCoreIntrinEmitter:
         local_size_out = self.local_size_out
         k_pack = self.k_pack
         mma_suffix = self.mma_suffix
-        a_dtype, b_dtype, out_dtype = self.a_dtype, self.b_dtype, self.accum_dtype
-        compute_a_dtype = a_dtype if local_size_a == 1 else f"{a_dtype}x{local_size_a}"
-        compute_b_dtype = b_dtype if local_size_b == 1 else f"{b_dtype}x{local_size_b}"
+        out_dtype = self.accum_dtype
+        mma_input_dtype = self.mma_input_dtype
+        compute_a_dtype = mma_input_dtype if local_size_a == 1 else f"{mma_input_dtype}x{local_size_a}"
+        compute_b_dtype = mma_input_dtype if local_size_b == 1 else f"{mma_input_dtype}x{local_size_b}"
         compute_out_dtype = out_dtype if local_size_out == 1 else f"{out_dtype}x{local_size_out}"
 
         a_is_fragment = is_fragment(A_local_buf)
