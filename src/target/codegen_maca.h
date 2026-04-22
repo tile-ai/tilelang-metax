@@ -8,6 +8,7 @@
 #ifndef TVM_TL_TARGET_CODEGEN_MACA_H_
 #define TVM_TL_TARGET_CODEGEN_MACA_H_
 
+#include <optional>
 #include <tvm/target/codegen.h>
 #include <tvm/tir/expr.h>
 #include <tvm/tir/op.h>
@@ -57,6 +58,7 @@ public:
   void VisitExpr_(const FloatImmNode *op, std::ostream &os) final;
   void VisitExpr_(const CallNode *op, std::ostream &os) final;
   void VisitExpr_(const CastNode *op, std::ostream &os) final;
+  void VisitExpr_(const ShuffleNode *op, std::ostream &os) final;
   void VisitExpr_(const MinNode *op, std::ostream &os) final;
   void VisitExpr_(const MaxNode *op, std::ostream &os) final;
   void VisitStmt_(const EvaluateNode *op) final;
@@ -151,6 +153,7 @@ private:
   std::unordered_map<const VarNode *, std::string> fragment_shapes;
   std::unordered_map<const VarNode *, std::string> fragment_layouts;
   std::unordered_map<const VarNode *, IntImm> unroll_factor;
+  std::optional<std::tuple<int64_t, int64_t, int64_t>> cluster_dims;
   friend void PrintConst(const FloatImmNode *op, std::ostream &os,
                          CodeGenTileLangMACA *p);
   void PrintWmmaScope(const std::string &scope, DataType t,

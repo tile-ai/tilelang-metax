@@ -82,7 +82,7 @@ def resolve_execution_backend(requested: str | None, target: Target) -> str:
         if is_cutedsl_target(target):
             return "cutedsl"
         kind = _target_kind(target)
-        if kind in {"cuda", "metal", "maca"}:
+        if kind == "cuda" or kind == "metal" or kind == "hip" or kind == "maca":
             choice = "tvm_ffi"
         else:
             choice = "cython"

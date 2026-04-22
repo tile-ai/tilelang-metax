@@ -8,10 +8,8 @@ import argparse
 
 
 @tilelang.jit(
-    out_idx=[6],
-    pass_configs={
-        tilelang.PassConfigKey.TL_ENABLE_FAST_MATH: True,
-    },
+    out_idx=[4],
+    pass_configs={tilelang.PassConfigKey.TL_ENABLE_FAST_MATH: True},
 )
 def flashattn(batch, heads, kv_head_num, seqlen_kv, dim, pe_dim, block_N, block_H, num_split, softmax_scale):
     scale = float(softmax_scale * 1.44269504)  # log2(e)
@@ -27,18 +25,17 @@ def flashattn(batch, heads, kv_head_num, seqlen_kv, dim, pe_dim, block_N, block_
         Q_pe: T.Tensor([batch, heads, pe_dim], dtype),
         KV: T.Tensor([batch, seqlen_kv, kv_head_num, dim], dtype),
         K_pe: T.Tensor([batch, seqlen_kv, kv_head_num, pe_dim], dtype),
-        glse: T.Tensor([batch, heads, num_split], dtype),
-        Output_partial: T.Tensor([batch, heads, num_split, dim], dtype),
         Output: T.Tensor([batch, heads, dim], dtype),
     ):
+        glse = T.alloc_global([batch, heads, num_split], dtype)
+        Output_partial = T.alloc_global([batch, heads, num_split, dim], dtype)
         # flash_attn_split
-        with T.Kernel(batch, heads // min(block_H, kv_group_num), num_split, threads=256) as (bid, hid, bz):
+        with T.Kernel(batch, heads // min(block_H, kv_group_num), num_split, threads=128) as (bid, hid, bz):
             Q_shared = T.alloc_shared([block_H, dim], dtype)
             S_shared = T.alloc_shared([block_H, block_N], dtype)
             Q_pe_shared = T.alloc_shared([block_H, pe_dim], dtype)
             KV_shared = T.alloc_shared([block_N, dim], dtype)
             K_pe_shared = T.alloc_shared([block_N, pe_dim], dtype)
-            O_shared = T.alloc_shared([block_H, dim], dtype)
             acc_s = T.alloc_fragment([block_H, block_N], accum_dtype)
             acc_s_cast = T.alloc_fragment([block_H, block_N], dtype)
             acc_o = T.alloc_fragment([block_H, dim], accum_dtype)
@@ -58,7 +55,7 @@ def flashattn(batch, heads, kv_head_num, seqlen_kv, dim, pe_dim, block_N, block_
             T.fill(scores_max, -T.infinity(accum_dtype))
 
             loop_range = T.ceildiv((seqlen_kv // num_split), block_N)
-            for k in T.Pipelined(loop_range, num_stages=2):
+            for k in T.Pipelined(loop_range, num_stages=1):
                 kv_start = (seqlen_kv // num_split) * bz + k * block_N
                 kv_end = (seqlen_kv // num_split) * bz + (k + 1) * block_N
                 T.copy(KV[bid, kv_start:kv_end, cur_kv_head, :], KV_shared)
@@ -88,8 +85,7 @@ def flashattn(batch, heads, kv_head_num, seqlen_kv, dim, pe_dim, block_N, block_
             for i in T.Parallel(block_H):
                 logsum[i] = T.log2(logsum[i]) + scores_max[i] * scale
             T.copy(logsum, glse[bid, hid * VALID_BLOCK_H : (hid + 1) * VALID_BLOCK_H, bz])
-            T.copy(acc_o, O_shared)
-            T.copy(O_shared, Output_partial[bid, hid * VALID_BLOCK_H : (hid + 1) * VALID_BLOCK_H, bz, :])
+            T.copy(acc_o, Output_partial[bid, hid * VALID_BLOCK_H : (hid + 1) * VALID_BLOCK_H, bz, :])
 
         # combine
         with T.Kernel(heads, batch, threads=128) as (hid, bz):
@@ -125,17 +121,14 @@ def flashattn(batch, heads, kv_head_num, seqlen_kv, dim, pe_dim, block_N, block_
         Q_pe: T.Tensor([batch, heads, pe_dim], dtype),
         KV: T.Tensor([batch, seqlen_kv, kv_head_num, dim], dtype),
         K_pe: T.Tensor([batch, seqlen_kv, kv_head_num, pe_dim], dtype),
-        glse: T.Tensor([batch, heads, num_split], dtype),
-        Output_partial: T.Tensor([batch, heads, num_split, dim], dtype),
         Output: T.Tensor([batch, heads, dim], dtype),
     ):
-        with T.Kernel(heads // min(block_H, kv_group_num), batch, threads=256) as (hid, bid):
+        with T.Kernel(heads // min(block_H, kv_group_num), batch, threads=128) as (hid, bid):
             Q_shared = T.alloc_shared([block_H, dim], dtype)
             S_shared = T.alloc_shared([block_H, block_N], dtype)
             Q_pe_shared = T.alloc_shared([block_H, pe_dim], dtype)
             KV_shared = T.alloc_shared([block_N, dim], dtype)
             K_pe_shared = T.alloc_shared([block_N, pe_dim], dtype)
-            O_shared = T.alloc_shared([block_H, dim], dtype)
             acc_s = T.alloc_fragment([block_H, block_N], accum_dtype)
             acc_o = T.alloc_fragment([block_H, dim], accum_dtype)
             scores_max = T.alloc_fragment([block_H], accum_dtype)
@@ -153,7 +146,7 @@ def flashattn(batch, heads, kv_head_num, seqlen_kv, dim, pe_dim, block_N, block_
             T.fill(scores_max, -T.infinity(accum_dtype))
 
             loop_range = T.ceildiv(seqlen_kv, block_N)
-            for k in T.Pipelined(loop_range, num_stages=2):
+            for k in T.Pipelined(loop_range, num_stages=1):
                 T.copy(KV[bid, k * block_N : (k + 1) * block_N, cur_kv_head, :], KV_shared)
                 T.copy(K_pe[bid, k * block_N : (k + 1) * block_N, cur_kv_head, :], K_pe_shared)
                 T.gemm(Q_shared, KV_shared, acc_s, transpose_B=True, policy=T.GemmWarpPolicy.FullCol, clear_accum=True)
@@ -176,8 +169,7 @@ def flashattn(batch, heads, kv_head_num, seqlen_kv, dim, pe_dim, block_N, block_
                 T.gemm(S_shared, KV_shared, acc_o, policy=T.GemmWarpPolicy.FullCol)
             for i, j in T.Parallel(block_H, dim):
                 acc_o[i, j] /= logsum[i]
-            T.copy(acc_o, O_shared)
-            T.copy(O_shared, Output[bid, hid * VALID_BLOCK_H : (hid + 1) * VALID_BLOCK_H, :])
+            T.copy(acc_o, Output[bid, hid * VALID_BLOCK_H : (hid + 1) * VALID_BLOCK_H, :])
 
     if num_split > 1:
         return main_split
@@ -185,15 +177,13 @@ def flashattn(batch, heads, kv_head_num, seqlen_kv, dim, pe_dim, block_N, block_
         return main_no_split
 
 
-def ref_program(q, q_pe, kv, k_pe, glse, Output_partial):
+def ref_program(q, q_pe, kv, k_pe):
     #     """
     #     Inputs:
     #     - q (Tensor): [batch, heads, dim]
     #     - q_pe (Tensor): [batch, heads, pe_dim]
     #     - kv (Tensor): [batch, seqlen_kv, kv_head_num, dim]
     #     - k_pe (Tensor): [batch, seqlen_kv, kv_head_num, pe_dim]
-    #     - glse (Tensor): [batch, heads, num_split]
-    #     - Output_partial (Tensor): [batch, heads, num_split, dim]
     #     Outputs:
     #     - output (Tensor): [batch, heads, dim]
     #     """
@@ -232,8 +222,8 @@ def main(
     qk_flops = 2 * batch * heads * kv_ctx * (dim + pe_dim)
     pv_flops = 2 * batch * heads * kv_ctx * dim
     total_flops = qk_flops + pv_flops
-    BLOCK_N = 64
-    BLOCK_H = min(64, heads // kv_heads)
+    BLOCK_N = 32
+    BLOCK_H = min(16, heads // kv_heads)
     num_split = 1
     softmax_scale = (dim + pe_dim) ** -0.5
 
@@ -253,8 +243,8 @@ def run_regression_perf(
     dim=512,
     pe_dim=64,
 ):
-    BLOCK_N = 64
-    BLOCK_H = min(64, heads // kv_heads)
+    BLOCK_N = 32
+    BLOCK_H = min(16, heads // kv_heads)
     num_split = 1
     softmax_scale = (dim + pe_dim) ** -0.5
 

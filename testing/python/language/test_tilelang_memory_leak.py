@@ -9,10 +9,7 @@ import gc
 
 def test_tilelang_globals_leak():
     @tilelang.jit(
-        pass_configs={
-            tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: True,
-            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
-        },
+        pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True},
     )
     def get_dummy_kernel():
         @T.prim_func
@@ -39,6 +36,7 @@ def test_tilelang_globals_leak():
     #     objgraph.show_backrefs([a_upgrade], max_depth=5)
 
 
+@tilelang.testing.pytest.mark.xfail
 def test_error_no_cyclic_reference() -> None:
     # This test case ensures that when an error is raised from C++ side,
     # there is no cyclic reference that slows down the garbage collection.

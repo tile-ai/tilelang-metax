@@ -16,7 +16,6 @@ from tilelang.utils.language import (
 from tilelang.language.utils import (
     buffer_region_to_tile_region,
 )
-from tilelang.env import env as _env
 
 
 def _gemm_impl(
@@ -31,6 +30,7 @@ def _gemm_impl(
     k_pack: int = 1,
     wg_wait: int = 0,
     mbar: BarrierType | None = None,
+    annotations: dict | None = None,
 ) -> tir.PrimExpr:
     """Shared GEMM implementation.
 
@@ -82,9 +82,18 @@ def _gemm_impl(
             )
 
     M, N = C_shape
+    M_A = A_shape[-1] if transpose_A else A_shape[-2]
     K = A_shape[-2] if transpose_A else A_shape[-1]
+    N_B = B_shape[-2] if transpose_B else B_shape[-1]
     K_B = B_shape[-1] if transpose_B else B_shape[-2]
+    assert prim_expr_equal(M_A, M), f"T.gemm M shape check failed: M_A = {M_A}, M_C = {M}"
     assert prim_expr_equal(K, K_B), f"T.gemm K shape check failed: K_A = {K}, K_B = {K_B}"
+    use_2cta = annotations is not None and annotations.get("use_2cta", 0)
+    if use_2cta:
+        # In 2CTA mode each CTA holds half of B along N, so N_B should be N // 2
+        assert prim_expr_equal(N_B * 2, N), f"T.gemm N shape check failed for 2CTA: N_B = {N_B}, expected N_C / 2 = {N} / 2"
+    else:
+        assert prim_expr_equal(N_B, N), f"T.gemm N shape check failed: N_B = {N_B}, N_C = {N}"
 
     stride_a = A_stride[-2]
     stride_b = B_stride[-2]
@@ -132,62 +141,7 @@ def _gemm_impl(
         mbar_arg,
         C_coords[0],
         C_coords[1],
-    )
-
-
-# Public wrappers
-def gemm_v1(
-    A: BufferLikeType,
-    B: BufferLikeType,
-    C: BufferLikeType,
-    transpose_A: bool = False,
-    transpose_B: bool = False,
-    policy: GemmWarpPolicy = GemmWarpPolicy.Square,
-    clear_accum: bool = False,
-    k_pack: int = 1,
-    mbar: BarrierType | None = None,
-) -> tir.PrimExpr:
-    """Synchronous GEMM v1: use op tl.gemm."""
-    return _gemm_impl(
-        "tl.tileop.gemm",
-        A,
-        B,
-        C,
-        transpose_A,
-        transpose_B,
-        policy,
-        clear_accum,
-        k_pack,
-        0,
-        mbar,
-    )
-
-
-# experimental currently, for fast compilation
-def gemm_v2(
-    A: BufferLikeType,
-    B: BufferLikeType,
-    C: BufferLikeType,
-    transpose_A: bool = False,
-    transpose_B: bool = False,
-    policy: GemmWarpPolicy = GemmWarpPolicy.Square,
-    clear_accum: bool = False,
-    k_pack: int = 1,
-    mbar: BarrierType | None = None,
-) -> tir.PrimExpr:
-    """Synchronous GEMM v2: use op tl.gemm_py."""
-    return _gemm_impl(
-        "tl.tileop.gemm_py",
-        A,
-        B,
-        C,
-        transpose_A,
-        transpose_B,
-        policy,
-        clear_accum,
-        k_pack,
-        0,
-        mbar,
+        annotations=annotations,
     )
 
 
@@ -228,8 +182,19 @@ def gemm(
     Returns:
         tir.Call: A handle to the GEMM operation.
     """
-    impl = gemm_v1 if _env.use_gemm_v1() else gemm_v2
-    return impl(A, B, C, transpose_A, transpose_B, policy, clear_accum, k_pack, mbar)
+    return _gemm_impl(
+        "tl.tileop.gemm",
+        A,
+        B,
+        C,
+        transpose_A,
+        transpose_B,
+        policy,
+        clear_accum,
+        k_pack,
+        0,
+        mbar,
+    )
 
 
 def wgmma_gemm(
@@ -253,7 +218,7 @@ def wgmma_gemm(
     """
 
     return _gemm_impl(
-        "tl.tileop.wgmma_gemm_py",
+        "tl.tileop.wgmma_gemm",
         A,
         B,
         C,
@@ -277,6 +242,7 @@ def tcgen05_gemm(
     clear_accum: bool = False,
     *,
     mbar: BarrierType,
+    use_2cta: bool = False,
 ) -> tir.PrimExpr:
     """Explicit Blackwell TCGEN05 GEMM without an implicit wait.
 
@@ -285,12 +251,16 @@ def tcgen05_gemm(
     - it always requests the TCGEN5MMA lowering path
     - it never auto-emits an inlined `mbarrier_wait_parity`
 
+    When ``use_2cta=True``, the instruction is lowered to the 2CTA variant
+    which requires ``cluster_dims`` to be ``(2,1,1)`` or ``(1,2,1)``.
+
     If the current target or operand pattern cannot use Blackwell TCGEN5MMA,
     compilation fails instead of silently falling back to another GEMM path.
     """
 
+    ann = {"use_2cta": int(use_2cta)} if use_2cta else None
     return _gemm_impl(
-        "tl.tileop.tcgen05_gemm_py",
+        "tl.tileop.tcgen05_gemm",
         A,
         B,
         C,
@@ -301,4 +271,5 @@ def tcgen05_gemm(
         1,
         0,
         mbar,
+        annotations=ann,
     )

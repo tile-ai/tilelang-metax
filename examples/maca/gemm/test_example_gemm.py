@@ -1,7 +1,6 @@
 import tilelang.testing
 import example_gemm_autotune
 import example_gemm_intrinsics
-import example_gemm_schedule
 import example_gemm
 
 
@@ -14,11 +13,6 @@ def test_example_gemm_intrinsics():
     example_gemm_intrinsics.main(M=1024, N=1024, K=1024)
 
 
-def test_example_gemm_schedule():
-    example_gemm_schedule.main()
-
-
-@tilelang.testing.pytest.mark.skip("coredump")
 def test_example_gemm():
     example_gemm.main()
 

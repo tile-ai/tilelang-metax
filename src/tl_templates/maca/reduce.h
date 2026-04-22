@@ -50,6 +50,12 @@ struct BitOrOp {
   }
 };
 
+struct BitXorOp {
+  template <typename T> TL_DEVICE T operator()(T const &x, T const &y) const {
+    return x ^ y;
+  }
+};
+
 template <typename T> TL_DEVICE T warp_reduce_sum(T value) {
   return warp_reduce<T>(value, SumOp());
 }

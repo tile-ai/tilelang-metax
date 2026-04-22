@@ -203,8 +203,9 @@ class SparseFlashAttn(torch.nn.Module):
             block_H=self.block_H,
             num_stages=2,
             threads=128,
-        )(query, key, value, block_indices, cache_seqlens, glse, output_partial)
-        return kernel
+        )
+        output = kernel(query, key, value, block_indices, cache_seqlens, glse, output_partial)
+        return output
 
 
 def sparse_gqa_decode_varlen_indice(query, key, value, block_indices, cache_seqlens, max_cache_seqlen, block_size):

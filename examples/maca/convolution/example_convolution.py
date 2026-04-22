@@ -83,8 +83,8 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
     N, C, H, W, F, K, S, D, P = args.n, args.c, args.h, args.w, args.f, args.k, args.s, args.d, args.p
-    a = torch.randn(N, H, W, C).cuda().half()
-    b = torch.randn(K, K, C, F).cuda().half()
+    a = torch.randn(N, H, W, C, device="cuda", dtype=torch.float16).contiguous()
+    b = torch.randn(K, K, C, F, device="cuda", dtype=torch.float16).contiguous()
 
     block_m = 64
     block_n = 128

@@ -58,7 +58,7 @@ def dequantize_gemv(
     if fast_decoding is True:
         # Lazy import to decrease the startup time
         # as intrin registry may take a while to load
-        from tilelang.quantize import get_lop3_intrin_group
+        from tilelang.quantize.lop3_maca import get_lop3_intrin_group
 
         lop3_intrin_info = get_lop3_intrin_group(
             out_dtype=in_dtype,

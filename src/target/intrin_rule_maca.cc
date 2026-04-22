@@ -91,7 +91,7 @@ struct MACAFastMathTan : public MACAMath {
       // `__tanf` seems to produce some values too deviant from numpy tan
       // version. So, let's use just `tanf` instead.
       case 32:
-        return name + 'f';
+        return "__" + name + 'f';
       case 16:
         return 'h' + name;
       default:
@@ -174,7 +174,7 @@ TVM_REGISTER_OP("tir.nearbyint")
                                DispatchPureExtern<MACAMath>);
 
 TVM_REGISTER_OP("tir.exp").set_attr<FLowerIntrinsic>(
-    "maca.FLowerIntrinsic", DispatchPureExtern<MACAFastMath>);
+    "maca.FLowerIntrinsic", DispatchPureExtern<MACAMath>);
 
 TVM_REGISTER_OP("tir.exp2")
     .set_attr<FLowerIntrinsic>("maca.FLowerIntrinsic",
@@ -182,34 +182,34 @@ TVM_REGISTER_OP("tir.exp2")
 
 TVM_REGISTER_OP("tir.exp10")
     .set_attr<FLowerIntrinsic>("maca.FLowerIntrinsic",
-                               DispatchPureExtern<MACAFastMath>);
+                               DispatchPureExtern<MACAMath>);
 
 TVM_REGISTER_OP("tir.erf").set_attr<FLowerIntrinsic>(
     "maca.FLowerIntrinsic", DispatchPureExtern<MACAMath>);
 
 TVM_REGISTER_OP("tir.log").set_attr<FLowerIntrinsic>(
-    "maca.FLowerIntrinsic", DispatchPureExtern<MACAFastMath>);
+    "maca.FLowerIntrinsic", DispatchPureExtern<MACAMath>);
 
 TVM_REGISTER_OP("tir.log2")
     .set_attr<FLowerIntrinsic>("maca.FLowerIntrinsic",
-                               DispatchPureExtern<MACAFastMath>);
+                               DispatchPureExtern<MACAMath>);
 
 TVM_REGISTER_OP("tir.log10")
     .set_attr<FLowerIntrinsic>("maca.FLowerIntrinsic",
-                               DispatchPureExtern<MACAFastMath>);
+                               DispatchPureExtern<MACAMath>);
 
 TVM_REGISTER_OP("tir.tan").set_attr<FLowerIntrinsic>(
-    "maca.FLowerIntrinsic", DispatchPureExtern<MACAFastMathTan>);
+    "maca.FLowerIntrinsic", DispatchPureExtern<MACAMath>);
 
 TVM_REGISTER_OP("tir.cos").set_attr<FLowerIntrinsic>(
-    "maca.FLowerIntrinsic", DispatchPureExtern<MACAFastMath>);
+    "maca.FLowerIntrinsic", DispatchPureExtern<MACAMath>);
 
 TVM_REGISTER_OP("tir.cosh")
     .set_attr<FLowerIntrinsic>("maca.FLowerIntrinsic",
                                DispatchPureExtern<MACAMath>);
 
 TVM_REGISTER_OP("tir.sin").set_attr<FLowerIntrinsic>(
-    "maca.FLowerIntrinsic", DispatchPureExtern<MACAFastMath>);
+    "maca.FLowerIntrinsic", DispatchPureExtern<MACAMath>);
 
 TVM_REGISTER_OP("tir.sinh")
     .set_attr<FLowerIntrinsic>("maca.FLowerIntrinsic",
@@ -251,6 +251,10 @@ TVM_REGISTER_OP("tir.tvm_warp_activemask")
                                DispatchMACAWarpActiveMask);
 
 TVM_REGISTER_OP("tir.fmod")
+    .set_attr<FLowerIntrinsic>("maca.FLowerIntrinsic",
+                               DispatchPureExtern<MACAMath>);
+
+TVM_REGISTER_OP("tir.rsqrt")
     .set_attr<FLowerIntrinsic>("maca.FLowerIntrinsic",
                                DispatchPureExtern<MACAMath>);
 

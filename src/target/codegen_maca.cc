@@ -27,6 +27,65 @@ namespace codegen {
 using namespace tvm::tl::codegen;
 using namespace ffi;
 
+struct MACAMath {
+  std::string operator()(DataType t, std::string name) const {
+    if (t.is_float()) {
+      switch (t.bits()) {
+      case 64:
+        return name;
+      case 32:
+        return name + 'f';
+      case 16:
+        return 'h' + name;
+      default:
+        return "";
+      }
+    }
+    return "";
+  }
+};
+
+struct MACAFastMath : public MACAMath {
+  std::string operator()(DataType t, std::string name) const {
+    if (t.is_float() && t.bits() == 32) {
+      return "__" + name + 'f';
+    } else {
+      return MACAMath::operator()(t, name);
+    }
+    return "";
+  }
+};
+
+struct MACAFastMathTan : public MACAMath {
+  std::string operator()(DataType t, std::string name) const {
+    if (t.is_float()) {
+      switch (t.bits()) {
+      case 64:
+        return name;
+      case 32:
+        return "__" + name + 'f';
+      case 16:
+        return 'h' + name;
+      default:
+        return "";
+      }
+    }
+    return "";
+  }
+};
+
+struct MACAIEEEMath {
+  std::string operator()(DataType t, std::string name,
+                         std::string rounding_mode) const {
+    if (t.is_float() && t.bits() == 32) {
+      return "__" + name + '_' + rounding_mode;
+    } else if (t.is_float() && t.bits() == 64) {
+      return "__d" + name + "_" + rounding_mode;
+    }
+    return "";
+  }
+};
+
 static std::string GetTileLangFP8Type(DataType type) {
   std::stringstream stream;
   int32_t lanes = type.lanes();
@@ -153,6 +212,10 @@ private:
                  iv->thread_tag == "threadIdx.z") {
         threadIdx_z_ext = op->value;
       }
+    } else if (op->attr_key == tl::attr::kMinBlocksPerSM) {
+      if (const IntImmNode *v = op->value.as<IntImmNode>()) {
+        min_blocks_per_sm = v->value;
+      }
     }
     StmtVisitor::VisitStmt_(op);
   }
@@ -161,6 +224,39 @@ public:
   PrimExpr threadIdx_x_ext = Integer(1);
   PrimExpr threadIdx_y_ext = Integer(1);
   PrimExpr threadIdx_z_ext = Integer(1);
+  int64_t min_blocks_per_sm = 1; // default to 1
+};
+
+class ClusterInfoExtractor : public tir::StmtVisitor {
+private:
+  void VisitStmt(const PrimFunc &f) {
+    if (f->GetAttr<Array<PrimExpr>>("cluster_dims").has_value()) {
+      launch_with_cluster = true;
+      auto cluster_dims = f->GetAttr<Array<PrimExpr>>("cluster_dims").value();
+      cluster_grid_x_ext = cluster_dims[0].as<IntImmNode>()->value;
+      cluster_grid_y_ext = cluster_dims[1].as<IntImmNode>()->value;
+      cluster_grid_z_ext = cluster_dims[2].as<IntImmNode>()->value;
+      ICHECK(cluster_grid_x_ext > 0 && cluster_grid_y_ext > 0 &&
+             cluster_grid_z_ext > 0);
+    }
+    StmtVisitor::VisitStmt(f->body);
+  }
+
+  bool launch_with_cluster = false;
+  int64_t cluster_grid_x_ext = 1;
+  int64_t cluster_grid_y_ext = 1;
+  int64_t cluster_grid_z_ext = 1;
+
+public:
+  std::optional<std::tuple<int64_t, int64_t, int64_t>>
+  extract(const PrimFunc &f) {
+    this->VisitStmt(f);
+    if (launch_with_cluster) {
+      return std::make_tuple(cluster_grid_x_ext, cluster_grid_y_ext,
+                             cluster_grid_z_ext);
+    }
+    return std::nullopt;
+  }
 };
 
 void CodeGenTileLangMACA::PrintExtraAttrs(const PrimFunc &f) {
@@ -177,7 +273,8 @@ void CodeGenTileLangMACA::PrintExtraAttrs(const PrimFunc &f) {
       // return
       return;
     }
-    stream << " __launch_bounds__(" << threadIdx_ext_int->value << ")";
+    stream << " __launch_bounds__(" << threadIdx_ext_int->value << ", "
+           << extractor.min_blocks_per_sm << ")";
   }
 }
 
@@ -324,6 +421,12 @@ void CodeGenTileLangMACA::PrintType(DataType t, std::ostream &os) { // NOLINT(*)
         ICHECK_EQ(lanes % 2, 0)
             << "only support even lane for float type with lanes > 4";
         os << "ulonglong" << lanes / 2;
+      } else if (lanes == 16) {
+        os << "float32x16";
+        return;
+      } else if (lanes == 32) {
+        os << "float32x32";
+        return;
       } else {
         fail = true;
       }
@@ -549,6 +652,51 @@ void CodeGenTileLangMACA::PrintType(DataType t, std::ostream &os) { // NOLINT(*)
 void CodeGenTileLangMACA::PrintVecBinaryOp(const std::string &op, DataType t,
                                            PrimExpr lhs, PrimExpr rhs,
                                            std::ostream &os) { // NOLINT(*)
+  if (t.lanes() == 2) {
+    bool is_f32x2 = t.is_float() && t.bits() == 32;
+    bool is_bf16x2 = t.is_bfloat16();
+    bool is_fp16x2 = t.is_float16();
+
+    bool should_emit = is_f32x2 || is_bf16x2 || is_fp16x2;
+
+    if (should_emit) {
+      // Map TIR binary-op strings to tl:: packed helpers.
+      // Note: fma (ternary) and abs (unary) cannot appear here.
+      std::string tl_func;
+      if (op == "+")
+        tl_func = "add2";
+      else if (op == "-")
+        tl_func = "sub2";
+      else if (op == "*")
+        tl_func = "mul2";
+      else if (op == "min")
+        tl_func = "min2";
+      else if (op == "max")
+        tl_func = "max2";
+
+      if (!tl_func.empty()) {
+        bool need_cast = is_bf16x2 || is_fp16x2;
+        std::string native_type;
+        if (is_bf16x2) {
+          native_type = "bfloat16x2";
+        } else if (is_fp16x2) {
+          native_type = "float16x2";
+        }
+
+        std::string lhs_str = PrintExpr(lhs);
+        std::string rhs_str = PrintExpr(rhs);
+
+        if (need_cast) {
+          os << "tl::to_uint1(tl::" << tl_func << "("
+             << "tl::from_uint1<" << native_type << ">(" << lhs_str << "), "
+             << "tl::from_uint1<" << native_type << ">(" << rhs_str << ")))";
+        } else {
+          os << "tl::" << tl_func << "(" << lhs_str << ", " << rhs_str << ")";
+        }
+        return;
+      }
+    }
+  }
   // Declare the result.
   std::string sret = name_supply_->FreshName("_");
   this->PrintIndent();
@@ -591,9 +739,11 @@ void CodeGenTileLangMACA::PrintVecElemLoad(const std::string &vec, DataType t,
   }
 
   static const char access[] = {'x', 'y', 'z', 'w'};
-  ICHECK(i >= 0 && i < 256 / t.bits())
-      << "i: " << i << " t: " << t << " t.bits(): " << t.bits()
-      << " t.lanes(): " << t.lanes();
+  ICHECK(i >= 0 && i < (t.bits() == 8                        ? 16
+                        : (t.lanes() == 16)                  ? 16
+                        : (t.lanes() == 32)                  ? 32
+                        : (t.bits() == 16 || t.bits() == 32) ? 8
+                                                             : 4));
   if (t.bits() == 8 && (t.is_int() || t.is_uint())) {
     std::string type_name = t.is_int() ? "char" : "unsigned char";
     if (t.lanes() == 2 || t.lanes() == 3) {
@@ -606,6 +756,9 @@ void CodeGenTileLangMACA::PrintVecElemLoad(const std::string &vec, DataType t,
       std::string ac = vec + "." + access[i / 8];
       os << "((" << type_name << ")(" << ac << " >> " << i % 8 * 8 << "))";
     }
+  } else if ((t.lanes() == 16 || t.lanes() == 32) && t.bits() == 32 &&
+             t.is_float()) {
+    os << vec << "[" << i << "]";
   } else if (t.is_float16()) {
     if (t.lanes() <= 8) {
       os << "((half2*)(&(" << vec << "." << access[i / 2] << ")))->"
@@ -683,7 +836,11 @@ void CodeGenTileLangMACA::PrintVecElemStore(const std::string &vec, DataType t,
                                             int i, const std::string &value) {
   this->PrintIndent();
   static const char access[] = {'x', 'y', 'z', 'w'};
-  ICHECK(i >= 0 && i < 256 / t.bits());
+  ICHECK(i >= 0 && i < (t.bits() == 8                        ? 16
+                        : (t.lanes() == 16)                  ? 16
+                        : (t.lanes() == 32)                  ? 32
+                        : (t.bits() == 16 || t.bits() == 32) ? 8
+                                                             : 4));
   if (t.bits() == 8 && (t.is_int() || t.is_uint())) {
     if (t.lanes() == 2 || t.lanes() == 3) {
       stream << vec << '.' << access[i % t.lanes()] << "="
@@ -706,6 +863,9 @@ void CodeGenTileLangMACA::PrintVecElemStore(const std::string &vec, DataType t,
       }
       stream << "(" << value << " << " << i % 8 * 8 << ");\n";
     }
+  } else if ((t.lanes() == 16 || t.lanes() == 32) && t.bits() == 32 &&
+             t.is_float()) {
+    stream << vec << "[" << i << "] = " << value << ";\n";
   } else if (t.is_float16()) {
     if (t.lanes() <= 8) {
       stream << "((half2*)(&(" << vec << "." << access[i / 2] << ")))->"
@@ -862,9 +1022,6 @@ std::string CodeGenTileLangMACA::CastFromTo(std::string value, DataType from,
       os << "u";
     }
     os << "int)";
-  }
-  if ((from.is_float16() || from.is_bfloat16()) && target.is_float8()) {
-    os << "(float)";
   }
   os << value << ")";
   return os.str();
@@ -1143,8 +1300,7 @@ void CodeGenTileLangMACA::VisitExpr_(const MinNode *op, std::ostream &os) {
 
   // Standard min/max functions don't support bfloat16 or float16
   if ((t.is_bfloat16() || t.is_float16()) && t.is_scalar()) {
-    os << "mctlass::fast_min(" << PrintExpr(op->a) << ", " << PrintExpr(op->b)
-       << ")";
+    os << "__hmin(" << PrintExpr(op->a) << ", " << PrintExpr(op->b) << ")";
     return;
   }
 
@@ -1166,8 +1322,7 @@ void CodeGenTileLangMACA::VisitExpr_(const MaxNode *op, std::ostream &os) {
 
   // Standard min/max functions don't support bfloat16 or float16
   if ((t.is_bfloat16() || t.is_float16()) && t.is_scalar()) {
-    os << "mctlass::fast_max(" << PrintExpr(op->a) << ", " << PrintExpr(op->b)
-       << ")";
+    os << "__hmax(" << PrintExpr(op->a) << ", " << PrintExpr(op->b) << ")";
     return;
   }
 
@@ -1607,7 +1762,9 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
   } else if (op->op.same_as(tl::tma_store_arrive())) {
     print_extern_call_stmt("tl::tma_store_arrive");
   } else if (op->op.same_as(tl::tma_store_wait())) {
-    print_extern_call_stmt("tl::tma_store_wait<0>");
+    int count = Downcast<IntImm>(op->args[0])->value;
+    this->PrintIndent();
+    this->stream << "tl::tma_store_wait<" << count << ">();\n";
   } else if (op->op.same_as(tl::warpgroup_arrive())) {
     print_extern_call_stmt("tl::warpgroup_arrive");
   } else if (op->op.same_as(tl::warpgroup_commit_batch())) {
@@ -1964,6 +2121,59 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
       os << "_double";
     }
     os << "(&" << this->mcrand_random_generator_state << ")";
+  } else if (op->op.same_as(tl::add2()) || op->op.same_as(tl::sub2()) ||
+             op->op.same_as(tl::mul2()) || op->op.same_as(tl::fma2()) ||
+             op->op.same_as(tl::max2()) || op->op.same_as(tl::min2()) ||
+             op->op.same_as(tl::abs2())) {
+    std::string op_name;
+    if (op->op.same_as(tl::add2()))
+      op_name = "add2";
+    else if (op->op.same_as(tl::sub2()))
+      op_name = "sub2";
+    else if (op->op.same_as(tl::mul2()))
+      op_name = "mul2";
+    else if (op->op.same_as(tl::fma2()))
+      op_name = "fma2";
+    else if (op->op.same_as(tl::max2()))
+      op_name = "max2";
+    else if (op->op.same_as(tl::min2()))
+      op_name = "min2";
+    else
+      op_name = "abs2";
+
+    DataType dtype = op->dtype;
+    bool need_cast = dtype.is_bfloat16() || dtype.is_float16();
+    std::string native_type;
+
+    if (dtype.is_bfloat16()) {
+      native_type = "bfloat16x2";
+    } else if (dtype.is_float16()) {
+      native_type = "float16x2";
+    }
+
+    auto print_arg = [&](int idx) -> std::string {
+      std::string arg_str = PrintExpr(op->args[idx]);
+      if (need_cast) {
+        return "tl::from_uint1<" + native_type + ">(" + arg_str + ")";
+      }
+      return arg_str;
+    };
+
+    if (need_cast) {
+      os << "tl::to_uint1(tl::" << op_name << "(";
+    } else {
+      os << "tl::" << op_name << "(";
+    }
+
+    os << print_arg(0);
+    for (size_t i = 1; i < op->args.size(); ++i) {
+      os << ", " << print_arg(i);
+    }
+    os << ")";
+
+    if (need_cast) {
+      os << ")";
+    }
   } else if (op->op.same_as(tl::warp_reduce_sum())) {
     os << "tl::warp_reduce_sum(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::warp_reduce_max())) {
@@ -2057,6 +2267,118 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     enable_sparse_gemm_ = true;
     this->PrintCallExtern(GetType(tvm::ffi::GetRef<PrimExpr>(op)),
                           op_instance->value, op->args, true, os);
+  } else if (op->op.same_as(Op::Get("tir.exp"))) {
+    MACAMath math_func;
+    std::string func_name = math_func(op->dtype, "exp");
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(Op::Get("tir.exp10"))) {
+    MACAMath math_func;
+    std::string func_name = math_func(op->dtype, "exp10");
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(Op::Get("tir.log"))) {
+    MACAMath math_func;
+    std::string func_name = math_func(op->dtype, "log");
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(Op::Get("tir.log2"))) {
+    MACAMath math_func;
+    std::string func_name = math_func(op->dtype, "log2");
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(Op::Get("tir.log10"))) {
+    MACAMath math_func;
+    std::string func_name = math_func(op->dtype, "log10");
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(Op::Get("tir.sin"))) {
+    MACAMath math_func;
+    std::string func_name = math_func(op->dtype, "sin");
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(Op::Get("tir.cos"))) {
+    MACAMath math_func;
+    std::string func_name = math_func(op->dtype, "cos");
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(Op::Get("tir.tan"))) {
+    MACAMath math_func;
+    std::string func_name = math_func(op->dtype, "tan");
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(Op::Get("tir.rsqrt"))) {
+    MACAMath math_func;
+    std::string func_name = math_func(op->dtype, "rsqrt");
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(tl::__exp())) {
+    MACAFastMath math_func;
+    std::string func_name = math_func(op->dtype, "exp");
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(tl::__exp10())) {
+    MACAFastMath math_func;
+    std::string func_name = math_func(op->dtype, "exp10");
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(tl::__log())) {
+    MACAFastMath math_func;
+    std::string func_name = math_func(op->dtype, "log");
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(tl::__log2())) {
+    MACAFastMath math_func;
+    std::string func_name = math_func(op->dtype, "log2");
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(tl::__log10())) {
+    MACAFastMath math_func;
+    std::string func_name = math_func(op->dtype, "log10");
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(tl::__tan())) {
+    MACAFastMath math_func;
+    std::string func_name = math_func(op->dtype, "tan");
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(tl::__cos())) {
+    MACAFastMath math_func;
+    std::string func_name = math_func(op->dtype, "cos");
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(tl::__sin())) {
+    MACAFastMath math_func;
+    std::string func_name = math_func(op->dtype, "sin");
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(tl::ieee_add())) {
+    MACAIEEEMath math_func;
+    std::string rounding_mode = Downcast<StringImm>(op->args[2])->value;
+    std::string func_name = math_func(op->dtype, "fadd", rounding_mode);
+    os << func_name << "(" << PrintExpr(op->args[0]) << ", "
+       << PrintExpr(op->args[1]) << ")";
+  } else if (op->op.same_as(tl::ieee_sub())) {
+    MACAIEEEMath math_func;
+    std::string rounding_mode = Downcast<StringImm>(op->args[2])->value;
+    std::string func_name = math_func(op->dtype, "fsub", rounding_mode);
+    os << func_name << "(" << PrintExpr(op->args[0]) << ", "
+       << PrintExpr(op->args[1]) << ")";
+  } else if (op->op.same_as(tl::ieee_mul())) {
+    MACAIEEEMath math_func;
+    std::string rounding_mode = Downcast<StringImm>(op->args[2])->value;
+    std::string func_name = math_func(op->dtype, "fmul", rounding_mode);
+    os << func_name << "(" << PrintExpr(op->args[0]) << ", "
+       << PrintExpr(op->args[1]) << ")";
+  } else if (op->op.same_as(tl::ieee_fmaf())) {
+    MACAIEEEMath math_func;
+    std::string rounding_mode = Downcast<StringImm>(op->args[3])->value;
+    std::string func_name = math_func(op->dtype, "fmaf", rounding_mode);
+    os << func_name << "(" << PrintExpr(op->args[0]) << ", "
+       << PrintExpr(op->args[1]) << ", " << PrintExpr(op->args[2]) << ")";
+  } else if (op->op.same_as(tl::ieee_frcp())) {
+    MACAIEEEMath math_func;
+    std::string rounding_mode = Downcast<StringImm>(op->args[1])->value;
+    std::string func_name = math_func(op->dtype, "frcp", rounding_mode);
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(tl::ieee_fsqrt())) {
+    MACAIEEEMath math_func;
+    std::string rounding_mode = Downcast<StringImm>(op->args[1])->value;
+    std::string func_name = math_func(op->dtype, "fsqrt", rounding_mode);
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(tl::ieee_frsqrt())) {
+    MACAIEEEMath math_func;
+    std::string func_name = math_func(op->dtype, "frsqrt", "rn");
+    os << func_name << "(" << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(tl::ieee_fdiv())) {
+    MACAIEEEMath math_func;
+    std::string rounding_mode = Downcast<StringImm>(op->args[2])->value;
+    std::string func_name = math_func(op->dtype, "fdiv", rounding_mode);
+    os << func_name << "(" << PrintExpr(op->args[0]) << ", "
+       << PrintExpr(op->args[1]) << ")";
   } else {
     CodeGenC::VisitExpr_(op, os);
   }
@@ -2094,9 +2416,35 @@ void CodeGenTileLangMACA::VisitStmt_(const AttrStmtNode *op) {
     return;
   } else if (op->attr_key == "threadblock_swizzle_pattern") {
     this->PrintIndent();
-    const StringImmNode *pattern = op->value.as<StringImmNode>();
-    ICHECK(pattern);
-    this->stream << "const dim3 blockIdx = " << pattern->value << "();\n";
+    std::string func_name;
+    int panel_size = 0;
+    if (const auto *call = op->value.as<CallNode>()) {
+      if (call->op.same_as(tir::builtin::tvm_tuple()) &&
+          call->args.size() >= 2) {
+        const auto *name_node = call->args[0].as<StringImmNode>();
+        const auto *size_node = call->args[1].as<IntImmNode>();
+        ICHECK(name_node && size_node) << "threadblock_swizzle_pattern expects "
+                                       << "tvm_tuple(device_func, panel_size)";
+        func_name = name_node->value;
+        panel_size = static_cast<int>(size_node->value);
+      }
+    }
+    ICHECK(!func_name.empty() && panel_size > 0);
+    if (this->cluster_dims.has_value()) {
+      auto [cluster_grid_x_ext, cluster_grid_y_ext, cluster_grid_z_ext] =
+          this->cluster_dims.value();
+      ICHECK(cluster_grid_y_ext == 1 && cluster_grid_z_ext == 1)
+          << "Only support annonate threadblock swizzle for cluster on X "
+          << "dimension for now!";
+      ICHECK(panel_size % cluster_grid_x_ext == 0)
+          << "panel_size must be divisible by clusterDim.x";
+      this->stream << "const dim3 blockIdx = tl::" << func_name
+                   << "WithCluster<" << panel_size / cluster_grid_x_ext << ", "
+                   << cluster_grid_x_ext << ">();\n";
+    } else {
+      this->stream << "const dim3 blockIdx = tl::" << func_name << "<"
+                   << panel_size << ">();\n";
+    }
     this->VisitStmt(op->body);
     return;
   } else if (op->attr_key == "pragma_unroll_factor") {
@@ -2349,6 +2697,39 @@ void CodeGenTileLangMACA::VisitStmt_(const BufferStoreNode *op) {
   }
 }
 
+void CodeGenTileLangMACA::VisitExpr_(const ShuffleNode *op,
+                                     std::ostream &os) { // NOLINT(*)
+  // For bfloat16x2 / float16x2 construction from two scalar lanes, emit a
+  // proper pack instrinsic instead of the generic `uint(a, b)` produced by
+  // the base CodeGenC which is not valid MACA.
+  DataType t = op->dtype;
+  bool is_bf16x2 = t.is_bfloat16() && t.lanes() == 2;
+  bool is_fp16x2 = t.is_float16() && t.lanes() == 2;
+  if ((is_bf16x2 || is_fp16x2) && op->vectors.size() == 2 &&
+      op->vectors[0].dtype().lanes() == 1 &&
+      op->vectors[1].dtype().lanes() == 1) {
+    // Collect the two scalar element expressions.
+    std::string e0 = PrintExpr(op->vectors[0]);
+    std::string e1 = PrintExpr(op->vectors[1]);
+    if (is_bf16x2) {
+      enable_bf16_ = true;
+      // __pack_maca_bfloat162(bfloat16_t, bfloat16_t) -> unsigned (32-bit)
+      // Use aggregate initialisation of uint1 (struct { unsigned x; })
+      // to avoid taking the address of a temporary.
+      os << "uint1{__pack_maca_bfloat162(" << e0 << ", " << e1 << ")}";
+    } else {
+      enable_fp16_ = true;
+      // __pack_half2 returns __half2 which is 32-bit.
+      // Reinterpret via aggregate initialisation.
+      os << "uint1{*(unsigned)&(__pack_half2((__half)(" << e0 << "), (__half)("
+         << e1 << ")))}";
+    }
+    return;
+  }
+  // Default path for all other types.
+  CodeGenC::VisitExpr_(op, os);
+}
+
 void CodeGenTileLangMACA::VisitExpr_(const BroadcastNode *op,
                                      std::ostream &os) { // NOLINT(*)
   int lanes = static_cast<int>(Downcast<IntImm>(op->lanes)->value);
@@ -2485,6 +2866,19 @@ void CodeGenTileLangMACA::VisitExpr_(const BroadcastNode *op,
     if (!fail) {
       return;
     }
+  }
+
+  if (op->dtype.is_float() && op->dtype.bits() == 32 &&
+      (lanes == 16 || lanes == 32)) {
+    std::string v = PrintExpr(op->value);
+    os << "(float32x" << lanes << "){";
+    for (int i = 0; i < lanes; ++i) {
+      if (i != 0)
+        os << ", ";
+      os << v;
+    }
+    os << "}";
+    return;
   }
 
   std::string v = PrintExpr(op->value);
@@ -2690,6 +3084,19 @@ void CodeGenTileLangMACA::PrintVecElemLoadExpr(DataType t, int i,
     return;
   }
 
+  if ((t.lanes() == 16 || t.lanes() == 32) && t.bits() == 32 && t.is_float()) {
+    if (i == 0) {
+      os << "(float32x" << t.lanes() << "){";
+    }
+    os << value;
+    if (i != t.lanes() - 1) {
+      os << ",";
+    } else {
+      os << "}";
+    }
+    return;
+  }
+
   if (i == 0) {
     os << "make_";
     PrintType(t, os);
@@ -2821,6 +3228,9 @@ void CodeGenTileLangMACA::AddFunction(const GlobalVar &gvar,
   this->PrintFuncPrefix(stream);
   CodeGenC::PrintType(f->ret_type, stream);
   this->PrintExtraAttrs(f);
+
+  // Record cluster dimensions for usage in threadblock swizzle codegen
+  this->cluster_dims = ClusterInfoExtractor().extract(f);
 
   this->stream << " " << static_cast<std::string>(global_symbol.value()) << "(";
 

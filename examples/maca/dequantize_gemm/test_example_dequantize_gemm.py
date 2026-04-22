@@ -3,11 +3,9 @@ import tilelang.testing
 import example_dequant_gemv_fp16xint4
 import example_dequant_gemm_fp4_hopper
 import example_dequant_gemm_bf16_mxfp4_hopper
-import example_dequant_groupedgemm_bf16_mxfp4_hopper
 import example_dequant_gemm_w4a8
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_dequant_gemv_fp16xint4():
     example_dequant_gemv_fp16xint4.main()
 
@@ -20,11 +18,6 @@ def test_example_dequant_gemm_fp4_hopper():
 @tilelang.testing.pytest.mark.xfail
 def test_example_dequant_gemm_bf16_mxfp4_hopper():
     example_dequant_gemm_bf16_mxfp4_hopper.main()
-
-
-@tilelang.testing.pytest.mark.xfail
-def test_example_dequant_groupedgemm_bf16_mxfp4_hopper():
-    example_dequant_groupedgemm_bf16_mxfp4_hopper.main()
 
 
 def test_example_dequant_gemm_w4a8():

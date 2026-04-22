@@ -55,7 +55,7 @@ def test_example_wy_fast_compilation():
     torch.cuda.synchronize()
 
 
-@tilelang.testing.pytest.mark.skip("timeout")
+@tilelang.testing.pytest.mark.xfail
 def test_example_wy_fast_bwd_split_compilation():
     from example_wy_fast_bwd_split import tilelang_wy_fast_bwd, tilelang_wy_fast_bwd_split, prepare_input, prepare_output
 
@@ -245,7 +245,7 @@ def test_example_cumsum_compilation():
     G_new_tilelang = kernel(G)  # noqa: F841
 
 
-@tilelang.testing.pytest.mark.skip("timeout")
+@tilelang.testing.pytest.mark.xfail
 def test_example_chunk_delta_h_compilation():
     from example_chunk_delta_h import tilelang_chunk_gated_delta_rule_fwd_h, prepare_input
 
@@ -326,4 +326,5 @@ def test_example_chunk_delta_bwd_compilation():
 
 
 if __name__ == "__main__":
-    tilelang.testing.main()
+    # tilelang.testing.main()
+    test_example_wy_fast_compilation()
