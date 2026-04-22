@@ -16,6 +16,7 @@ from fla.utils import autocast_custom_bwd, autocast_custom_fwd, contiguous
 from reference import naive_nsa
 from einops import rearrange
 import tilelang
+from tilelang import language as T
 
 
 @tilelang.jit(pass_configs={tilelang.PassConfigKey.TL_ENABLE_FAST_MATH: True, tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True})
@@ -349,6 +350,7 @@ def tilelang_kernel_bwd_dqkv(
     NV = tilelang.cdiv(V, BV)
 
     heads_kv = heads // groups
+    H = heads_kv
     q_shape = [batch, seq_len, heads, dim]
     k_shape = [batch, seq_len, heads_kv, dim]
     v_shape = [batch, seq_len, heads_kv, dim]
@@ -525,6 +527,7 @@ def tilelang_kernel_block_mask(
     heads,
     seq_len,
     selected_blocks,
+    block_counts,
     block_size,
     dtype=T.int32,
 ):
@@ -593,7 +596,9 @@ def parallel_nsa_bwd(
     dk = torch.empty(NV, *k.shape, dtype=k.dtype, device=q.device)
     dv = torch.empty(v.shape, dtype=v.dtype, device=q.device)
 
-    block_mask = tilelang_kernel_block_mask(B, H, T, S, BS)(block_indices.to(torch.int32), block_counts.to(torch.int32)).to(torch.bool)
+    block_mask = tilelang_kernel_block_mask(B, H, T, S, block_counts, BS)(block_indices.to(torch.int32), block_counts.to(torch.int32)).to(
+        torch.bool
+    )
 
     fused_qkv_bwd_kernel = tilelang_kernel_bwd_dqkv(
         batch=B,
@@ -783,7 +788,7 @@ def parallel_nsa(
     return o
 
 
-if __name__ == "__main__":
+def main():
     B, T, H, HQ, D, S, block_size, dtype = 1, 32, 1, 16, 32, 1, 32, torch.float16
     torch.random.manual_seed(0)
     q = torch.randn((B, T, HQ, D), dtype=dtype, device="cuda").requires_grad_(True)
@@ -841,3 +846,7 @@ if __name__ == "__main__":
     torch.testing.assert_close(ref_dk, tri_dk, atol=1e-2, rtol=1e-2)
     torch.testing.assert_close(ref_dv, tri_dv, atol=1e-2, rtol=1e-2)
     torch.testing.assert_close(ref_dg_slc, tri_dg_slc, atol=1e-2, rtol=1e-2)
+
+
+if __name__ == "__main__":
+    main()

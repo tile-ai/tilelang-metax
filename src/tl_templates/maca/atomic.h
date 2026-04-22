@@ -207,6 +207,13 @@ template <typename T> TL_DEVICE half2 ToHalf2(T val) {
 
 TL_DEVICE half2 ToHalf2(half2 val) { return val; }
 
+TL_DEVICE half2 ToHalf2(float2 val) {
+  half2 ret;
+  ret.x = static_cast<half_t>(val.x);
+  ret.y = static_cast<half_t>(val.y);
+  return ret;
+}
+
 // Here ValType can be either value or value* (pointer)
 
 template <typename ValType>
