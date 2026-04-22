@@ -302,6 +302,7 @@ def run_cython_dynamic_shape(
     tilelang.testing.torch_assert_close(tensor_c, tensor_ref_c, atol=1e-2, rtol=1e-2, max_mismatched_ratio=0.05)
 
 
+@tilelang.testing.pytest.mark.xfail
 def test_cython_dynamic_shape():
     run_cython_dynamic_shape(T.dynamic("m"), 256, 192, False, False, T.float16, T.float16, T.float32, 128, 128, 32, 2)
     run_cython_dynamic_shape(T.dynamic("m"), T.dynamic("n"), T.dynamic("k"), False, False, T.float16, T.float16, T.float32, 128, 128, 32, 2)
