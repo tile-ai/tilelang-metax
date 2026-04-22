@@ -17,7 +17,6 @@ def test_example_gqa_bwd_tma_reduce_varlen():
     example_gqa_bwd_tma_reduce_varlen.main()
 
 
-@tilelang.testing.requires_cuda
 def test_example_gqa_bwd():
     example_gqa_bwd.main()
 
