@@ -107,9 +107,10 @@ static std::string GetTileLangFP8Type(DataType type) {
         << "Only support scalar and vector types of width (2, 4, 8, 16, 32) "
            "for FP8";
   }
-  if (type.is_float8_e4m3() || type.is_float8_e4m3fn()) {
+  if (type.is_float8_e4m3() || type.is_float8_e4m3fn() ||
+      type.is_float8_e4m3fnuz()) {
     stream << "fp8_e4" << vec << "_t";
-  } else if (type.is_float8_e5m2()) {
+  } else if (type.is_float8_e5m2() || type.is_float8_e5m2fnuz()) {
     stream << "fp8_e5" << vec << "_t";
   } else if (type.is_float8_e8m0fnu()) {
     stream << "fp8_e8" << vec << "_t";

@@ -1,4 +1,8 @@
 from tilelang import tvm as tvm
+from tilelang.contrib import dlpack as tl_dlpack
+from tilelang.jit import kernel as jit_kernel
+from tilelang.jit.adapter import MACATVMFFIKernelAdapter, TVMFFIKernelAdapter
+from tilelang.jit.adapter import maca_tvm_ffi as maca_tvm_ffi_mod
 import tilelang.language as T
 import tilelang.testing
 import tilelang
@@ -494,6 +498,54 @@ def test_tvm_ffi_pdl():
     tilelang.testing.torch_assert_close(c, ref_c, atol=1e-5, rtol=1e-5)
 
     print("pdl test passed!")
+
+
+class _FakeDLPackArray:
+    def __init__(self, token):
+        self.token = token
+
+    def _create_view(self, shape, dtype):
+        return {"shape": tuple(shape), "dtype": dtype, "token": self.token}
+
+
+@pytest.mark.skipif(not hasattr(torch, "float8_e5m2fnuz"), reason="Torch build lacks float8 fnuz support")
+def test_dlpack_keeps_generic_float8_logical_dtype_mapping(monkeypatch):
+    monkeypatch.setattr(tl_dlpack.runtime, "from_dlpack", lambda token: _FakeDLPackArray(token))
+
+    wrapped = tl_dlpack.convert_func(
+        lambda arg: arg,
+        torch.Tensor,
+        lambda tensor: ("dlpack", tensor.dtype),
+    )
+
+    result = wrapped(torch.zeros((4,), dtype=torch.float8_e5m2fnuz))
+
+    assert result["dtype"] == "float8_e5m2"
+
+
+@pytest.mark.skipif(not hasattr(torch, "float8_e4m3fnuz"), reason="Torch build lacks float8 fnuz support")
+def test_generic_tvm_ffi_adapter_leaves_float8_tensor_untouched():
+    adapter = TVMFFIKernelAdapter.__new__(TVMFFIKernelAdapter)
+    tensor = torch.zeros((4,), dtype=torch.float8_e4m3fnuz)
+
+    assert adapter._adapt_tensor_for_runtime(tensor) is tensor
+
+
+@pytest.mark.skipif(not hasattr(torch, "float8_e4m3fn"), reason="Torch build lacks float8 fn support")
+def test_maca_tvm_ffi_adapter_wraps_float8_for_runtime(monkeypatch):
+    adapter = MACATVMFFIKernelAdapter.__new__(MACATVMFFIKernelAdapter)
+    tensor = torch.zeros((4,), dtype=torch.float8_e4m3fn)
+
+    monkeypatch.setattr(maca_tvm_ffi_mod.runtime, "from_dlpack", lambda token: _FakeDLPackArray(token))
+
+    wrapped = adapter._adapt_tensor_for_runtime(tensor)
+
+    assert wrapped["dtype"] == "float8_e4m3fn"
+
+
+def test_jit_kernel_uses_target_specific_tvm_ffi_adapter():
+    assert jit_kernel._get_tvm_ffi_adapter_cls(tvm.target.Target("maca")) is MACATVMFFIKernelAdapter
+    assert jit_kernel._get_tvm_ffi_adapter_cls(tvm.target.Target("cuda")) is TVMFFIKernelAdapter
 
 
 if __name__ == "__main__":

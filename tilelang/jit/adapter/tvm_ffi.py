@@ -60,7 +60,7 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
     # rt_mod
     rt_mod: tvm.runtime.Module | None = None
     # Maps symbolic variables to their corresponding buffer and shape indices
-    dynamic_symbolic_map: dict[tir.Var, tuple[int, int, int]] | None = None
+    dynamic_symbolic_map: dict[tir.Var, tuple[int, int, int, int]] | None = None
 
     # Stream/device functors are inherited from BaseKernelAdapter
     def __init__(
@@ -142,59 +142,70 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
                         dynamic_symbolic_map[stride] = (1, i, j, stride_scale)
         return dynamic_symbolic_map
 
-    def _convert_torch_func(self) -> Callable[..., Any]:
-        # Capture thunks that reflect Torch's current stream and device.
-        # These are evaluated at call time to align TVM execution with the
-        # caller's active PyTorch stream/device.
-        # current_stream_functor = self.get_current_stream_functor()
-        current_device_functor = self.get_current_device_functor()
-
-        # Convert TVM types to native Python types during initialization
-        # Convert tvm.DataType to torch.dtype for tensor creation
-        param_dtypes = [param.torch_dtype() for param in self.params]
-        # Convert TVM shape arrays to native Python lists
+    def _compute_param_shapes(self) -> list[list[Any]]:
         param_shapes = []
-
         for param in self.params:
             native_shape = []
             for dim in param.shape:
                 if isinstance(dim, tir.IntImm):
                     native_shape.append(int(dim))
-                elif isinstance(dim, tir.Var):
-                    native_shape.append(dim)  # Keep tir.Var for dynamic dimensions
                 else:
                     native_shape.append(dim)
             tl_dtype = param.dtype
             if tl_dtype.bits < 8:
-                stroage_dtype: dtype = dtype(param.torch_dtype())
-                # last dim divide by bits to get the actual shape
-                native_shape[-1] = native_shape[-1] * tl_dtype.bits * tl_dtype.lanes // (stroage_dtype.bits * stroage_dtype.lanes)
+                storage_dtype: dtype = dtype(param.torch_dtype())
+                native_shape[-1] = native_shape[-1] * tl_dtype.bits * tl_dtype.lanes // (storage_dtype.bits * storage_dtype.lanes)
             param_shapes.append(native_shape)
+        return param_shapes
 
+    def _get_or_create_executable(self) -> tvm.runtime.Executable:
         if self.executable is None:
             self.executable = runtime.Executable(self.rt_mod)
             if COMPILE_ARGS:
-                # Precompile jit module with extra arguments
                 self.executable.jit(**COMPILE_ARGS)
+        return self.executable
 
-        dynamic_symbolic_map = self._process_dynamic_symbolic()
-        executable = self.executable
+    def _get_dynamic_symbolic_map(self) -> dict[tir.Var, tuple[int, int, int, int]]:
+        return self.dynamic_symbolic_map if self.dynamic_symbolic_map is not None else self._process_dynamic_symbolic()
 
-        # Prepare helpers for friendly dtype error messages
-        prim_func = self.prim_func
-        buffer_map = prim_func.buffer_map
-        params = prim_func.params
-        # Expected dtype string per parameter index (for buffers only)
-        expected_dtype_strs: list[str | None] = []
-        # Track whether each param is a buffer (has dtype) vs scalar
-        is_buffer_param: list[bool] = []
-        for p in params:
-            if p in buffer_map:
-                expected_dtype_strs.append(str(buffer_map[p].dtype))
-                is_buffer_param.append(True)
+    def _resolve_output_shape(
+        self,
+        param_shape: list[Any],
+        inputs: tuple[torch.Tensor | Any, ...],
+        tensor_list: list[torch.Tensor],
+        dynamic_symbolic_map: dict[tir.Var, tuple[int, int, int, int]],
+    ) -> list[Any]:
+        shape = []
+        for dim in param_shape:
+            if isinstance(dim, tir.Var):
+                for key, (ref_id, ref_tensor_idx, ref_shape_idx, stride_scale) in dynamic_symbolic_map.items():
+                    if str(dim) != str(key):
+                        continue
+                    if ref_id == 2:
+                        shape.append(inputs[ref_tensor_idx])
+                    elif ref_id == 0:
+                        shape.append(tensor_list[ref_tensor_idx].shape[ref_shape_idx])
+                    elif ref_id == 1:
+                        shape.append(tensor_list[ref_tensor_idx].stride()[ref_shape_idx] * stride_scale)
+                    break
             else:
-                expected_dtype_strs.append(None)
-                is_buffer_param.append(False)
+                shape.append(dim)
+        return shape
+
+    def _adapt_tensor_for_runtime(self, arg: torch.Tensor | Any):
+        return arg
+
+    def _convert_torch_func(self) -> Callable[..., Any]:
+        # Capture thunks that reflect Torch's current stream and device.
+        # These are evaluated at call time to align TVM execution with the
+        # caller's active PyTorch stream/device.
+        current_device_functor = self.get_current_device_functor()
+
+        # Convert TVM types to native Python types during initialization
+        param_dtypes = [param.torch_dtype() for param in self.params]
+        param_shapes = self._compute_param_shapes()
+        dynamic_symbolic_map = self._get_dynamic_symbolic_map()
+        executable = self._get_or_create_executable()
 
         def func(*inputs: torch.Tensor | Any):
             # Validate input count strictly
@@ -214,21 +225,7 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
             for i in range(len(self.params)):
                 if i in self.result_idx:
                     dtype = param_dtypes[i]
-                    shape = []
-                    # Now working with native Python list, no FFI calls needed
-                    for s in param_shapes[i]:
-                        if isinstance(s, tir.Var):
-                            for key in dynamic_symbolic_map:
-                                if str(s) == str(key):
-                                    ref_id, ref_tensor_idx, ref_shape_idx, stride_scale = dynamic_symbolic_map[key]
-                                    if ref_id == 2:
-                                        shape.append(inputs[ref_tensor_idx])
-                                    elif ref_id == 0:
-                                        shape.append(tensor_list[ref_tensor_idx].shape[ref_shape_idx])
-                                    elif ref_id == 1:
-                                        shape.append(tensor_list[ref_tensor_idx].stride()[ref_shape_idx] * stride_scale)
-                        else:  # Already converted to Python int during initialization
-                            shape.append(s)
+                    shape = self._resolve_output_shape(param_shapes[i], inputs, tensor_list, dynamic_symbolic_map)
 
                     if out_device is None:
                         out_device = current_device_functor()
@@ -245,7 +242,7 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
                     ins_idx += 1
                 tensor_list.append(tensor)
 
-            executable(*tensor_list)
+            executable(*(self._adapt_tensor_for_runtime(tensor) for tensor in tensor_list))
 
             # Return outputs in the requested form
             if len(self.result_idx) == 1:
