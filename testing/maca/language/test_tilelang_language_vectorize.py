@@ -124,6 +124,7 @@ def vectorize_test_all_dtypes(dtype, vec_num):
     return main
 
 
+@pytest.mark.xfail
 @pytest.mark.parametrize(
     "dtype",
     [

@@ -149,8 +149,10 @@ class TensorCoreIntrinEmitter:
             "float32": "f32",
             "int8": "i8",
             "int32": "i32",
+            "float8_e4m3": "f8",
             "float8_e4m3fn": "f8",
             "float8_e4m3fnuz": "f8",
+            "float8_e5m2": "bf8",
             "float8_e5m2fn": "bf8",
             "float8_e5m2fnuz": "bf8",
         }
