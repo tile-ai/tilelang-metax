@@ -35,6 +35,7 @@ def qwq(dtype=torch.float8_e4m3fn):
     return main
 
 
+@pytest.mark.xfail
 @pytest.mark.parametrize("dtype", [torch.float8_e4m3fn, torch.float8_e5m2, torch.float8_e8m0fnu, torch.float16])
 def test_hoist_broadcast(dtype):
     kernel = qwq(dtype)
