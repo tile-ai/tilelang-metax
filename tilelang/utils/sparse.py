@@ -110,6 +110,21 @@ def compress(A: torch.Tensor, transposed: bool, arch: str | None = None, **kwarg
         raise ValueError(f"Unsupported CUDA compute version: {compute_version}. Supported versions are sm_80 and sm_90.")
 
 
+def compress_maca(A: torch.Tensor, transposed: bool, arch: str | None = None, **kwargs) -> tuple[torch.Tensor, torch.Tensor]:
+    if transposed:
+        A = A.t().contiguous()
+    origin_dtype = A.dtype
+    if is_float8_dtype(origin_dtype):
+        fp8_remove_negative_zeros_(A)
+        A = A.view(torch.int8)
+    A_sp, E = compress_sm80(A, transposed=False)
+    if is_float8_dtype(origin_dtype):
+        A_sp = A_sp.view(origin_dtype)
+    if transposed:
+        A_sp = A_sp.t().contiguous()
+    return A_sp, E
+
+
 def randn_semi_sparse(M: int, K: int, dtype=torch.float16, device="cuda", transposed: bool = False):
     """
     Generate a random semi-sparse tensor. The generated tensor will have 2:4 sparsity along the K dimension.
