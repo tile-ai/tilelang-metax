@@ -14,7 +14,6 @@ def loop_layout_kernel(A, B, loop_layout):
             B[i, j] = A[i, j]
 
 
-
 def test_loop_layout_fragment_vec4():
     def loop_layout_fn(i, j):
         elems = i * 32 + j
@@ -29,7 +28,6 @@ def test_loop_layout_fragment_vec4():
 
     # Expect vectorized copy along innermost dimension (float4)
     assert "*(float4*)(B + ((i * 512) + (((int)threadIdx.x) * 4))) = *(float4*)(A + ((i * 512) + (((int)threadIdx.x) * 4)));" in code
-
 
 
 def test_loop_layout_identity():
@@ -53,7 +51,6 @@ def copy_with_layout_kernel(A, B, loop_layout):
 
     with T.Kernel(1, threads=128):
         T.copy(A, B, loop_layout=loop_layout)
-
 
 
 def test_copy_loop_layout_annotated_replicate_vec4():

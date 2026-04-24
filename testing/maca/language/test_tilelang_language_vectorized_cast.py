@@ -94,6 +94,7 @@ def run_vectorized_cast(src_dtype: T.dtype, dst_dtype: T.dtype, check_str: str, 
 def test_vectorized_cast(src_dtype, dst_dtype, check_str, lanes):
     run_vectorized_cast(src_dtype, dst_dtype, check_str, lanes)
 
+
 @tilelang.testing.pytest.mark.xfail
 @pytest.mark.parametrize(
     "src_dtype, dst_dtype, check_str, lanes",

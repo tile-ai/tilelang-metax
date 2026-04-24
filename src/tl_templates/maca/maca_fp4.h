@@ -42,19 +42,17 @@ TL_DEVICE unsigned char encode_fp4_e2m1(float x) {
     ax = 6.0f;
   }
 
-  const float candidates[8] = {0.0f, 0.5f, 1.0f, 1.5f,
-                               2.0f, 3.0f, 4.0f, 6.0f};
+  const float candidates[8] = {0.0f, 0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 6.0f};
   const unsigned char codes[8] = {0x0U, 0x1U, 0x2U, 0x3U,
-                                   0x4U, 0x5U, 0x6U, 0x7U};
+                                  0x4U, 0x5U, 0x6U, 0x7U};
 
   float best_diff = fabsf(ax - candidates[0]);
   unsigned int best_idx = 0U;
   for (unsigned int i = 1U; i < 8U; ++i) {
     float diff = fabsf(ax - candidates[i]);
     // Tie-break toward value with even LSB to emulate RN-even.
-    if (diff < best_diff ||
-        (diff == best_diff && ((codes[i] & 1U) == 0U) &&
-         ((codes[best_idx] & 1U) != 0U))) {
+    if (diff < best_diff || (diff == best_diff && ((codes[i] & 1U) == 0U) &&
+                             ((codes[best_idx] & 1U) != 0U))) {
       best_diff = diff;
       best_idx = i;
     }
@@ -101,7 +99,9 @@ public:
     return fp4_e2_t(static_cast<unsigned char>((__x >> 4U) & 0x0FU));
   }
 
-  TL_DEVICE void set_x(fp4_e2_t val) { __x = (__x & 0xF0U) | (val.__x & 0x0FU); }
+  TL_DEVICE void set_x(fp4_e2_t val) {
+    __x = (__x & 0xF0U) | (val.__x & 0x0FU);
+  }
   TL_DEVICE void set_y(fp4_e2_t val) {
     __x = (__x & 0x0FU) | ((val.__x & 0x0FU) << 4U);
   }
@@ -278,7 +278,8 @@ TL_DEVICE bfloat16_t __tl_cvt_fp4_to_bfloat16(const unsigned char src) {
 }
 
 // fp4_e2m1x2 -> bfloat162
-TL_DEVICE __maca_bfloat162 __tl_cvt_fp4x2_to_bfloat162(const unsigned char src) {
+TL_DEVICE __maca_bfloat162
+__tl_cvt_fp4x2_to_bfloat162(const unsigned char src) {
   float2 tmp = __tl_cvt_fp4x2_to_float2(src);
   return __floats2bfloat162_rn(tmp.x, tmp.y);
 }
@@ -289,7 +290,8 @@ TL_DEVICE unsigned char __tl_cvt_bfloat16_to_fp4(const bfloat16_t src) {
 }
 
 // bfloat162 -> fp4_e2m1x2
-TL_DEVICE unsigned char __tl_cvt_bfloat162_to_fp4x2(const __maca_bfloat162 src) {
+TL_DEVICE unsigned char
+__tl_cvt_bfloat162_to_fp4x2(const __maca_bfloat162 src) {
   float2 tmp = __bfloat1622float2(src);
   const unsigned char lo = __tl_cvt_float_to_fp4(tmp.x) & 0x0FU;
   const unsigned char hi = __tl_cvt_float_to_fp4(tmp.y) & 0x0FU;

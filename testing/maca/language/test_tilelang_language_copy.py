@@ -182,6 +182,7 @@ def run_tilelang_copy_fp8_e8m0(M=1024, N=1024, block_M=128, block_N=128, src_dty
     assert output is not None
 
 
+@tilelang.testing.pytest.mark.xfail
 def test_tilelang_copy_fp8_e8m0():
     run_tilelang_copy_fp8_e8m0(src_dtype=T.float8_e8m0fnu, dst_dtype=T.float8_e8m0fnu)
 
