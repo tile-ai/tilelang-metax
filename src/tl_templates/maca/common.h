@@ -55,6 +55,8 @@
 #define hpow __ocml_pown_f16
 #define hsqrt __ocml_sqrt_f16
 
+using int4_t = int4;
+
 using float16_t = _Float16;
 using float16x2 =
     __attribute__((__vector_size__(2 * sizeof(float16_t)))) float16_t;
@@ -159,11 +161,53 @@ struct bfloat16x16 {
 typedef
     __attribute__((__vector_size__(4 * sizeof(short)))) short bfloat16x4_vec;
 
+using int32x2 = __attribute__((__vector_size__(2 * sizeof(int)))) int;
 using int32x4 = __attribute__((__vector_size__(4 * sizeof(int)))) int;
 using float32x4 = __attribute__((__vector_size__(4 * sizeof(float)))) float;
 using float32x16 = __attribute__((__vector_size__(16 * sizeof(float)))) float;
 using float64x4 = __attribute__((__vector_size__(4 * sizeof(double)))) double;
 using int8x4 = __attribute__((__vector_size__(4 * sizeof(int8_t)))) int8_t;
+
+// Pack four char values.
+TL_DEVICE int make_int(signed char x0, signed char x1, signed char x2,
+                       signed char x3) {
+  return (x3 << 24) | (x2 << 16) | (x1 << 8) | x0;
+}
+
+// Pack eight char values.
+TL_DEVICE int2 make_int2(signed char x0, signed char x1, signed char x2,
+                         signed char x3, signed char y0, signed char y1,
+                         signed char y2, signed char y3) {
+  int2 result;
+  result.x = make_int(x0, x1, x2, x3);
+  result.y = make_int(y0, y1, y2, y3);
+  return result;
+}
+
+// Pack sixteen char values.
+TL_DEVICE int4_t make_int4(signed char x0, signed char x1, signed char x2,
+                           signed char x3, signed char y0, signed char y1,
+                           signed char y2, signed char y3, signed char z0,
+                           signed char z1, signed char z2, signed char z3,
+                           signed char w0, signed char w1, signed char w2,
+                           signed char w3) {
+  int4_t result;
+  result.x = make_int(x0, x1, x2, x3);
+  result.y = make_int(y0, y1, y2, y3);
+  result.z = make_int(z0, z1, z2, z3);
+  result.w = make_int(w0, w1, w2, w3);
+  return result;
+}
+
+TL_DEVICE int4_t make_int4(short x0, short x1, short y0, short y1, short z0,
+                           short z1, short w0, short w1) {
+  int4_t result;
+  *((short2 *)&result.x) = make_short2(x0, x1);
+  *((short2 *)&result.y) = make_short2(y0, y1);
+  *((short2 *)&result.z) = make_short2(z0, z1);
+  *((short2 *)&result.w) = make_short2(w0, w1);
+  return result;
+}
 
 // Pack four char values.
 TL_DEVICE unsigned int make_uint(unsigned char x0, unsigned char x1,

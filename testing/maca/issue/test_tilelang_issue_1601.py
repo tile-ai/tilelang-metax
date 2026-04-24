@@ -3,7 +3,6 @@ import tilelang.testing
 import tilelang.language as T
 
 
-@tilelang.testing.requires_cuda
 def test_issue_1601():
     @tilelang.jit
     def qwq():

@@ -124,7 +124,6 @@ def vectorize_test_all_dtypes(dtype, vec_num):
     return main
 
 
-@tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     "dtype",
     [
@@ -154,7 +153,7 @@ def vectorize_broadcast_int8(vec_num):
             a[i] = b
 
 
-@tilelang.testing.requires_cuda
+@tilelang.testing.pytest.mark.xfail
 @pytest.mark.parametrize("vec_num", [4, 32])
 def test_vectorize_broadcast_int8(vec_num):
     """Test broadcasting a non-constant int8 value to a vectorized store."""

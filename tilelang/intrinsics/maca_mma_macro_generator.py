@@ -44,10 +44,10 @@ class TensorCoreIntrinEmitter:
         "int8": "int8",
         "int32": "int32",
         "float8_e4m3": "e4m3",
-        "float8_e5m2": "e5m2",
         "float8_e4m3fn": "e4m3",
+        "float8_e4m3fnuz": "e4m3",
+        "float8_e5m2": "e5m2",
         "float8_e5m2fn": "e5m2",
-        "float8_e4m3fnuz": "e4m3fnuz",
         "float8_e5m2fnuz": "e5m2fnuz",
     }
 
@@ -106,7 +106,8 @@ class TensorCoreIntrinEmitter:
 
     def _initialize_k_dim(self, a_dtype=T.float16):
         if isinstance(a_dtype, str):
-            if a_dtype in ["float8_e4m3fnuz", "float8_e5m2fnuz"]:
+            if a_dtype in ["float8_e4m3fn", "float8_e4m3fnuz", "float8_e5m2", "float8_e5m2fnuz"]:
+                self.k_dim = 32
                 return
             a_dtype = DataType(a_dtype)
 
@@ -148,15 +149,17 @@ class TensorCoreIntrinEmitter:
             "float32": "f32",
             "int8": "i8",
             "int32": "i32",
-            "float8_e4m3fnuz": "fp8",
-            "float8_e5m2fnuz": "fp8",
-            "float8_e4m3fn": "fp8",
-            "float8_e5m2fn": "fp8",
+            "float8_e4m3fn": "f8",
+            "float8_e4m3fnuz": "f8",
+            "float8_e5m2fn": "bf8",
+            "float8_e5m2fnuz": "bf8",
         }
         in_dtype_abbrv = in_dtype_map[in_dtype_key]
 
-        if in_dtype_abbrv == "fp8":
-            self.mma_suffix = f"{M_DIM}x{N_DIM}x{k_dim}fp8"
+        if in_dtype_abbrv == "f8":
+            self.mma_suffix = f"{M_DIM}x{N_DIM}x{k_dim}f8"
+        elif in_dtype_abbrv == "bf8":
+            self.mma_suffix = f"{M_DIM}x{N_DIM}x{k_dim}bf8"
         elif in_dtype_abbrv == "i8":
             self.mma_suffix = f"{M_DIM}x{N_DIM}x{k_dim}i8"
         elif in_dtype_abbrv == "bf16":

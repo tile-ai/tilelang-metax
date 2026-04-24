@@ -1911,11 +1911,20 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
         {"float32", "float"},
         {"float64", "double"},
         {"float16x4", "float16x4"},
+        {"float16x8", "float16x8"},
         {"bfloat16x4", "bfloat16x4_vec"},
+        {"bfloat16x8", "bfloat16x8_vec"},
         {"float32x4", "float32x4"},
-        {"float8_e4m3fnuzx4", "fp8_e4_4_t"},
-        {"float8_e4m3fnuzx8", "long"},
-        {"float32x16", "float32x16"}};
+        {"float8_e4m3fnuzx4", "int32x2"},
+        {"float8_e4m3fnx4", "int32x2"},
+        {"float8_e4m3fnuzx8", "int32x2"},
+        {"float8_e4m3fnx8", "int32x2"},
+        {"float8_e5m2fnuzx4", "fp8_e5_4_t"},
+        {"float8_e5m2fnuzx8", "int32x2"},
+        {"float8_e5m2x4", "fp8_e5_4_t"},
+        {"float8_e5m2x8", "int32x2"},
+        {"float32x16", "float32x16"},
+        {"float32x32", "float32x32"}};
     std::string call_mfma_code = R"({
       *((({C_dtype}*){c_ref}) + {c_bias}) = {mfma_buildin}(*((({A_dtype}*){a_ref}) + {a_bias}),
                     *((({B_dtype}*){b_ref}) + {b_bias}),
@@ -2825,7 +2834,8 @@ void CodeGenTileLangMACA::VisitExpr_(const BroadcastNode *op,
   if ((op->dtype.is_int() || op->dtype.is_uint()) && op->dtype.bits() == 4) {
     bool fail = false;
     const int64_t *p = as_const_int(op->value);
-    ICHECK(p);
+    ICHECK(p) << "BroadcastNode " << op << " value: " << op->value
+              << " is not a constant";
     int64_t v = *p & 0xF;
 
     if (lanes == 4) {
