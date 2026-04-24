@@ -33,7 +33,6 @@ def strided_kernel(x):
         pass
 
 
-@tilelang.testing.requires_cuda
 def test_subtype_basic_shape_binding():
     """Test that symbolic shape variables are correctly bound for subtype buffers.
 
@@ -46,7 +45,6 @@ def test_subtype_basic_shape_binding():
     basic_shape_kernel(t)
 
 
-@tilelang.testing.requires_cuda
 def test_subtype_stride_binding():
     """Test that symbolic stride variables are correctly bound for subtype buffers.
 
@@ -62,7 +60,6 @@ def test_subtype_stride_binding():
     strided_kernel(t)
 
 
-@tilelang.testing.requires_cuda
 def test_subtype_noncontiguous_tensor():
     """Test subtype with non-contiguous (strided) tensor.
 
@@ -79,7 +76,6 @@ def test_subtype_noncontiguous_tensor():
     strided_kernel(t_noncontig)
 
 
-@tilelang.testing.requires_cuda
 @pytest.mark.parametrize("m", SUBTYPE_M_VALUES, ids=[f"m={m}" for m in SUBTYPE_M_VALUES])
 def test_subtype_different_m_values(m):
     """Test subtype binding with different values of symbolic variable m."""
@@ -88,7 +84,6 @@ def test_subtype_different_m_values(m):
     basic_shape_kernel(t)
 
 
-@tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     "stride_multiplier",
     SUBTYPE_STRIDE_MULTIPLIERS,
@@ -163,7 +158,6 @@ def complex_expr_kernel(x, y):
         pass
 
 
-@tilelang.testing.requires_cuda
 def test_subtype_symbolic_last_dim():
     """Test symbolic variable in the last dimension.
 
@@ -176,7 +170,6 @@ def test_subtype_symbolic_last_dim():
     symbolic_last_dim_kernel(t)
 
 
-@tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     "n_runtime",
     SUBTYPE_LAST_DIM_RUNTIME_SIZES,
@@ -189,7 +182,6 @@ def test_subtype_symbolic_last_dim_various_sizes(n_runtime):
     symbolic_last_dim_kernel(t)
 
 
-@tilelang.testing.requires_cuda
 def test_subtype_symbolic_last_dim_strided():
     """Test symbolic variable in last dimension with strides.
 
@@ -209,7 +201,6 @@ def test_subtype_symbolic_last_dim_strided():
     symbolic_last_dim_strided_kernel(t_strided)
 
 
-@tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     "m",
     SUBTYPE_SHARED_SYMBOLIC_M_VALUES,
@@ -232,7 +223,6 @@ def test_subtype_shared_symbolic(m):
     shared_symbolic_kernel(x, y)
 
 
-@tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     "m",
     SUBTYPE_SHARED_SYMBOLIC_STRIDED_M_VALUES,
@@ -250,7 +240,6 @@ def test_subtype_shared_symbolic_strided(m):
     shared_symbolic_strided_kernel(x, y)
 
 
-@tilelang.testing.requires_cuda
 def test_subtype_shared_symbolic_strided_noncontig():
     """Test shared symbolic stride with non-contiguous tensors."""
     # Create non-contiguous tensors with same stride pattern
@@ -269,7 +258,6 @@ def test_subtype_shared_symbolic_strided_noncontig():
     shared_symbolic_strided_kernel(x, y)
 
 
-@tilelang.testing.requires_cuda
 def test_subtype_complex_expressions():
     """Test complex expressions with symbolic variables.
 
@@ -286,7 +274,6 @@ def test_subtype_complex_expressions():
     complex_expr_kernel(x, y)
 
 
-@tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     ("m", "n"),
     SUBTYPE_COMPLEX_EXPRESSION_CASES,

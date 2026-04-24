@@ -125,7 +125,7 @@ def test_no_transform_if_then_else_condition():
 # =============================================================================
 
 
-@tilelang.testing.requires_cuda
+
 def test_codegen_local_to_memory():
     """Test CUDA codegen for local → memory with vectorized copy."""
 
@@ -147,7 +147,7 @@ def test_codegen_local_to_memory():
     assert "fp4_e2_16_t" in source, "Expected vectorized fp4 copy in generated code"
 
 
-@tilelang.testing.requires_cuda
+
 def test_codegen_memory_to_local():
     """Test CUDA codegen for memory → local with vectorized copy."""
 
@@ -167,7 +167,7 @@ def test_codegen_memory_to_local():
     assert "b_local_cast" in source, "Expected local cast buffer in generated code"
 
 
-@tilelang.testing.requires_cuda
+
 def test_codegen_fp8_local_to_memory():
     """Test CUDA codegen for fp8 local → memory."""
 
@@ -189,7 +189,7 @@ def test_codegen_fp8_local_to_memory():
     assert "fp8" in source and "cvt" in source, "Expected fp8 conversion"
 
 
-@tilelang.testing.requires_cuda
+
 def test_codegen_no_cast_buffer_same_dtype():
     """Test no cast buffer when dtypes are the same."""
 

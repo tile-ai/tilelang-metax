@@ -1305,7 +1305,8 @@ private:
         DataType from_ty = cast->value.dtype();
         DataType target_ty = cast->dtype;
         if (IsCudaVectorizableCast(from_ty, target_ty) &&
-            TargetIsCuda(Target::Current())) {
+            (TargetIsCuda(Target::Current()) ||
+             TargetIsMaca(Target::Current()))) {
           has_cast_operations = true;
         }
       }

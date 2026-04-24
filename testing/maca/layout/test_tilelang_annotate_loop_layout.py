@@ -14,7 +14,7 @@ def loop_layout_kernel(A, B, loop_layout):
             B[i, j] = A[i, j]
 
 
-@tilelang.testing.requires_cuda
+
 def test_loop_layout_fragment_vec4():
     def loop_layout_fn(i, j):
         elems = i * 32 + j
@@ -31,7 +31,7 @@ def test_loop_layout_fragment_vec4():
     assert "*(float4*)(B + ((i * 512) + (((int)threadIdx.x) * 4))) = *(float4*)(A + ((i * 512) + (((int)threadIdx.x) * 4)));" in code
 
 
-@tilelang.testing.requires_cuda
+
 def test_loop_layout_identity():
     def loop_layout_fn(i, j):
         forward_thread = i
@@ -55,7 +55,7 @@ def copy_with_layout_kernel(A, B, loop_layout):
         T.copy(A, B, loop_layout=loop_layout)
 
 
-@tilelang.testing.requires_cuda
+
 def test_copy_loop_layout_annotated_replicate_vec4():
     def loop_layout_fn(i, j, rep):
         elems = i * 32 + j
@@ -85,8 +85,6 @@ def replicate_loop_layout_kernel(A, B, loop_layout):
             B[i, j] = A[i, j]
 
 
-@tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version(9, 0)
 def test_annotate_replicate_loop_layout_vec4():
     M, N = 128, 32
 
