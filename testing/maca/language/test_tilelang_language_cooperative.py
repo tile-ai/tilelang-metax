@@ -24,8 +24,6 @@ def grid_sync(N=1024):
     return kernel
 
 
-@tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(6, 0)
 def test_grid_sync():
     N = 1024
     kernel = grid_sync(N)
