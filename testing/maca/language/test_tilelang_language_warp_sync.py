@@ -12,7 +12,7 @@ def kernel_with_warp_sync():
         A: T.Tensor((1,), "int32"),
         B: T.Tensor((1,), "int32"),
     ):
-        with T.Kernel(1, threads=32):
+        with T.Kernel(1, threads=64):
             tx = T.get_thread_binding()
             if tx == 0:
                 tir.call_extern("void", "__nanosleep", 100)
@@ -24,7 +24,6 @@ def kernel_with_warp_sync():
     return main
 
 
-@tilelang.testing.requires_cuda
 def test_warp_sync():
     a = torch.empty((1), device="cuda", dtype=torch.int32)
     b = torch.empty((1), device="cuda", dtype=torch.int32)

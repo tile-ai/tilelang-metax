@@ -319,8 +319,9 @@ std::string CodeGenTileLangMACA::Finish() {
   // TODO: Add implementation for maca target.
   // decl_stream << "#include <tl_templates/maca/copy.h>\n";
   decl_stream << "#include <tl_templates/maca/reduce.h>\n";
-  decl_stream << "#include <tl_templates/maca/threadblock_swizzle.h>\n";
+  decl_stream << "#include <tl_templates/maca/intrin.h>\n";
   decl_stream << "#include <tl_templates/maca/atomic.h>\n";
+  decl_stream << "#include <tl_templates/maca/threadblock_swizzle.h>\n";
   decl_stream << "#include <tl_templates/maca/debug.h>\n";
   //  decl_stream << "#ifdef ENABLE_BF16\n";
   //  decl_stream << "#include <tl_templates/maca/maca_bf16_fallbacks.cuh>\n";
@@ -1808,6 +1809,13 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     this->need_cooperative_groups_ = true;
     this->PrintIndent();
     this->stream << "cooperative_groups::this_grid().sync();\n";
+  } else if (op->op.same_as(tl::sync_warp())) {
+    this->PrintIndent();
+    this->stream << "__syncwarp(";
+    if (!op->args.empty()) {
+      this->stream << this->PrintExpr(op->args[0]);
+    }
+    this->stream << ");\n";
   } else if (op->op.same_as(tl::loop_break())) {
     this->PrintIndent();
     this->stream << "break;\n";
@@ -2267,6 +2275,8 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
       os << ", " << PrintExpr(op->args[2]);
     }
     os << ")";
+  } else if (op->op.same_as(builtin::thread_return())) {
+    os << "return";
   } else if (op->op.same_as(tl::tl_gemm_sp())) {
     ICHECK(op->args.size() == 5)
         << "tl_gemm_sp expects 5 arguments <op_instance, A_ptr, B_ptr, C_ptr, "
@@ -2300,6 +2310,43 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     os << "__shfl_up_sync(" << PrintExpr(op->args[0]) << ", "
        << PrintExpr(op->args[1]) << ", " << PrintExpr(op->args[2]) << ", "
        << PrintExpr(op->args[3]) << ")";
+  } else if (op->op.same_as(tl::get_lane_idx())) {
+    ICHECK_LE(op->args.size(), 1)
+        << "tl.get_lane_idx expects at most one argument <warp_size>.";
+    os << "tl::get_lane_idx(";
+    if (!op->args.empty()) {
+      os << PrintExpr(op->args[0]);
+    }
+    os << ")";
+  } else if (op->op.same_as(tl::get_warp_idx_sync())) {
+    ICHECK_LE(op->args.size(), 1)
+        << "tl.get_warp_idx_sync expects at most one argument <warp_size>.";
+    os << "tl::get_warp_idx_sync(";
+    if (!op->args.empty()) {
+      os << PrintExpr(op->args[0]);
+    }
+    os << ")";
+  } else if (op->op.same_as(tl::get_warp_idx())) {
+    ICHECK_LE(op->args.size(), 1)
+        << "tl.get_warp_idx expects at most one argument <warp_size>.";
+    os << "tl::get_warp_idx(";
+    if (!op->args.empty()) {
+      os << PrintExpr(op->args[0]);
+    }
+    os << ")";
+  } else if (op->op.same_as(tl::get_warp_group_idx())) {
+    ICHECK_LE(op->args.size(), 2)
+        << "tl.get_warp_group_idx expects <warp_size, warps_per_group>.";
+    os << "tl::get_warp_group_idx(";
+    for (size_t i = 0; i < op->args.size(); ++i) {
+      if (i != 0) {
+        os << ", ";
+      }
+      os << PrintExpr(op->args[i]);
+    }
+    os << ")";
+  } else if (op->op.same_as(tl::tl_shuffle_elect())) {
+    os << "tl::tl_shuffle_elect<" << PrintExpr(op->args[0]) << ">()";
   } else if (op->op.same_as(Op::Get("tir.exp"))) {
     MACAMath math_func;
     std::string func_name = math_func(op->dtype, "exp");

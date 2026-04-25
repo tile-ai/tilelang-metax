@@ -3,16 +3,16 @@ from typing import Optional
 import tilelang.language as T
 import tilelang.testing
 import torch
-from tilelang.utils.target import check_hip_availability
+from tilelang.utils.target import check_maca_availability
 
-_IS_HIP_AVAILABLE = check_hip_availability()
+_IS_MACA_AVAILABLE = check_maca_availability()
 _DEFAULT_WARPS_PER_GROUP = 4
 
 
 def _resolve_warp_size(warp_size: Optional[int]) -> int:
     if warp_size is not None:
         return int(warp_size)
-    return 64 if _IS_HIP_AVAILABLE else 32
+    return 64 if _IS_MACA_AVAILABLE else 32
 
 
 def _resolve_warps_per_group(warps_per_group: Optional[int]) -> int:
@@ -152,52 +152,42 @@ def run_shuffle_elect(num_threads: int = 128, thread_extent: int = 64):
     return A
 
 
-@tilelang.testing.requires_cuda
 def test_get_lane_idx_default():
     run_get_lane_id()
 
 
-@tilelang.testing.requires_cuda
 def test_get_lane_idx_custom():
     run_get_lane_id(num_threads=256, warp_size=64)
 
 
-@tilelang.testing.requires_cuda
 def test_get_warp_idx_sync_default():
     run_get_warp_idx_sync()
 
 
-@tilelang.testing.requires_cuda
 def test_get_warp_idx_sync_custom():
     run_get_warp_idx_sync(num_threads=256, warp_size=16)
 
 
-@tilelang.testing.requires_cuda
 def test_get_warp_idx_default():
     run_get_warp_idx()
 
 
-@tilelang.testing.requires_cuda
 def test_get_warp_idx_custom():
     run_get_warp_idx(num_threads=320, warp_size=20)
 
 
-@tilelang.testing.requires_cuda
 def test_get_warp_group_idx_default():
     run_get_warp_group_idx()
 
 
-@tilelang.testing.requires_cuda
 def test_get_warp_group_idx_custom():
     run_get_warp_group_idx(num_threads=512, warp_size=32, warps_per_group=5)
 
 
-@tilelang.testing.requires_cuda
 def test_shuffle_elect_default():
     run_shuffle_elect(num_threads=256, thread_extent=64)
 
 
-@tilelang.testing.requires_cuda
 def test_shuffle_elect_block_leader():
     run_shuffle_elect(num_threads=128, thread_extent=0)
 
