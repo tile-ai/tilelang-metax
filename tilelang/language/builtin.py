@@ -6,13 +6,14 @@ from tilelang._typing import BufferLikeType, BufferLikeTypeTuple, BarrierType, D
 from tilelang import tvm as tvm
 from tilelang.language import ptx_arrive_barrier, evaluate
 from tilelang.language.kernel import get_thread_bindings, get_block_extents
-from tilelang.utils.target import check_hip_availability
+from tilelang.utils.target import check_hip_availability, check_maca_availability
 from tvm import DataType, tir
 from tvm.runtime import convert
 from tvm.tir import PrimExpr, Var, Call, BufferLoad, BufferRegion
 from tilelang.utils.language import retrieve_ptr
 
 _IS_HIP_AVAILABLE = check_hip_availability()
+_IS_MACA_AVAILABLE = check_maca_availability()
 
 
 def _normalize_index_arg(value: int | PrimExpr | None) -> PrimExpr | None:
@@ -876,8 +877,12 @@ def barrier_arrive(mbarrier: BarrierType):
 
 # Full-warp mask as a proper uint32 TIR constant so the emitted C/C++ source
 # prints as `0xFFFFFFFFu` instead of `(int64_t)4294967295` after TIR widening.
-_FULL_WARP_MASK = tir.const(0xFFFFFFFF, "uint32")
-_DEFAULT_SHFL_WIDTH = 32
+if _IS_MACA_AVAILABLE:
+    _FULL_WARP_MASK = tir.const(0xFFFFFFFF, "uint64")
+    _DEFAULT_SHFL_WIDTH = 64
+else:
+    _DEFAULT_SHFL_WIDTH = 32
+    _FULL_WARP_MASK = tir.const(0xFFFFFFFF, "uint32")
 
 
 def _as_uint32_mask(mask: int | PrimExpr) -> PrimExpr:
@@ -891,6 +896,17 @@ def _as_uint32_mask(mask: int | PrimExpr) -> PrimExpr:
     return mask
 
 
+def _as_uint64_mask(mask: int | PrimExpr) -> PrimExpr:
+    """Normalize a warp lane mask to a uint64 TIR expression.
+
+    Python literals (e.g. ``0xFFFFFFFF``) would otherwise be widened to int64
+    by TIR and printed as ``(int64_t)4294967295`` in the generated source.
+    """
+    if isinstance(mask, int):
+        return tir.const(mask, "uint64")
+    return mask
+
+
 def shfl_xor(
     value: int | PrimExpr | tir.Call,
     delta: int | PrimExpr | tir.Call,
@@ -900,6 +916,8 @@ def shfl_xor(
     """XOR-swap ``value`` across lanes (``__shfl_xor_sync`` on CUDA,
     ``__shfl_xor`` on HIP — mask ignored on HIP).
     """
+    if _IS_MACA_AVAILABLE:
+        return tir.call_intrin(value.dtype, tir.op.Op.get("tl.shfl_xor_sync"), _as_uint64_mask(mask), value, delta, width)
     return tir.call_intrin(value.dtype, tir.op.Op.get("tl.shfl_xor_sync"), _as_uint32_mask(mask), value, delta, width)
 
 
@@ -912,6 +930,8 @@ def shfl_down(
     """Shift ``value`` down by ``delta`` lanes (``__shfl_down_sync`` on CUDA,
     ``__shfl_down`` on HIP).
     """
+    if _IS_MACA_AVAILABLE:
+        return tir.call_intrin(value.dtype, tir.op.Op.get("tl.shfl_down_sync"), _as_uint64_mask(mask), value, delta, width)
     return tir.call_intrin(value.dtype, tir.op.Op.get("tl.shfl_down_sync"), _as_uint32_mask(mask), value, delta, width)
 
 
@@ -924,6 +944,8 @@ def shfl_up(
     """Shift ``value`` up by ``delta`` lanes (``__shfl_up_sync`` on CUDA,
     ``__shfl_up`` on HIP).
     """
+    if _IS_MACA_AVAILABLE:
+        return tir.call_intrin(value.dtype, tir.op.Op.get("tl.shfl_up_sync"), _as_uint64_mask(mask), value, delta, width)
     return tir.call_intrin(value.dtype, tir.op.Op.get("tl.shfl_up_sync"), _as_uint32_mask(mask), value, delta, width)
 
 
@@ -954,6 +976,8 @@ def shfl_sync(
     ``width`` lanes (``__shfl_sync`` on CUDA, ``__shfl`` on HIP — mask ignored
     on HIP).
     """
+    if _IS_MACA_AVAILABLE:
+        return tir.call_intrin(value.dtype, tir.op.Op.get("tl.shfl_sync"), _as_uint64_mask(mask), value, srcLane, width)
     return tir.call_intrin(value.dtype, tir.op.Op.get("tl.shfl_sync"), _as_uint32_mask(mask), value, srcLane, width)
 
 

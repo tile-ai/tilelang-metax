@@ -195,3 +195,10 @@ __device__ void debug_print_buffer_value<fp8_e4_t>(const char *msg,
 //          msg, blockIdx.x, blockIdx.y, blockIdx.z, threadIdx.x, threadIdx.y,
 //          threadIdx.z, buf_name, index, (float)var);
 // }
+
+TL_DEVICE void device_assert_with_msg(bool cond, const char *msg) {
+  if (!cond) {
+    printf("Device assert failed: %s\n", msg);
+    assert(0);
+  }
+}
