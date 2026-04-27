@@ -9,12 +9,10 @@ import sparse_mla_fwd_pipelined
 import sparse_mla_bwd
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_topk_selector():
     topk_selector.test_topk_selector()
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_fp8_lighting_indexer():
     fp8_lighting_indexer.test_fp8_lighting_indexer(S=512, SKV=1024, H=32, HKV=1, D=64, kv_stride=1)
 
