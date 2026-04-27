@@ -314,6 +314,12 @@ template <int y = 1, typename T> TL_DEVICE T pow_of_int(T x) {
   return result;
 }
 
+template <int barrier_id = 0, int thread_count = 0>
+TL_DEVICE void __sync_thread_partial() {
+  // INFO: all threads will sync in a warp in maca, does not need partial
+  // version
+}
+
 } // namespace tl
 
 //

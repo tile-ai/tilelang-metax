@@ -4,7 +4,6 @@ import tilelang.testing
 from tilelang import language as T
 
 
-@tilelang.testing.requires_cuda
 def test_issue_1257_missing_syncthreads_after_atomic_add_on_shared():
     """Regression for issue #1257.
 

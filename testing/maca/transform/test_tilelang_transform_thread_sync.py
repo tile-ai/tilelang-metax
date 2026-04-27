@@ -17,7 +17,6 @@ def run_passes(func: tvm.tir.PrimFunc):
     return tilelang.transform.ThreadSync("shared")(mod)
 
 
-@tilelang.testing.requires_cuda
 def test_no_sync_between_atomic_adds_to_shared():
     """Atomic WAW (and RMW) should not trigger thread-level sync insertion.
 
@@ -56,7 +55,6 @@ def test_no_sync_between_atomic_adds_to_shared():
     assert 'T.tvm_storage_sync("shared")' not in s, f"Unexpected sync inserted for atomic ops:\n{s}"
 
 
-@tilelang.testing.requires_cuda
 def test_thread_sync_handles_int64_tvm_access_ptr_offset():
     """Regression: shared/shared.dyn pointer offsets may be int64.
 
@@ -94,7 +92,6 @@ def test_thread_sync_handles_int64_tvm_access_ptr_offset():
     assert 'T.tvm_storage_sync("shared.dyn")' not in s, f"Unexpected sync inserted for single atomic op:\n{s}"
 
 
-@tilelang.testing.requires_cuda
 def test_sync_if_with_same_index():
     @T.prim_func(check_well_formed=False)
     def func(p0_arg: T.Buffer((1, 2, 1, 1), "float32"), p1: T.Buffer(2, "float32")) -> None:
@@ -118,7 +115,6 @@ def test_sync_if_with_same_index():
     assert "T.tvm_storage_sync" in str(mod)
 
 
-@tilelang.testing.requires_cuda
 def test_sync_if_with_same_index_with_modulo_if():
     @T.prim_func(check_well_formed=False)
     def func() -> None:
@@ -140,7 +136,6 @@ def test_sync_if_with_same_index_with_modulo_if():
     assert "T.tvm_storage_sync" in str(mod)
 
 
-@tilelang.testing.requires_cuda
 def test_sync_read_thread_id_independent_location():
     @T.prim_func
     def func(p0_arg: T.Buffer((1, 2, 1, 1), "float32"), p1: T.Buffer(2, "float32")) -> None:
@@ -165,7 +160,6 @@ def test_sync_read_thread_id_independent_location():
     assert "T.tvm_storage_sync" in str(mod)
 
 
-@tilelang.testing.requires_cuda
 def test_sync_shared():
     @T.prim_func(private=True)
     def func(A: T.Buffer((4, 4), "float32"), E: T.Buffer((4, 4), "float32")):
@@ -210,7 +204,6 @@ def test_sync_shared():
     tvm.ir.assert_structural_equal(mod["main"], expected)
 
 
-@tvm.testing.requires_cuda
 def test_sync_let_stmt():
     @T.prim_func(private=True)
     def func(A: T.Buffer((16 * 512), "float32")):
@@ -290,7 +283,6 @@ def test_sync_let_stmt():
     tvm.ir.assert_structural_equal(mod["main"], expected)
 
 
-@tilelang.testing.requires_cuda
 def test_sync_shared_dyn_stmatrix_loop_hoist():
     @T.prim_func
     def func():
@@ -332,7 +324,6 @@ def test_sync_shared_dyn_stmatrix_loop_hoist():
     assert s.index('T.tvm_storage_sync("shared.dyn")') < s.index("for i in T.unroll(8)")
 
 
-@tilelang.testing.requires_cuda
 def test_loop_carry_no_dependency_same_index():
     """Test that A[i] write followed by A[i] read in a loop does NOT need barrier.
 
@@ -366,7 +357,6 @@ def test_loop_carry_no_dependency_same_index():
     assert 'T.tvm_storage_sync("shared")' not in s, f"Unexpected sync in loop:\n{s}"
 
 
-@tilelang.testing.requires_cuda
 def test_loop_carry_with_cross_thread_dependency():
     """Test loop-carried dependency where different threads access overlapping locations.
 
@@ -405,7 +395,6 @@ def test_loop_carry_with_cross_thread_dependency():
     assert 'T.tvm_storage_sync("shared")' in s, f"Expected sync for cross-thread dependency:\n{s}"
 
 
-@tilelang.testing.requires_cuda
 def test_loop_carry_modulo_buffering():
     """Test that A[i%2] write followed by A[i%2] read does NOT need barrier (double buffering).
 
@@ -439,7 +428,6 @@ def test_loop_carry_modulo_buffering():
     print(f"Modulo buffering result:\n{s}")
 
 
-@tilelang.testing.requires_cuda
 def test_loop_carry_different_indices():
     """Test that A[i] write followed by A[i+1] read does NOT need barrier.
 
@@ -476,7 +464,6 @@ def test_loop_carry_different_indices():
 # =============================================================================
 
 
-@tilelang.testing.requires_cuda
 def test_sync_hoist_non_uniform_if_with_threadidx():
     """Test that sync is hoisted when if condition directly depends on threadIdx.
 
@@ -514,7 +501,6 @@ def test_sync_hoist_non_uniform_if_with_threadidx():
     assert sync_pos < if_pos, f"Sync should be before if statement:\n{s}"
 
 
-@tilelang.testing.requires_cuda
 def test_sync_hoist_non_uniform_if_shared_memory_condition():
     """Test sync hoisting when if condition reads from shared memory with thread-dependent index.
 
@@ -554,7 +540,6 @@ def test_sync_hoist_non_uniform_if_shared_memory_condition():
     assert sync_pos < if_pos, f"Sync should be hoisted before non-uniform if:\n{s}"
 
 
-@tilelang.testing.requires_cuda
 def test_sync_inside_uniform_if_blockidx():
     """Test that sync can stay inside if when condition is uniform (blockIdx).
 
@@ -586,7 +571,6 @@ def test_sync_inside_uniform_if_blockidx():
     assert 'T.tvm_storage_sync("shared")' in s, f"Expected sync:\n{s}"
 
 
-@tilelang.testing.requires_cuda
 def test_sync_inside_uniform_if_runtime_block_uniform_condition():
     """Runtime-loaded but block-uniform conditions should keep syncs in the if."""
 
@@ -612,7 +596,6 @@ def test_sync_inside_uniform_if_runtime_block_uniform_condition():
     assert sync_pos > if_pos, f"Block-uniform runtime condition should keep sync inside if:\n{s}"
 
 
-@tilelang.testing.requires_cuda
 def test_sync_hoist_nested_non_uniform_if():
     """Test sync hoisting with nested if statements where outer is non-uniform."""
 
@@ -644,7 +627,6 @@ def test_sync_hoist_nested_non_uniform_if():
     assert sync_pos < if_pos, f"Sync should be hoisted before outer if:\n{s}"
 
 
-@tilelang.testing.requires_cuda
 def test_sync_hoist_non_uniform_if_in_loop():
     """Test sync hoisting when non-uniform if is inside a loop."""
 
@@ -673,7 +655,6 @@ def test_sync_hoist_non_uniform_if_in_loop():
     # This ensures all threads can reach the sync point
 
 
-@tilelang.testing.requires_cuda
 def test_no_sync_needed_uniform_accesses():
     """Test that no extra sync is added when accesses are already safe.
 
@@ -702,7 +683,6 @@ def test_no_sync_needed_uniform_accesses():
     assert 'T.tvm_storage_sync("shared")' not in s, f"Unexpected sync:\n{s}"
 
 
-@tilelang.testing.requires_cuda
 def test_sync_hoist_non_uniform_if_in_loop_with_shared_memory():
     """Test sync hoisting when non-uniform if is inside a loop with shared memory."""
 
