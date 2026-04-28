@@ -35,41 +35,34 @@ env:
 jobs:
   lint:
     name: Quick Lint
-    runs-on: tilelang-metax-runner
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Install dependencies for runner (MetaX)
-        run: |
-          sudo apt-get update && sudo apt-get install -y git
-          sudo /opt/conda/bin/pip install pre-commit
-          export PATH="/opt/conda/bin:${PATH}"
-          echo "PATH=${PATH}" | tee -a "${GITHUB_ENV}"
-
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          # submodules: recursive
+          submodules: recursive
 
-      # - name: Setup Python 3.9
-      #   id: setup-pylowest
-      #   uses: actions/setup-python@v6
-      #   with:
-      #     python-version: "3.9"
-      #     update-environment: true
-      #     cache: pip
-      #     cache-dependency-path: |
-      #       pyproject.toml
-      #       requirements*.txt
-      #       .pre-commit-config.yaml
+      - name: Setup Python 3.9
+        id: setup-pylowest
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.9"
+          update-environment: true
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements*.txt
+            .pre-commit-config.yaml
 
       - name: Check AST with Python 3.9
         run: |
-          python -m compileall -q -f tilelang
+          "${{ steps.setup-pylowest.outputs.python-path }}" -m compileall -q -f tilelang
 
       - name: Pre-commit Lint
         run: |
-          if ! pre-commit run --all-files --color=always --show-diff-on-failure; then
+          if ! pipx run pre-commit run --all-files --color=always --show-diff-on-failure; then
             echo "::error::Pre-commit checks failed. Please run 'pre-commit install' and 'pre-commit run --all-files' locally to see the issues."
             exit 1
           fi
@@ -98,9 +91,9 @@ jobs:
             name: self-hosted-metax
             # Format: MACA-<major>.<minor>[.<patch>]. E.g., "MACA-3.0".
             toolkit: MACA-3.6
-          # - tags: [macos-latest]
-          #   name: macos-latest
-          #   toolkit: Metal # or Nightly-Metal
+          - tags: [macos-latest]
+            name: macos-latest
+            toolkit: Metal # or Nightly-Metal
         python-version:
           - "3.12"
       fail-fast: false
@@ -258,7 +251,6 @@ jobs:
         id: setup-uv
         uses: astral-sh/setup-uv@v7
         with:
-          version: "0.10.11"
           python-version: ${{ matrix.python-version }}
           activate-environment: true
           # Do not use cache for self-hosted runners, as it will download/upload caches which is slow.
@@ -295,6 +287,7 @@ jobs:
             uv pip install -v -r requirements-test-rocm.txt
           elif [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
             uv pip install -v -r requirements-test-maca.txt
+            uv pip install flash_linear_attention -i https://repos.metax-tech.com/r/maca-pypi/simple --trusted-host repos.metax-tech.com
           elif [[ "${{ matrix.runner.toolkit }}" == *"Metal"* ]]; then
             uv pip install -v -r requirements-test-metal.txt
           else
