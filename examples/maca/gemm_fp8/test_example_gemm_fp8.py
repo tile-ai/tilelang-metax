@@ -4,7 +4,6 @@ import example_tilelang_gemm_fp8_intrinsic
 import example_tilelang_gemm_fp8
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_tilelang_gemm_fp8_2xAcc():
     example_tilelang_gemm_fp8_2xAcc.main()
 

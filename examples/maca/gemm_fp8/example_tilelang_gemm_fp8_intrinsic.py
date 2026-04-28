@@ -4,7 +4,7 @@ import tilelang.testing
 from tvm import DataType
 import tilelang.language as T
 from tilelang.intrinsics import get_swizzle_layout
-from tilelang.intrinsics.mma_macro_generator import TensorCoreIntrinEmitter
+from tilelang.intrinsics.maca_mma_macro_generator import TensorCoreIntrinEmitter
 from tilelang.intrinsics.mfma_macro_generator import MatrixCoreIntrinEmitter
 from tilelang.utils import determine_fp8_type
 
@@ -199,14 +199,14 @@ def assert_tl_matmul_correctness(M, N, K, in_dtype, out_dtype, accum_dtype):
     accum_dtype = accum_dtype.as_torch()
 
     if in_dtype in {torch.int8, torch.int32}:
-        A = torch.randint(-128, 128, (M, K), dtype=torch.int8).to(in_dtype).cuda()
-        B = torch.randint(-128, 128, (N, K), dtype=torch.int8).to(in_dtype).cuda()
+        A = torch.randint(-128, 128, (M, K), dtype=torch.int8, device="cuda").to(in_dtype)
+        B = torch.randint(-128, 128, (N, K), dtype=torch.int8, device="cuda").to(in_dtype)
     elif in_dtype in {torch.float8_e4m3fn, torch.float8_e4m3fnuz, torch.float8_e5m2, torch.float8_e5m2fnuz}:
-        A = torch.randn(M, K).to(in_dtype).cuda()
-        B = torch.randn(N, K).to(in_dtype).cuda()
+        A = torch.randn(M, K, device="cuda").to(in_dtype)
+        B = torch.randn(N, K, device="cuda").to(in_dtype)
     else:
-        A = torch.randn(M, K).to(in_dtype).cuda() - 0.5
-        B = torch.randn(N, K).to(in_dtype).cuda() - 0.5
+        A = torch.randn(M, K).to(in_dtype, device="cuda") - 0.5
+        B = torch.randn(N, K).to(in_dtype, device="cuda") - 0.5
 
     C = torch.zeros(M, N, device="cuda", dtype=accum_dtype)
 

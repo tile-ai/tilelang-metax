@@ -31,9 +31,9 @@ def prepare_input(
     output_dtype,
     accum_dtype,
 ):
-    K = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
-    Beta = torch.randn(B, S, H, dtype=input_dtype).cuda()
-    G = torch.randn(B, S, H, dtype=accum_dtype).cuda()
+    K = torch.randn(B, S, H, DK, dtype=input_dtype, device="cuda")
+    Beta = torch.randn(B, S, H, dtype=input_dtype, device="cuda")
+    G = torch.randn(B, S, H, dtype=accum_dtype, device="cuda")
     return K, Beta, G
 
 

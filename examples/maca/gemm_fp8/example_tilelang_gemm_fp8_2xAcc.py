@@ -27,7 +27,7 @@ def matmul(M, N, K, block_M, block_N, block_K, dtype, accum_dtype=T.float32):
             T.clear(C_local)
             T.clear(C_local_accum)
             K_iters = T.ceildiv(K, block_K)
-            for k in T.Pipelined(K_iters, num_stages=3):
+            for k in T.Pipelined(K_iters, num_stages=1):
                 T.copy(A[by * block_M, k * block_K], A_shared)
                 T.copy(B[bx * block_N, k * block_K], B_shared)
                 T.gemm(A_shared, B_shared, C_local, transpose_B=True)
@@ -57,7 +57,7 @@ def calc_diff(x, y):
 def test_gemm_fp8(M, N, K, dtype):
     torch_dtype = T.dtype(dtype).as_torch()
 
-    kernel = matmul(M, N, K, 128, 128, 64, dtype)
+    kernel = matmul(M, N, K, 128, 64, 64, dtype)
 
     a = torch.rand(M, K, dtype=torch.float16, device="cuda")
     a = (100 * (2 * a - 1)).to(dtype=torch_dtype)

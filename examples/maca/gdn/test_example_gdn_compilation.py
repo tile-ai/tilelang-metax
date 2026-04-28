@@ -24,7 +24,6 @@ threads = 128
 num_stages = 0
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_wy_fast_compilation():
     from example_wy_fast import tilelang_recompute_w_u_fwd, prepare_input
 
@@ -55,7 +54,6 @@ def test_example_wy_fast_compilation():
     torch.cuda.synchronize()
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_wy_fast_bwd_split_compilation():
     from example_wy_fast_bwd_split import tilelang_wy_fast_bwd, tilelang_wy_fast_bwd_split, prepare_input, prepare_output
 
@@ -76,10 +74,10 @@ def test_example_wy_fast_bwd_split_compilation():
         B, S, H, DK, DV, chunk_size, getattr(torch, output_dtype), getattr(torch, gate_dtype), getattr(torch, state_dtype)
     )
     BS = chunk_size
-    dA_tilelang = torch.empty(B, S, H, BS, dtype=getattr(torch, input_dtype)).cuda()
-    dbeta_tilelang_k = torch.empty(B, S, H, dtype=getattr(torch, output_dtype)).cuda()
-    dg_tilelang_A_positive = torch.empty(B, S, H, BS, dtype=getattr(torch, gate_dtype)).cuda()
-    dg_tilelang_A_negative = torch.empty(B, S, H, BS, dtype=getattr(torch, gate_dtype)).cuda()
+    dA_tilelang = torch.empty(B, S, H, BS, dtype=getattr(torch, input_dtype), device="cuda")
+    dbeta_tilelang_k = torch.empty(B, S, H, dtype=getattr(torch, output_dtype), device="cuda")
+    dg_tilelang_A_positive = torch.empty(B, S, H, BS, dtype=getattr(torch, gate_dtype), device="cuda")
+    dg_tilelang_A_negative = torch.empty(B, S, H, BS, dtype=getattr(torch, gate_dtype), device="cuda")
 
     # tilelang
     kernel = tilelang_wy_fast_bwd(
@@ -127,7 +125,6 @@ def test_example_wy_fast_bwd_split_compilation():
     dg_tilelang = dg_tilelang + dg_tilelang_A_positive.sum(dim=-1) - dg_tilelang_A_negative.sum(dim=-1)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_chunk_o_compilation():
     from example_chunk_o import tilelang_chunk_fwd_o, prepare_input
 
@@ -167,7 +164,6 @@ def test_example_chunk_o_compilation():
     O_tilelang = kernel(Q, K, V, HIDDEN, G)  # noqa: F841
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_chunk_o_bwd_compilation():
     from example_chunk_o_bwd import tilelang_chunk_o_bwd_dqkwg, prepare_input
 
@@ -210,7 +206,6 @@ def test_example_chunk_o_bwd_compilation():
         dg_tilelang = dg_tilelang.sum(dim=0)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_chunk_scaled_dot_kkt_compilation():
     from example_chunk_scaled_dot_kkt import tilelang_chunk_scaled_dot_kkt_fwd, prepare_input
 
@@ -222,7 +217,6 @@ def test_example_chunk_scaled_dot_kkt_compilation():
     A_tilelang = kernel(K, Beta, G)  # noqa: F841
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_cumsum_compilation():
     from example_cumsum import tilelang_chunk_local_cumsum_scalar, prepare_cumsum_input, prepare_cumsum_output
 
@@ -245,7 +239,6 @@ def test_example_cumsum_compilation():
     G_new_tilelang = kernel(G)  # noqa: F841
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_chunk_delta_h_compilation():
     from example_chunk_delta_h import tilelang_chunk_gated_delta_rule_fwd_h, prepare_input
 

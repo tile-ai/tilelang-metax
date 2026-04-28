@@ -77,7 +77,7 @@ def prepare_cumsum_input(
     H,
     dtype,
 ):
-    G = torch.randn(B, S, H, dtype=dtype).cuda()
+    G = torch.randn(B, S, H, dtype=dtype, device="cuda")
     return G
 
 
@@ -87,7 +87,7 @@ def prepare_cumsum_output(
     H,
     dtype,
 ):
-    G_new = torch.empty(B, S, H, dtype=dtype).cuda()
+    G_new = torch.empty(B, S, H, dtype=dtype, device="cuda")
     return G_new
 
 

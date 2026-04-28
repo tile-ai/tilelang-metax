@@ -60,7 +60,7 @@ def tl_gemm(
             T.clear(C_local)
             T.clear(C_local_accum)
             K_iters = T.ceildiv(K, block_K)
-            for k in T.Pipelined(K_iters, num_stages=4):
+            for k in T.Pipelined(K_iters, num_stages=1):
                 # Load A into shared memory
                 T.copy(A[by * block_M, k * block_K], A_shared)
                 # Load B into shared memory
