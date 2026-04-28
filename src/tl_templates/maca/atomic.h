@@ -179,19 +179,24 @@ TL_DEVICE void AtomicAddx2Ret(T1 *ref, T2 *val, T1 *ret, int memory_order = 0) {
 template <typename T1, typename T2>
 TL_DEVICE void AtomicAddx4(T1 *ref, T2 *val, int memory_order = 0) {
   (void)memory_order;
-  atomicAdd(reinterpret_cast<T1 *>(ref), static_cast<T1>(val[0]));
-  atomicAdd(reinterpret_cast<T1 *>(ref + 1), static_cast<T1>(val[1]));
-  atomicAdd(reinterpret_cast<T1 *>(ref + 2), static_cast<T1>(val[2]));
-  atomicAdd(reinterpret_cast<T1 *>(ref + 3), static_cast<T1>(val[3]));
+  using NT1 = typename normalize_atomic_type<T1>::type;
+  atomicAdd(reinterpret_cast<NT1 *>(ref), static_cast<NT1>(val[0]));
+  atomicAdd(reinterpret_cast<NT1 *>(ref + 1), static_cast<NT1>(val[1]));
+  atomicAdd(reinterpret_cast<NT1 *>(ref + 2), static_cast<NT1>(val[2]));
+  atomicAdd(reinterpret_cast<NT1 *>(ref + 3), static_cast<NT1>(val[3]));
 }
 
 template <typename T1, typename T2>
 TL_DEVICE void AtomicAddx4Ret(T1 *ref, T2 *val, T1 *ret, int memory_order = 0) {
   (void)memory_order;
-  ret[0] = atomicAdd(reinterpret_cast<T1 *>(ref), static_cast<T1>(val[0]));
-  ret[1] = atomicAdd(reinterpret_cast<T1 *>(ref + 1), static_cast<T1>(val[1]));
-  ret[2] = atomicAdd(reinterpret_cast<T1 *>(ref + 2), static_cast<T1>(val[2]));
-  ret[3] = atomicAdd(reinterpret_cast<T1 *>(ref + 3), static_cast<T1>(val[3]));
+  using NT1 = typename normalize_atomic_type<T1>::type;
+  ret[0] = atomicAdd(reinterpret_cast<NT1 *>(ref), static_cast<NT1>(val[0]));
+  ret[1] =
+      atomicAdd(reinterpret_cast<NT1 *>(ref + 1), static_cast<NT1>(val[1]));
+  ret[2] =
+      atomicAdd(reinterpret_cast<NT1 *>(ref + 2), static_cast<NT1>(val[2]));
+  ret[3] =
+      atomicAdd(reinterpret_cast<NT1 *>(ref + 3), static_cast<NT1>(val[3]));
 }
 
 // For vectorized AtomicAdd, we maintain two versions of interfaces:
