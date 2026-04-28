@@ -287,7 +287,7 @@ jobs:
             uv pip install -v -r requirements-test-rocm.txt
           elif [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
             uv pip install -v -r requirements-test-maca.txt
-            uv pip install -v flash_linear_attention==0.4.0+metax3.5.3.9torch2.8 -i https://repos.metax-tech.com/r/maca-pypi/simple --trusted-host repos.metax-tech.com
+            uv pip install -v --python-version 3.10.0 flash_linear_attention==0.4.0+metax3.5.3.9torch2.8 -i https://repos.metax-tech.com/r/maca-pypi/simple --trusted-host repos.metax-tech.com
           elif [[ "${{ matrix.runner.toolkit }}" == *"Metal"* ]]; then
             uv pip install -v -r requirements-test-metal.txt
           else
