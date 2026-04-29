@@ -204,6 +204,8 @@ public:
         << ". A zero grid dimension is often caused by a dynamic shape"
         << " (e.g. num_tokens) being 0 at runtime.";
 
+    mcGetLastError();
+
     void *config[] = {MC_LAUNCH_PARAM_BUFFER_POINTER, packed_args,
                       MC_LAUNCH_PARAM_BUFFER_SIZE, &packed_nbytes,
                       MC_LAUNCH_PARAM_END};
