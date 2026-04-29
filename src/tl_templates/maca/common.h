@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "atomic.h"
 #include <common/maca_bfloat16.h>
 #include <common/maca_fp16.h>
 #include <cute/arch/mma.hpp>
@@ -242,8 +243,9 @@ TL_DEVICE unsigned __pack_maca_bfloat162(const bfloat16_t x,
 
 template <typename T1, typename T2>
 TL_DEVICE void AtomicAdd(T1 *address, T2 val, int memory_order = 0) {
+  using NT1 = typename normalize_atomic_type<T1>::type;
   (void)memory_order;
-  atomicAdd(reinterpret_cast<T1 *>(address), static_cast<T1>(val));
+  atomicAdd(reinterpret_cast<NT1 *>(address), static_cast<NT1>(val));
 }
 
 template <typename T> TL_DEVICE void AtomicAdd(_Float16 *address, T val) {

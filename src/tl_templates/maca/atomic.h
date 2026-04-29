@@ -7,6 +7,10 @@
 #include <mctlass/numeric_types.h>
 #include <type_traits>
 
+using half_t = __half;
+
+using bfloat16_t = maca_bfloat16;
+
 #define TL_DEVICE __forceinline__ __device__
 #define TL_NOT_IMPLEMENTED()                                                   \
   do {                                                                         \
