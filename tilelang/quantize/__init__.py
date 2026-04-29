@@ -14,5 +14,5 @@ from .utils import (
     interleave_weight,  # noqa: F401
 )
 
-from .lop3 import get_lop3_intrin_group  # noqa: F401
+from .lop3_maca import get_lop3_intrin_group  # noqa: F401
 from .mxfp import get_mxfp_intrin_group  # noqa: F401
