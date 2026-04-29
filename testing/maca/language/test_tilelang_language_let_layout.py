@@ -64,7 +64,7 @@ def ref_blocksparse_copy(A, B, BlockMask, M, N, N_S, block_M, block_N):
     return ref_B
 
 
-def run_blocksparse_copy(M, N, block_M, block_N, pass_configs=None):
+def run_blocksparse_copy(M, N, block_M, block_N, pass_configs=None, target="cuda"):
     """Run blocksparse copy test with given parameters."""
     N_S = N // block_N
 
@@ -72,7 +72,7 @@ def run_blocksparse_copy(M, N, block_M, block_N, pass_configs=None):
     kernel = tilelang.compile(
         program,
         out_idx=[1],
-        target="cuda",
+        target=target,
         pass_configs=pass_configs or {},
     )
 
@@ -104,14 +104,14 @@ def test_blocksparse_copy_tma():
     run_blocksparse_copy(M=1024, N=1024, block_M=128, block_N=128, pass_configs={})
 
 
-@tilelang.testing.requires_cuda
 def test_blocksparse_copy_cp_async():
-    """Test blocksparse copy with CP.ASYNC (without TMA)."""
+    """Test blocksparse copy with TMA disabled on MACA."""
     run_blocksparse_copy(
         M=1024,
         N=1024,
         block_M=128,
         block_N=128,
+        target="maca",
         pass_configs={
             tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: True,
             tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,

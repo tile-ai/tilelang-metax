@@ -15,6 +15,8 @@
 
 #include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "target/source/codegen_c.h"
 #include "tvm/ir/expr.h"
@@ -160,11 +162,21 @@ private:
                       const VarNode *variable, std::ostream &os);
   int32_t GetWmmaFragmentSize(const std::string &scope, const VarNode *variable,
                               int32_t size);
+  void EmitMACACPAsync(const CallNode *op);
+  void EmitMACACPAsyncCommit();
+  void EmitMACACPAsyncWait(int pending_groups);
+  void RegisterMACACPAsyncToken(const CallNode *op);
+  void DeclareMACACPAsyncTokens();
 
   std::vector<std::string> eviction_policy_names_ = {
       "EVICT_NORMAL", "EVICT_FIRST", "EVICT_LAST"};
   std::unordered_set<std::string> bf16_supported_ops_ = {
       "bf1622float2", "bf1622int16", "float22bf162", "bf162bf162"};
+  std::unordered_map<const CallNode *, std::pair<std::string, std::string>>
+      maca_cp_async_tokens_;
+  std::vector<const CallNode *> maca_cp_async_token_order_;
+  std::vector<std::string> maca_cp_async_current_group_;
+  std::vector<std::vector<std::string>> maca_cp_async_committed_groups_;
 };
 
 } // namespace codegen

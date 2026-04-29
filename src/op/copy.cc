@@ -801,7 +801,7 @@ CopyInst CopyNode::GetCopyInst(Target target, const LayoutMap &layout_map,
   bool is_async_copy = GetIsAsyncCopy();
   bool no_implicit_commit_wait = GetNoImplicitAsyncCommitWait();
 
-  if (is_async_copy || no_implicit_commit_wait) {
+  if (is_async_copy || (no_implicit_commit_wait && !TargetIsMaca(target))) {
     bool cp_async_supported = CheckCPAsyncCopy(target, layout_map, analyzer);
     ICHECK(cp_async_supported)
         << "Explicit async copy semantics require cp.async lowering, but "

@@ -130,6 +130,8 @@ bool TargetHasAsyncCopy(Target target) {
   if (TargetIsCuda(target)) {
     int arch = GetArchInt(target);
     return arch >= 80;
+  } else if (TargetIsMaca(target)) {
+    return true;
   } else if (TargetIsCDNA(target)) {
     if (target->attrs.count("mcpu")) {
       std::string mcpu = Downcast<tvm::ffi::String>(target->attrs.at("mcpu"));

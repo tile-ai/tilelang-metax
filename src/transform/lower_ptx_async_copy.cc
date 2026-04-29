@@ -714,7 +714,7 @@ tvm::transform::Pass LowerPTXAsyncCopy() {
       return f;
     }
     Target target = target_opt.value();
-    if (!TargetIsCuda(target)) {
+    if (!TargetIsCuda(target) && !TargetIsMaca(target)) {
       return f;
     }
 
