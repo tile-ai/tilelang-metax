@@ -6,7 +6,6 @@ import tilelang.testing
 import torch
 
 
-@tilelang.testing.requires_cuda
 def test_stg32_codegen():
     """Test that stg32 generates tl::store_global_32 in CUDA source."""
 
@@ -34,7 +33,6 @@ def test_stg32_codegen():
     torch.testing.assert_close(Y, X, atol=1e-5, rtol=1e-5)
 
 
-@tilelang.testing.requires_cuda
 def test_stg64_codegen():
     """Test that stg64 generates tl::store_global_64 in CUDA source."""
 
@@ -63,7 +61,6 @@ def test_stg64_codegen():
     torch.testing.assert_close(Y, X, atol=1e-5, rtol=1e-5)
 
 
-@tilelang.testing.requires_cuda
 def test_stg128_codegen():
     """Test that stg128 generates tl::store_global_128 in CUDA source."""
 
@@ -92,8 +89,6 @@ def test_stg128_codegen():
     torch.testing.assert_close(Y, X, atol=1e-5, rtol=1e-5)
 
 
-@tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(10, 0)
 def test_stg256_codegen():
     """Test that stg256 generates tl::store_global_256 in CUDA source."""
 
@@ -122,7 +117,6 @@ def test_stg256_codegen():
     torch.testing.assert_close(Y, X, atol=1e-5, rtol=1e-5)
 
 
-@tilelang.testing.requires_cuda
 def test_stg32_predicated_codegen():
     """Test that stg32 with predicate generates tl::store_global_32_conditional(ptr, val, pred) in CUDA source."""
 
@@ -148,7 +142,6 @@ def test_stg32_predicated_codegen():
     assert "store_global_32" in src, "Expected store_global_32 call in generated CUDA source"
 
 
-@tilelang.testing.requires_cuda
 def test_stg64_predicated_codegen():
     """Test that stg64 with predicate generates tl::store_global_64_conditional(ptr, val, pred) in CUDA source."""
 
@@ -175,7 +168,6 @@ def test_stg64_predicated_codegen():
     assert "store_global_64" in src, "Expected store_global_64 call in generated CUDA source"
 
 
-@tilelang.testing.requires_cuda
 def test_stg128_predicated_codegen():
     """Test that stg128 with predicate generates tl::store_global_128_conditional(ptr, val, pred) in CUDA source."""
 
@@ -202,8 +194,6 @@ def test_stg128_predicated_codegen():
     assert "store_global_128" in src, "Expected store_global_128 call in generated CUDA source"
 
 
-@tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(10, 0)
 def test_stg256_predicated_codegen():
     """Test that stg256 with predicate generates tl::store_global_256_conditional(ptr, val, pred) in CUDA source."""
 
