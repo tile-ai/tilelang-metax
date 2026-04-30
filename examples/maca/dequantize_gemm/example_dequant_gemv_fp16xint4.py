@@ -166,7 +166,7 @@ def main() -> None:
     storage_dtype = T.int8
     source_format = "uint"
     n_partition = 4
-    reduce_thread = 32
+    reduce_thread = 64
     fast_decoding = True
     trans_A = False
     trans_B = True
