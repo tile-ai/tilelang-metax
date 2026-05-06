@@ -2121,7 +2121,7 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
       this->mcrand_random_generator_state_type = "mcrandStatePhilox4_32_10_t";
     }
     this->PrintIndent();
-    this->stream << this->mcrand_random_generator_state_type
+    this->stream << this->mcrand_random_generator_state_type << " "
                  << this->mcrand_random_generator_state << ";\n";
     this->PrintIndent();
     this->stream << "mcrand_init(" << PrintExpr(op->args[0]) << ", "
