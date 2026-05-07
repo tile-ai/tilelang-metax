@@ -416,7 +416,7 @@ using namespace tir::transform;
 
 MACAMemcpyAsyncInjectResult InjectMACAMemcpyAsync(const Stmt &body,
                                                   const PrimExpr &mbar) {
-  MACAMemccpyAsyncInjector injector(mbar);
+  MACAMemcpyAsyncInjector injector(mbar);
   Stmt injected = injector(body);
   return {injected, injector.InjectedMACAMemcpyAsync()};
 }

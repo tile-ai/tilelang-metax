@@ -1583,7 +1583,7 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     this->stream << mbar << " = memcpy_async<" << bytes
                  << ">((void* __restrict__)" << dst << ", (void* __restrict__)"
                  << src << ");\n";
-  } else if (op->op.same_as(tl::maca_barrier_arrive_and_wait)) {
+  } else if (op->op.same_as(tl::maca_barrier_arrive_and_wait())) {
     this->PrintIndent();
     ICHECK(op->args.size() == 1)
         << "maca_barrier_arrive_and_wait expects 1 argument (bar)";

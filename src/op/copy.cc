@@ -963,7 +963,7 @@ Stmt CopyNode::LowerCPAsyncCopy(const LowerArgs &T,
 }
 
 Stmt CopyNode::LowerMACAMemcpyAsync(const LowerArgs &T,
-                                    arith::Analyzer *analyzer) {
+                                    arith::Analyzer *analyzer) const {
   using namespace tvm::transform;
 
   PrimExpr mbar_handle;

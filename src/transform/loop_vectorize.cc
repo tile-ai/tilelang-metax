@@ -521,7 +521,8 @@ private:
       buffer_vector_infos_.push_back({Buffer(), vectorize_length, false, {}});
       return arith::IRMutatorWithAnalyzer::VisitExpr_(node);
     } else if (node->op.same_as(builtin::ptx_cp_async()) ||
-               node->op.same_as(tl::ptx_cp_async()) || node->op.same_as(tl::maca_memcpy_async()) {
+               node->op.same_as(tl::ptx_cp_async()) ||
+               node->op.same_as(tl::maca_memcpy_async())) {
       // builtin::ptx_cp_async stores bytes, while tl::ptx_cp_async stores
       // logical element counts. In both cases we pick the largest vector width
       // whose eventual PTX payload is one of {4, 8, 16} bytes.
