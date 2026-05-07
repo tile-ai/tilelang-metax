@@ -121,6 +121,8 @@ class GemmMACAMMA(GemmBase):
                 B_local = T.alloc_local((warp_cols * local_size_b), in_dtype)
                 if clear_accum:
                     T.clear(C_buf)
+                if self.mbar is not None:
+                    T.maca_barrier_arrive_and_wait(self.mbar)
                 for ki in T.serial(0, (block_K // micro_size_k)):
                     # Load A into fragment
                     mma_emitter.ldmatrix_a(

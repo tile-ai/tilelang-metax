@@ -289,7 +289,8 @@ private:
   }
 
   bool IsCPAsyncOp(const Op &op) {
-    return op == builtin::ptx_cp_async() || op == tl::ptx_cp_async();
+    return op == builtin::ptx_cp_async() || op == tl::ptx_cp_async() ||
+           op == tl::maca_memcpy_async();
   }
 
   static constexpr int kCPAsyncDstPtrArg = 0;

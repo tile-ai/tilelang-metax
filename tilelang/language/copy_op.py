@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from typing import Literal, Any
-from tilelang._typing import BufferLikeType
+from tilelang._typing import BufferLikeType, BarrierType
 from tilelang.utils.language import (
     to_buffer_region,
     legalize_pairwise_extents,
@@ -227,6 +227,53 @@ def tma_copy(
         ann["eviction_policy"] = eviction_policy_map[eviction_policy]
 
     return tir.call_intrin("handle", tir.op.Op.get("tl.tileop.tma_copy"), src, dst, annotations=ann if ann else None)
+
+
+def maca_async_copy(
+    src: BufferLikeType,
+    dst: BufferLikeType,
+    barrier: BarrierType,
+    *,
+    annotations: dict | None = None,
+) -> tir.PrimExpr:
+    """MACA async copy - emits memcpy_async.
+
+    The operation writes the returned barrier handle to the provided barrier buffer.
+    The user must call T.maca_barrier_arrive_and_wait() for synchronization.
+
+    Args:
+        src: Source memory region (global memory)
+        dst: Destination memory region (shared memory)
+        barrier: MACA barrier (from T.alloc_maca_barrier()) for storing the barrier handle.
+        annotations: Additional annotations dict. Values in annotations take
+            precedence over individual arguments.
+
+    Returns:
+        tir.PrimExpr: The barrier handle that was stored (for convenience, same as buffer access)
+    """
+    # If both side are buffers, we should make sure their shapes are equal
+    if isinstance(src, tir.Buffer) and isinstance(dst, tir.Buffer):
+        ir.assert_structural_equal(src.shape, dst.shape)
+
+    src_extent = get_extent(src)
+    dst_extent = get_extent(dst)
+
+    assert src_extent or dst_extent, "Can't deduce copy extents from args. Both src and dst miss extents info."
+    src_extent = list(src_extent) if src_extent else [1] * len(dst_extent)
+    dst_extent = list(dst_extent) if dst_extent else [1] * len(src_extent)
+
+    src_extent, dst_extent = legalize_pairwise_extents(src_extent, dst_extent)
+
+    src = to_buffer_region(src, access_type="r", extents=src_extent)
+    dst = to_buffer_region(dst, access_type="w", extents=dst_extent)
+
+    ann = annotations.copy() if annotations else {}
+
+    from .builtin import _mbar_to_buffer_load
+
+    ann["barrier"] = _mbar_to_buffer_load(barrier)
+
+    return tir.call_intrin("handle", tir.op.Op.get("tl.tileop.maca_async_copy"), src, dst, annotations=ann)
 
 
 def transpose(

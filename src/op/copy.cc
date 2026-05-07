@@ -14,6 +14,7 @@
 #include "../transform/common/loop_fusion_utils.h"
 #include "../transform/loop_partition.h"
 #include "../transform/loop_vectorize.h"
+#include "../transform/maca_memcpy_async_injector.h"
 #include "../transform/ptx_async_copy_injector.h"
 #include "utils.h"
 
@@ -867,6 +868,12 @@ Stmt CopyNode::Lower(const LowerArgs &T, arith::Analyzer *analyzer) const {
     ICHECK(ldsm_copy.defined()) << "Failed to lower ptx matrix copy";
     return ldsm_copy;
   } else if (copy_inst == CopyInst::kCPAsync) {
+    if (TargetIsMaca(target)) {
+      auto memcpy_async_copy = LowerMACAMemcpyAsync(T, analyzer);
+      ICHECK(memcpy_async_copy.defined())
+          << "Failed to lower memcpy_async copy";
+      return memcpy_async_copy;
+    }
     auto cp_async_copy = LowerCPAsyncCopy(T, analyzer);
     ICHECK(cp_async_copy.defined()) << "Failed to lower cp.async copy";
     return cp_async_copy;
@@ -953,6 +960,50 @@ Stmt CopyNode::LowerCPAsyncCopy(const LowerArgs &T,
     return SeqStmt({cp_async_loop, commit_group});
   }
   return cp_async_loop;
+}
+
+Stmt CopyNode::LowerMACAMemcpyAsync(const LowerArgs &T,
+                                    arith::Analyzer *analyzer) {
+  using namespace tvm::transform;
+
+  PrimExpr mbar_handle;
+  if (auto user_barrier = annotations.Get("barrier")) {
+    mbar_handle = Downcast<PrimExpr>(user_barrier.value());
+  } else {
+    LOG(FATAL) << "T.maca_async_copy() requires a barrier argument. "
+               << "Use T.maca_async_copy(src, dst, barrier=bar).";
+  }
+
+  auto simt_loop = MakeSIMTLoop(analyzer);
+  auto fused_loop = Downcast<For>(ParallelLoopFuser::Fuse(simt_loop));
+  auto par_op = ParallelOp(fused_loop);
+
+  std::vector<InferLevel> levels = {InferLevel::kCommon, InferLevel::kStrict,
+                                    InferLevel::kFree};
+
+  for (auto level : levels) {
+    par_op->InferLayout({T.target,
+                         T.thread_bounds,
+                         T.layout_map,
+                         analyzer,
+                         false,
+                         T.buffer_remap,
+                         {}},
+                        level);
+  }
+  auto loop_layout = par_op->GetLoopLayout();
+  Stmt lowered_loop =
+      LowerParallelLoop(par_op->GetRoot(), loop_layout, T.thread_var, analyzer,
+                        T.layout_map, par_op->GetPredicate(T.thread_var));
+
+  auto inject_result = InjectMACAMemcpyAsync(lowered_loop, mbar_handle);
+  Stmt memcpy_async_loop = inject_result.stmt;
+  ICHECK(inject_result.injected_maca_memcpy_async)
+      << "maca_async_copy rewrite miss for copy src=" << src->name
+      << " (scope=" << src.scope() << ", dtype=" << src->dtype
+      << "), dst=" << dst->name << " (scope=" << dst.scope()
+      << ", dtype=" << dst->dtype << ")";
+  return memcpy_async_loop;
 }
 
 // Lowers the copy using standard load/store with loop transformations.
@@ -2363,6 +2414,22 @@ TVM_REGISTER_OP("tl.tileop.tma_copy")
                                 Map<String, ObjectRef> annotations) {
                                Map<String, ObjectRef> ann = annotations;
                                ann.Set("is_tma_copy",
+                                       IntImm(DataType::Int(32), 1));
+                               return Copy(args, ann);
+                             })
+    .set_num_inputs(5)
+    .set_attr<TCallEffectKind>("TCallEffectKind",
+                               Integer(CallEffectKind::kOpaque));
+
+// Register the maca_async_copy operation - for MACA async copy using
+// memcpy_async and barrier_arrive_and_wait.
+TVM_REGISTER_OP("tl.tileop.maca_async_copy")
+    .set_attr<TScriptPrinterName>("TScriptPrinterName", "maca_async_copy")
+    .set_attr<OpBuilderFunc>("TLOpBuilder",
+                             [](Array<PrimExpr> args,
+                                Map<String, ObjectRef> annotations) {
+                               Map<String, ObjectRef> ann = annotations;
+                               ann.Set("is_async_copy",
                                        IntImm(DataType::Int(32), 1));
                                return Copy(args, ann);
                              })

@@ -2106,6 +2106,10 @@ tvm::transform::Pass PipelinePlanning() {
   auto pass_func = [=](PrimFunc f, const IRModule &m, PassContext ctx) {
     bool use_async_copy =
         ctx->GetConfig<Bool>("tir.use_async_copy", Bool(true)).value();
+    auto target = f->GetAttr<Target>(tvm::attr::kTarget);
+    if (TargetIsMaca(target.value())) {
+      use_async_copy = false;
+    }
     PrimFuncNode *fptr = f.CopyOnWrite();
     fptr->body = PipelinePlanner::Substitute(f, use_async_copy);
     return f;

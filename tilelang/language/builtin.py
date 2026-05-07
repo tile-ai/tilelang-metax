@@ -1257,6 +1257,39 @@ def tcgen05_after_thread_sync():
     return tir.call_intrin("void", tir.op.Op.get("tl.tcgen05_after_thread_sync"))
 
 
+def maca_barrier_arrive_and_wait(barrier: tir.Buffer | BufferLoad | PrimExpr) -> tir.Stmt:
+    """Perform MACA barrier arrive and wait operation.
+
+    This is used to synchronize after memcpy_async operations.
+
+    Args:
+        barrier: tir.Buffer | BufferLoad | PrimExpr
+            The barrier handle (from T.alloc_maca_barrier()) or buffer load (e.g., bar[0]).
+
+    Returns:
+        tir.Stmt: A statement representing the barrier_arrive_and_wait operation.
+
+    Example:
+        .. code-block:: python
+
+            @T.prim_func
+            def func(A: Tensor((M, N)), B: Tensor((M, N)):
+                with T.Kernel(...) as (bx, by):
+                    A_shared = T.alloc_shared((block_M, block_N))
+
+                    # Allocate MACA barrier
+                    bar = T.alloc_maca_barrier()
+
+                    # Async copy with barrier
+                    T.maca_async_copy(A[...], A_shared, barrier=bar)
+
+                    # Wait for the async copy to complete
+                    T.maca_barrier_arrive_and_wait(bar)
+    """
+    barrier = _mbar_to_buffer_load(barrier)
+    return evaluate(tir.call_intrin("void", tir.op.Op.get("tl.maca_barrier_arrive_and_wait"), barrier))
+
+
 def ptx_mma_sm70(
     shape,
     A_layout,

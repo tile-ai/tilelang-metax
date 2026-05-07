@@ -141,6 +141,8 @@ bool TargetHasAsyncCopy(Target target) {
     } else {
       return false;
     }
+  } else if (TargetIsMaca(target)) {
+    return true;
   }
 
   return false;

@@ -709,6 +709,12 @@ private:
         annotations.Set(tl::attr::kLocalVarInit, init);
       }
     }
+    if (alloc_map_.count(buffer_var.get())) {
+      auto alloc = alloc_map_.at(buffer_var.get())->allocs[0];
+      if (auto barrier_type = alloc->annotations.Get("barrier_type")) {
+        annotations.Set("barrier_type", barrier_type.value());
+      }
+    }
     return annotations;
   }
   // Remap the index

@@ -162,6 +162,10 @@ public:
       ICHECK(buffer.defined()) << "InferLayout returned an undefined buffer.";
       ICHECK(layout.defined()) << "InferLayout returned an undefined layout.";
 
+      if (std::count(maca_async_copy_buffers_.begin(),
+                     maca_async_copy_buffers_.end(), buffer))
+        continue;
+
       // Helper: propagate inferred layout to alias buffers (same data Var)
       auto propagate_alias = [&](const Buffer &src_buffer,
                                  const Layout &src_layout) {
@@ -586,6 +590,10 @@ private:
           }
         }
         buffer_oob_vec_.push_back(src_oob || dst_oob);
+
+        if (TargetIsMaca(target_) && copy->GetIsAsyncCopy()) {
+          maca_async_copy_buffers_.push_back(dst_tensor);
+        }
       } else {
         buffer_oob_vec_.push_back(false);
       }
@@ -1013,6 +1021,7 @@ private:
   Target target_;
   LayoutMap annotated_layout_map_;
   bool skip_thread_partition_{false};
+  std::vector<Buffer> maca_async_copy_buffers_;
 
   std::vector<TileOperator> BackupInferList() {
     std::vector<TileOperator> back_infer_list;

@@ -195,6 +195,25 @@ def alloc_cluster_barrier(arrive_count: int | list[int]) -> Buffer:
     return buffer
 
 
+def alloc_maca_barrier(shape: ShapeType = 1) -> Buffer:
+    """Allocate a MACA barrier buffer.
+
+    Args:
+        shape (tuple): The shape of the barrier to allocate. Defaults to 1.
+
+    Returns:
+        T.Buffer: A TVM buffer object allocated for MACA barrier handles.
+
+    Examples
+    --------
+    >>> bar = alloc_maca_barrier(4)  # allocate 4 barrier handles for pipelining
+    >>> T.maca_async_copy(A[...], A_shared, barrier=bar[i])  # assign barrier handle
+    >>> T.barrier_arrive_and_wait(bar[i])  # wait for barrier
+    """
+    buffer = T.alloc_buffer(shape, "void", scope="local.barrier")
+    return buffer
+
+
 def alloc_tmem(shape: ShapeType, dtype: DType) -> Buffer:
     """
     Allocate a Tensor Memory (TMEM) buffer for use with 5th generation Tensor Core operations (e.g., TCGEN5.MMA).

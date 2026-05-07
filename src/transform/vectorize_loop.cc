@@ -685,7 +685,8 @@ public:
     if (op->op.same_as(builtin::ptx_cp_async())) {
       return scalar_count * 8;
     }
-    ICHECK(op->op.same_as(tl::ptx_cp_async()));
+    ICHECK(op->op.same_as(tl::ptx_cp_async()) ||
+           op->op.same_as(tl::maca_memcpy_async()));
     auto dst_elem_bits = GetAccessPtrElementBits(op->args[0]);
     auto src_elem_bits = GetAccessPtrElementBits(op->args[1]);
     if (!dst_elem_bits.has_value() || !src_elem_bits.has_value()) {
@@ -766,6 +767,69 @@ public:
     return Call(op->dtype, op->op, new_args);
   }
 
+  PrimExpr MutateMACAMemcpyAsyncExpr_(const CallNode *op) {
+    ICHECK(op->op.same_as(tl::maca_memcpy_async()));
+    if (op->args.size() != 4 && op->args.size() != 5) {
+      return tvm::ffi::GetRef<PrimExpr>(op);
+    }
+
+    PrimExpr dst = VisitExpr(op->args[0]);
+    PrimExpr src = VisitExpr(op->args[1]);
+    PrimExpr count = VisitExpr(op->args[2]);
+    PrimExpr mbar = VisitExpr(op->args[3]);
+    Optional<PrimExpr> predicate = std::nullopt;
+    if (op->args.size() == 5) {
+      auto pred = VisitExpr(op->args[4]);
+      if (pred.dtype().is_scalable_or_fixed_length_vector()) {
+        need_scalarize_ = true;
+        return tvm::ffi::GetRef<PrimExpr>(op);
+      }
+      predicate = pred;
+    }
+
+    auto lanes_ptr = as_const_int(var_lanes_);
+    if (!lanes_ptr || *lanes_ptr <= 1) {
+      Array<PrimExpr> new_args{dst, src, count, mbar};
+      if (predicate.defined()) {
+        new_args.push_back(predicate.value());
+      }
+      if (new_args.same_as(op->args)) {
+        return tvm::ffi::GetRef<PrimExpr>(op);
+      }
+      return Call(op->dtype, op->op, new_args);
+    }
+
+    auto bits_per_call = GetCPAsyncBitsPerCall(op, count);
+    if (!bits_per_call.has_value()) {
+      need_scalarize_ = true;
+      return tvm::ffi::GetRef<PrimExpr>(op);
+    }
+
+    int vector_size = static_cast<int>(*lanes_ptr);
+    int total_bits = bits_per_call.value() * vector_size;
+    if (total_bits % 8 != 0) {
+      need_scalarize_ = true;
+      return tvm::ffi::GetRef<PrimExpr>(op);
+    }
+    int total_bytes = total_bits / 8;
+    if (!IsValidCPAsyncTransferBytes(total_bytes)) {
+      need_scalarize_ = true;
+      return tvm::ffi::GetRef<PrimExpr>(op);
+    }
+
+    int total_count =
+        static_cast<int>(Downcast<IntImm>(count)->value) * vector_size;
+    Array<PrimExpr> new_args{dst, src, IntImm(count.dtype(), total_bytes),
+                             mbar};
+    if (predicate.defined()) {
+      new_args.push_back(predicate.value());
+    }
+    if (new_args.same_as(op->args)) {
+      return tvm::ffi::GetRef<PrimExpr>(op);
+    }
+    return Call(op->dtype, op->op, new_args);
+  }
+
   // Call
   PrimExpr VisitExpr_(const CallNode *op) final {
     if (op->op.same_as(builtin::if_then_else())) {
@@ -799,6 +863,8 @@ public:
     } else if (op->op.same_as(builtin::ptx_cp_async()) ||
                op->op.same_as(tl::ptx_cp_async())) {
       return MutatePTXCPAsyncExpr_(op);
+    } else if (op->op.same_as(tl::maca_memcpy_async())) {
+      return MutateMACAMemcpyAsyncExpr_(op);
     }
     auto optional_op = op->op.as<Op>();
     bool vectorizable = optional_op &&

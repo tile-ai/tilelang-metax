@@ -1269,6 +1269,8 @@ struct TileLangThreadSyncPlanner : public ConstrVisitor {
         e.scope = StorageScope::Create(s);
         curr_stmt_.access.emplace_back(std::move(e));
       }
+    } else if (op->op.same_as(tl::maca_memcpy_async())) {
+      return;
     } else {
       ConstrVisitor::VisitExpr_(op);
     }

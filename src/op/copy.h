@@ -332,6 +332,12 @@ protected:
   Stmt LowerCPAsyncCopy(const LowerArgs &T, arith::Analyzer *analyzer) const;
 
   /*!
+   * \brief Generate lowering for MACA memory async copy (memcpy_async).
+   */
+  Stmt LowerMACAMemcpyAsync(const LowerArgs &T,
+                            arith::Analyzer *analyser) const;
+
+  /*!
    * \brief Generate SIMT (thread-level) loop for copying.
    */
   For MakeSIMTLoop(arith::Analyzer *analyzer) const;

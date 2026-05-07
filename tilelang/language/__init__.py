@@ -45,6 +45,7 @@ from .allocate import (
     alloc_fragment,  # noqa: F401
     alloc_barrier,  # noqa: F401
     alloc_cluster_barrier,  # noqa: F401
+    alloc_maca_barrier,  # noqa: F401
     alloc_tmem,  # noqa: F401
     alloc_reducer,  # noqa: F401
     alloc_descriptor,  # noqa: F401
@@ -55,7 +56,7 @@ from .allocate import (
     alloc_global,  # noqa: F401
 )
 from tvm.script.parser.tir import allocate as allocate  # noqa: F401
-from .copy_op import copy, async_copy, tma_copy, transpose, c2d_im2col  # noqa: F401
+from .copy_op import copy, async_copy, tma_copy, maca_async_copy, transpose, c2d_im2col  # noqa: F401
 from tilelang.tileop.base import GemmWarpPolicy  # noqa: F401
 from .gemm_op import gemm, wgmma_gemm, tcgen05_gemm  # noqa: F401
 from .experimental.gemm_sp import gemm_sp, gemm_sp_v2  # noqa: F401
@@ -112,6 +113,7 @@ from .builtin import activemask as activemask  # noqa: F401
 from .builtin import syncthreads_count as syncthreads_count  # noqa: F401
 from .builtin import syncthreads_and as syncthreads_and  # noqa: F401
 from .builtin import syncthreads_or as syncthreads_or  # noqa: F401
+from .builtin import maca_barrier_arrive_and_wait  # noqa: F401
 
 from .utils import index_to_coordinates  # noqa: F401
 

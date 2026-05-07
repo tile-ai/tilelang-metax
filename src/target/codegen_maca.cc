@@ -1567,56 +1567,28 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     this->stream << ss.str();
     this->stream << ");\n";
   };
-  if (op->op.same_as(builtin::ptx_cp_async())) {
+  if (op->op.same_as(tl::maca_memcpy_async())) {
     // args[0] = dst_access_ptr, args[1] = src_access_ptr, args[2] = bytes,
-    // args[3] = predicate (optional)
-    ICHECK(op->args.size() == 3 || op->args.size() == 4)
-        << "ptx_cp_async expects 3 or 4 arguments (dst_access_ptr, "
-           "src_access_ptr, bytes, [predicate])";
+    // args[3] = barrier
+    ICHECK(op->args.size() == 4)
+        << "maca_memcpy_async expects 4 arguments (dst_access_ptr, "
+           "src_access_ptr, bytes, barrier)";
 
     std::string dst = this->PrintExpr(op->args[0]);
     std::string src = this->PrintExpr(op->args[1]);
-    std::string size = this->PrintExpr(op->args[2]);
+    std::string bytes = this->PrintExpr(op->args[2]);
+    std::string mbar = this->PrintExpr(op->args[3]);
 
     this->PrintIndent();
-    if (op->args.size() == 3) {
-      // Non-predicated version
-      this->stream << "tl::cp_async_gs<" << size << ">(" << dst << ", " << src
-                   << ");\n";
-    } else {
-      // Predicated version
-      std::string condition = this->PrintExpr(op->args[3]);
-      this->stream << "tl::cp_async_gs_conditional<" << size << ">(" << dst
-                   << ", " << src << ", " << condition << ");\n";
-    }
-  } else if (op->op.same_as(tl::ptx_cp_async())) {
-    // TileLang version: args[0] = dst_access_ptr, args[1] = src_access_ptr,
-    // args[2] = bytes, args[3] = predicate (optional)
-    ICHECK(op->args.size() == 3 || op->args.size() == 4)
-        << "tl::ptx_cp_async expects 3 or 4 arguments (dst_access_ptr, "
-           "src_access_ptr, bytes, [predicate])";
-
-    std::string dst = this->PrintExpr(op->args[0]);
-    std::string src = this->PrintExpr(op->args[1]);
-    std::string size = this->PrintExpr(op->args[2]);
-
+    this->stream << mbar << " = memcpy_async<" << bytes
+                 << ">((void* __restrict__)" << dst << ", (void* __restrict__)"
+                 << src << ");\n";
+  } else if (op->op.same_as(tl::maca_barrier_arrive_and_wait)) {
     this->PrintIndent();
-    if (op->args.size() == 3) {
-      // Non-predicated version
-      this->stream << "tl::cp_async_gs<" << size << ">(" << dst << ", " << src
-                   << ");\n";
-    } else {
-      // Predicated version
-      std::string condition = this->PrintExpr(op->args[3]);
-      this->stream << "tl::cp_async_gs_conditional<" << size << ">(" << dst
-                   << ", " << src << ", " << condition << ");\n";
-    }
-  } else if (op->op.same_as(builtin::ptx_commit_group())) {
-    print_extern_call_stmt("tl::cp_async_commit");
-  } else if (op->op.same_as(builtin::ptx_wait_group())) {
-    int n = Downcast<IntImm>(op->args[0])->value;
-    std::string func_name = "tl::cp_async_wait<" + std::to_string(n) + ">";
-    print_extern_call_stmt(func_name, 1);
+    ICHECK(op->args.size() == 1)
+        << "maca_barrier_arrive_and_wait expects 1 argument (bar)";
+    std::string dummyRet = this->PrintExpr(op->args[0]);
+    this->stream << "barrier_arrive_and_wait(" << dummyRet << ")\n";
   } else if (op->op.same_as(builtin::create_barriers())) {
     this->PrintIndent();
     int barrier_count = Downcast<IntImm>(op->args[0])->value;
@@ -2709,6 +2681,9 @@ void CodeGenTileLangMACA::VisitStmt_(const AllocateNode *op) {
     stream << "tl::Tcgen05SMemDescriptor " << vid << ";\n";
   } else if (scope == "local.descriptor.tcgen05_instr") {
     stream << "tl::Tcgen05InstrDescriptor " << vid << ";\n";
+  } else if (scope == "local.barrier") {
+    ICHECK(op->annotations.count("barrier_type"));
+    stream << Downcast<StringImm>(op->annotations.at("barrier_type"))->value;
   } else {
     PrintStorageScope(scope, stream);
     PrintType(op->dtype, stream);
@@ -2750,6 +2725,8 @@ void CodeGenTileLangMACA::VisitStmt_(const AllocateNode *op) {
         init = user_init;
       }
       stream << ' ' << vid << " = " << PrintExpr(init) << ";\n";
+    } else if (scope == "local.barrier") {
+      stream << ' ' << vid << '[' << constant_size << "];\n";
     } else if (scope.find("local.descriptor") != 0) {
       ICHECK(false) << "Unsupported scope: " << scope;
     }

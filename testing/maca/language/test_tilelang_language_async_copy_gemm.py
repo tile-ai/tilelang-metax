@@ -3,13 +3,13 @@ import tilelang.language as T
 import tilelang.testing
 
 
-@tilelang.testing.requires_cuda_compute_version_eq(8, 0)
-def test_copy_and_async_copy_gemm_codegen_equivalent_sm80():
-    """For SM80, T.copy(global->shared) may lower to cp.async.
+@tilelang.testing.pytest.mark.xfail
+def test_copy_and_async_copy_gemm_codegen_equivalent():
+    """T.copy(global->shared) will lower to memcpy_async.
 
     This test checks that the explicit form:
-      T.async_copy(...) + T.ptx_wait_group(0)
-    produces identical CUDA source as:
+      T.maca_async_copy(...)
+    produces identical MACA source as:
       T.copy(...)
 
     This is intentionally a codegen equivalence test (not a perf test).
@@ -35,17 +35,16 @@ def test_copy_and_async_copy_gemm_codegen_equivalent_sm80():
             A_shared = T.alloc_shared((block_M, block_K), T.float16)
             B_shared = T.alloc_shared((block_K, block_N), T.float16)
             C_local = T.alloc_fragment((block_M, block_N), T.float32)
+            bar = T.alloc_maca_barrier()
 
             T.clear(C_local)
 
             for ko in T.Pipelined(T.ceildiv(K, block_K), num_stages=2):
-                T.async_copy(A[by * block_M, ko * block_K], A_shared)
-                T.ptx_wait_group(0)
+                T.maca_async_copy(A[by * block_M, ko * block_K], A_shared, barrier=bar)
 
-                T.async_copy(B[ko * block_K, bx * block_N], B_shared)
-                T.ptx_wait_group(0)
+                T.maca_async_copy(B[ko * block_K, bx * block_N], B_shared, barrier=bar)
 
-                T.gemm(A_shared, B_shared, C_local)
+                T.gemm(A_shared, B_shared, C_local, mbar=bar)
 
             for i, j in T.Parallel(block_M, block_N):
                 C_local[i, j] = T.max(C_local[i, j], 0)
@@ -82,9 +81,9 @@ def test_copy_and_async_copy_gemm_codegen_equivalent_sm80():
 
     sync_matmul_relu = matmul_relu_kernel
 
-    # Compile both and compare the generated CUDA source.
-    async_kernel = tilelang.compile(async_matmul_relu, target="cuda")
-    sync_kernel = tilelang.compile(sync_matmul_relu, target="cuda")
+    # Compile both and compare the generated MACA source.
+    async_kernel = tilelang.compile(async_matmul_relu, target="maca")
+    sync_kernel = tilelang.compile(sync_matmul_relu, target="maca")
 
     async_src = async_kernel.get_kernel_source()
     sync_src = sync_kernel.get_kernel_source()

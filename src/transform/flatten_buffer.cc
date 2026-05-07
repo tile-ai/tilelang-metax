@@ -213,6 +213,11 @@ private:
       }
     }
 
+    if (maca_barrier_type_map_.count(alloc->buffer_var)) {
+      alloc.CopyOnWrite()->annotations.Set(
+          "barrier_type", maca_barrier_type_map_.at(alloc->buffer_var));
+    }
+
     return std::move(alloc);
   }
 
@@ -304,6 +309,15 @@ private:
         call.CopyOnWrite()->args.Set(2, promoter(offset));
       }
     }
+    if (call->op.same_as(tl::maca_memcpy_async())) {
+      ICHECK_EQ(call->args.size(), 4);
+      ICHECK(call->args[3].as<BufferLoad>());
+      ICHECK(call->annotations.count("barrier_type"));
+      auto barrier = call->args[3].as<BufferLoad>().value()->buffer->data;
+      auto barrier_type =
+          Downcast<StringImm>(call->annotations.at("barrier_type"));
+      maca_barrier_type_map_.Set(barrier, barrier_type);
+    }
     return std::move(call);
   }
 
@@ -387,6 +401,8 @@ private:
 
   /*! \brief Local var initializers preserved from block annotations. */
   Map<Var, PrimExpr> local_var_init_map_;
+
+  Map<Var, StringImm> maca_barrier_type_map_;
 };
 
 PrimFunc FlattenBufferRewriter(PrimFunc f) {

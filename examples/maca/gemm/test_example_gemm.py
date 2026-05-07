@@ -2,6 +2,7 @@ import tilelang.testing
 import example_gemm_autotune
 import example_gemm_intrinsics
 import example_gemm
+import example_gemm_with_maca_async_copy
 
 
 def test_example_gemm_autotune():
@@ -15,6 +16,10 @@ def test_example_gemm_intrinsics():
 
 def test_example_gemm():
     example_gemm.main()
+
+
+def test_example_gemm_with_maca_async_copy():
+    example_gemm_with_maca_async_copy.main()
 
 
 if __name__ == "__main__":

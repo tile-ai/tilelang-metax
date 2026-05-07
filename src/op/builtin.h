@@ -1189,6 +1189,16 @@ TVM_DLL const Op &stg128();
  */
 TVM_DLL const Op &stg256();
 
+/*!
+ * \brief tilelang intrinsic for MACA memory async copy.
+ */
+TVM_DLL const Op &maca_memcpy_async();
+
+/*!
+ * \brief tilelang intrinsic for MACA barrier arrive and wait.
+ */
+TVM_DLL const Op &maca_barrier_arrive_and_wait();
+
 } // namespace tl
 } // namespace tvm
 
