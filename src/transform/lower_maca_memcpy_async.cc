@@ -343,9 +343,10 @@ private:
     ffi::Array<PrimExpr> memcpy_async_args;
     if (predicated) {
       memcpy_async_args = {dst_access_ptr, src_access_ptr, PrimExpr(num_elems),
-                           predicate_value};
+                           mbar, predicate_value};
     } else {
-      memcpy_async_args = {dst_access_ptr, src_access_ptr, PrimExpr(num_elems)};
+      memcpy_async_args = {dst_access_ptr, src_access_ptr, PrimExpr(num_elems),
+                           mbar};
     }
     std::string barrier_type;
     if (4 == total_bytes) {
