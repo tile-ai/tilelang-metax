@@ -1588,7 +1588,7 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     ICHECK(op->args.size() == 1)
         << "maca_barrier_arrive_and_wait expects 1 argument (bar)";
     std::string dummyRet = this->PrintExpr(op->args[0]);
-    this->stream << "barrier_arrive_and_wait(" << dummyRet << ")\n";
+    this->stream << "barrier_arrive_and_wait(" << dummyRet << ");\n";
   } else if (op->op.same_as(builtin::create_barriers())) {
     this->PrintIndent();
     int barrier_count = Downcast<IntImm>(op->args[0])->value;
