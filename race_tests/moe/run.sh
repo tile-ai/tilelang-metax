@@ -1,0 +1,1 @@
+python fusedmoe_benchmark.py
