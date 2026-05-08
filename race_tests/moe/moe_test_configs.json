@@ -1,0 +1,42 @@
+{
+  "functional": [
+    {
+      "dhidden": 7168,
+      "dexpert": 2048,
+      "nroutedexperts": 8,
+      "nexpertspertoken": 4,
+      "bs": 1,
+      "seqlen": 8192,
+      "seed": 81394
+    },
+    {
+      "dhidden": 3584,
+      "dexpert": 1024,
+      "nroutedexperts": 4,
+      "nexpertspertoken": 2,
+      "bs": 2,
+      "seqlen": 4096,
+      "seed": 81394
+    }
+  ],
+  "performance": [
+    {
+      "dhidden": 7168,
+      "dexpert": 2048,
+      "nroutedexperts": 8,
+      "nexpertspertoken": 4,
+      "bs": 4,
+      "seqlen": 8192,
+      "seed": 81394
+    },
+    {
+      "dhidden": 3584,
+      "dexpert": 1024,
+      "nroutedexperts": 4,
+      "nexpertspertoken": 2,
+      "bs": 8,
+      "seqlen": 4096,
+      "seed": 81394
+    }
+  ]
+}
