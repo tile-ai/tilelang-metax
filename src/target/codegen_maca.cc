@@ -2091,6 +2091,12 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     if (this->mcrand_random_generator_state_type ==
         "curandStatePhilox4_32_10_t") {
       this->mcrand_random_generator_state_type = "mcrandStatePhilox4_32_10_t";
+    } else if (this->mcrand_random_generator_state_type ==
+               "curandStateMRG32k3a_t") {
+      this->mcrand_random_generator_state_type = "mcrandStateMRG32k3a_t";
+    } else if (this->mcrand_random_generator_state_type ==
+               "curandStateXORWOW_t") {
+      this->mcrand_random_generator_state_type = "mcrandStateXORWOW_t";
     }
     this->PrintIndent();
     this->stream << this->mcrand_random_generator_state_type << " "

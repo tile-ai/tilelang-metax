@@ -6,7 +6,7 @@ import tilelang.testing
 
 
 @tilelang.jit
-def tilelang_rand_1d(M=1024, seed=42, generator="curandStatePhilox4_32_10_t"):
+def tilelang_rand_1d(M=1024, seed=42, generator="mcrandStatePhilox4_32_10_t"):
     num_per_thread = 128
     threads = 1
     blk_M = num_per_thread * threads
@@ -51,9 +51,8 @@ def tilelang_rand_1d(M=1024, seed=42, generator="curandStatePhilox4_32_10_t"):
     return rand_kernel
 
 
-@tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
-    "M, seed, generator", [(1024, 42, "curandStateMRG32k3a_t"), (512, 123, "curandStatePhilox4_32_10_t"), (128, 0, "curandStateXORWOW_t")]
+    "M, seed, generator", [(1024, 42, "mcrandStateMRG32k3a_t"), (512, 123, "mcrandStatePhilox4_32_10_t"), (128, 0, "mcrandStateXORWOW_t")]
 )
 def test_rand_1d(M, seed, generator):
     kernel = tilelang_rand_1d(M, seed, generator)

@@ -23,7 +23,14 @@ def rng_init(seed, seq=None, off=0, generator="curandStatePhilox4_32_10_t") -> t
     state : PrimExpr
         The random number generator state handle.
     """
-    assert generator in ["curandStateMRG32k3a_t", "curandStatePhilox4_32_10_t", "curandStateXORWOW_t"]
+    assert generator in [
+        "curandStateMRG32k3a_t",
+        "curandStatePhilox4_32_10_t",
+        "curandStateXORWOW_t",
+        "mcrandStateMRG32k3a_t",
+        "mcrandStatePhilox4_32_10_t",
+        "mcrandStateXORWOW_t",
+    ]
     seed = tir.convert(seed)
     if seq is None:
         bx = T.get_block_binding()
