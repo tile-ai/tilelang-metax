@@ -329,6 +329,7 @@ jobs:
         run: |
           uv pip install -v .
           uv pip install -v 3rdparty/tvm/3rdparty/tvm-ffi
+          uv pip uninstall -v torch-c-dlpack-ext
 
       - name: Clean up stale /tmp files (self-hosted runners)
         if: startsWith(matrix.runner.name, 'self-hosted')

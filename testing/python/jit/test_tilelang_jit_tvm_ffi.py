@@ -283,14 +283,14 @@ def run_tvm_ffi_dynamic_shape(
     in_dtype = T.dtype(in_dtype).as_torch()
     out_dtype = T.dtype(out_dtype).as_torch()
 
-    tensor_a = torch.randn(M, K, dtype=in_dtype).cuda()
-    tensor_b = torch.randn(K, N, dtype=in_dtype).cuda()
+    tensor_a = torch.randn(M, K, dtype=in_dtype, device="cuda")
+    tensor_b = torch.randn(K, N, dtype=in_dtype, device="cuda")
 
     if trans_A:
         tensor_a = tensor_a.T
     if trans_B:
         tensor_b = tensor_b.T
-    tensor_c = torch.randn(M, N, dtype=out_dtype).cuda()
+    tensor_c = torch.randn(M, N, dtype=out_dtype, device="cuda")
 
     matmul_kernel(tensor_a, tensor_b, tensor_c)
 
