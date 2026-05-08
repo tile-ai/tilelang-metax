@@ -514,7 +514,8 @@ private:
       if (dtype.is_float16() || dtype.is_bfloat16()) {
         vectorize_length = 2;
       } else if (dtype.is_float() && dtype.bits() == 32 &&
-                 TargetHasSMVersionGE(Target::Current(false), 90)) {
+                     TargetHasSMVersionGE(Target::Current(false), 90) ||
+                 TargetIsMaca(Target::Current(false))) {
         vectorize_length = 4;
       }
 

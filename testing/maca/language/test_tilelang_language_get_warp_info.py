@@ -6,13 +6,14 @@ import torch
 from tilelang.utils.target import check_maca_availability
 
 _IS_MACA_AVAILABLE = check_maca_availability()
+_IS_MACA_AVAILABLE = check_maca_availability()
 _DEFAULT_WARPS_PER_GROUP = 4
 
 
 def _resolve_warp_size(warp_size: Optional[int]) -> int:
     if warp_size is not None:
         return int(warp_size)
-    return 64 if _IS_MACA_AVAILABLE else 32
+    return 64 if (_IS_MACA_AVAILABLE or _IS_MACA_AVAILABLE) else 32
 
 
 def _resolve_warps_per_group(warps_per_group: Optional[int]) -> int:

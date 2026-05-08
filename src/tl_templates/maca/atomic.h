@@ -91,25 +91,89 @@ TL_DEVICE T1 AtomicAddRet(T1 *address, T2 val,
 template <typename T1, typename T2>
 TL_DEVICE void AtomicMax(T1 *address, T2 val, int memory_order = 0) {
   (void)memory_order;
-  atomicMax(reinterpret_cast<T1 *>(address), static_cast<T1>(val));
+  using NT1 = typename normalize_atomic_type<T1>::type;
+  if constexpr (std::is_same_v<NT1, half> ||
+                std::is_same_v<NT1, maca_bfloat16>) {
+    // No native atomicMax for half/bf16 on MACA, use atomicCAS loop
+    unsigned short *address_as_ushort =
+        reinterpret_cast<unsigned short *>(address);
+    unsigned short val_as_ushort = *reinterpret_cast<unsigned short *>(&val);
+    unsigned short old_val_ushort = *address_as_ushort;
+    while (val > *reinterpret_cast<T1 *>(&old_val_ushort)) {
+      unsigned short assumed = old_val_ushort;
+      old_val_ushort = atomicCAS(address_as_ushort, assumed, val_as_ushort);
+      if (assumed == old_val_ushort)
+        break;
+    }
+  } else {
+    atomicMax(reinterpret_cast<T1 *>(address), static_cast<T1>(val));
+  }
 }
 
 template <typename T1, typename T2>
 TL_DEVICE T1 AtomicMaxRet(T1 *address, T2 val, int memory_order = 0) {
   (void)memory_order;
-  return atomicMax(reinterpret_cast<T1 *>(address), static_cast<T1>(val));
+  using NT1 = typename normalize_atomic_type<T1>::type;
+  if constexpr (std::is_same_v<NT1, half> ||
+                std::is_same_v<NT1, maca_bfloat16>) {
+    unsigned short *address_as_ushort =
+        reinterpret_cast<unsigned short *>(address);
+    unsigned short val_as_ushort = *reinterpret_cast<unsigned short *>(&val);
+    unsigned short old_val_ushort = *address_as_ushort;
+    while (val > *reinterpret_cast<T1 *>(&old_val_ushort)) {
+      unsigned short assumed = old_val_ushort;
+      old_val_ushort = atomicCAS(address_as_ushort, assumed, val_as_ushort);
+      if (assumed == old_val_ushort)
+        break;
+    }
+    return static_cast<T1>(*reinterpret_cast<T1 *>(&old_val_ushort));
+  } else {
+    return atomicMax(reinterpret_cast<T1 *>(address), static_cast<T1>(val));
+  }
 }
 
 template <typename T1, typename T2>
 TL_DEVICE void AtomicMin(T1 *address, T2 val, int memory_order = 0) {
   (void)memory_order;
-  atomicMin(reinterpret_cast<T1 *>(address), static_cast<T1>(val));
+  using NT1 = typename normalize_atomic_type<T1>::type;
+  if constexpr (std::is_same_v<NT1, half> ||
+                std::is_same_v<NT1, maca_bfloat16>) {
+    // No native atomicMin for half/bf16 on MACA, use atomicCAS loop
+    unsigned short *address_as_ushort =
+        reinterpret_cast<unsigned short *>(address);
+    unsigned short val_as_ushort = *reinterpret_cast<unsigned short *>(&val);
+    unsigned short old_val_ushort = *address_as_ushort;
+    while (val < *reinterpret_cast<T1 *>(&old_val_ushort)) {
+      unsigned short assumed = old_val_ushort;
+      old_val_ushort = atomicCAS(address_as_ushort, assumed, val_as_ushort);
+      if (assumed == old_val_ushort)
+        break;
+    }
+  } else {
+    atomicMin(reinterpret_cast<T1 *>(address), static_cast<T1>(val));
+  }
 }
 
 template <typename T1, typename T2>
 TL_DEVICE T1 AtomicMinRet(T1 *address, T2 val, int memory_order = 0) {
   (void)memory_order;
-  return atomicMin(reinterpret_cast<T1 *>(address), static_cast<T1>(val));
+  using NT1 = typename normalize_atomic_type<T1>::type;
+  if constexpr (std::is_same_v<NT1, half> ||
+                std::is_same_v<NT1, maca_bfloat16>) {
+    unsigned short *address_as_ushort =
+        reinterpret_cast<unsigned short *>(address);
+    unsigned short val_as_ushort = *reinterpret_cast<unsigned short *>(&val);
+    unsigned short old_val_ushort = *address_as_ushort;
+    while (val < *reinterpret_cast<T1 *>(&old_val_ushort)) {
+      unsigned short assumed = old_val_ushort;
+      old_val_ushort = atomicCAS(address_as_ushort, assumed, val_as_ushort);
+      if (assumed == old_val_ushort)
+        break;
+    }
+    return static_cast<T1>(*reinterpret_cast<T1 *>(&old_val_ushort));
+  } else {
+    return atomicMin(reinterpret_cast<T1 *>(address), static_cast<T1>(val));
+  }
 }
 
 TL_DEVICE inline void AtomicMax(float *address, float val,
@@ -166,38 +230,6 @@ TL_DEVICE inline float AtomicMinRet(float *address, float val,
   return __int_as_float(old);
 }
 
-// add x2   x4
-template <typename T1, typename T2>
-TL_DEVICE void AtomicAddx2(T1 *ref, T2 *val, int memory_order = 0) {
-  (void)memory_order;
-  atomicAdd(reinterpret_cast<T1 *>(ref), static_cast<T1>(val[0]));
-  atomicAdd(reinterpret_cast<T1 *>(ref + 1), static_cast<T1>(val[1]));
-}
-
-template <typename T1, typename T2>
-TL_DEVICE void AtomicAddx2Ret(T1 *ref, T2 *val, T1 *ret, int memory_order = 0) {
-  (void)memory_order;
-  ret[0] = atomicAdd(reinterpret_cast<T1 *>(ref), static_cast<T1>(val[0]));
-  ret[1] = atomicAdd(reinterpret_cast<T1 *>(ref + 1), static_cast<T1>(val[1]));
-}
-template <typename T1, typename T2>
-TL_DEVICE void AtomicAddx4(T1 *ref, T2 *val, int memory_order = 0) {
-  (void)memory_order;
-  atomicAdd(reinterpret_cast<T1 *>(ref), static_cast<T1>(val[0]));
-  atomicAdd(reinterpret_cast<T1 *>(ref + 1), static_cast<T1>(val[1]));
-  atomicAdd(reinterpret_cast<T1 *>(ref + 2), static_cast<T1>(val[2]));
-  atomicAdd(reinterpret_cast<T1 *>(ref + 3), static_cast<T1>(val[3]));
-}
-
-template <typename T1, typename T2>
-TL_DEVICE void AtomicAddx4Ret(T1 *ref, T2 *val, T1 *ret, int memory_order = 0) {
-  (void)memory_order;
-  ret[0] = atomicAdd(reinterpret_cast<T1 *>(ref), static_cast<T1>(val[0]));
-  ret[1] = atomicAdd(reinterpret_cast<T1 *>(ref + 1), static_cast<T1>(val[1]));
-  ret[2] = atomicAdd(reinterpret_cast<T1 *>(ref + 2), static_cast<T1>(val[2]));
-  ret[3] = atomicAdd(reinterpret_cast<T1 *>(ref + 3), static_cast<T1>(val[3]));
-}
-
 // For vectorized AtomicAdd, we maintain two versions of interfaces:
 // 1. AtomicAddxN(dst_type* ref, src_type *val) // Pass pointer
 // 2. AtomicAddxN(dst_type* ref, src_type val) // Pass value
@@ -244,4 +276,73 @@ TL_DEVICE void AtomicAddx2(bfloat16_t *ref, ValType val,
   (void)memory_order;
   maca_bfloat162 add_val = ToBfloat162(val);
   atomicAdd(reinterpret_cast<maca_bfloat162 *>(ref), add_val);
+}
+
+// Float2/Float4 helpers for vectorized atomic add
+template <typename T> TL_DEVICE float2 ToFloat2(T *val) {
+  return *reinterpret_cast<const float2 *>(val);
+}
+
+TL_DEVICE float2 ToFloat2(float2 val) { return val; }
+template <typename T> TL_DEVICE float4 ToFloat4(T *val) {
+  return *reinterpret_cast<const float4 *>(val);
+}
+
+TL_DEVICE float4 ToFloat4(float4 val) { return val; }
+
+// Scalar fallback for float AtomicAddx2
+template <typename ValType>
+TL_DEVICE void AtomicAddx2(float *ref, ValType val, int memory_order = 0) {
+  (void)memory_order;
+  float2 add_val = ToFloat2(val);
+  atomicAdd(ref + 0, add_val.x);
+  atomicAdd(ref + 1, add_val.y);
+}
+
+template <typename ValType>
+TL_DEVICE float2 AtomicAddx2Ret(float *ref, ValType val, int memory_order = 0) {
+  (void)memory_order;
+  float2 add_val = ToFloat2(val);
+  float2 ret;
+  ret.x = atomicAdd(ref + 0, add_val.x);
+  ret.y = atomicAdd(ref + 1, add_val.y);
+  return ret;
+}
+
+// Scalar fallback for float AtomicAddx4
+template <typename dst_dtype, typename ValType>
+TL_DEVICE void AtomicAddx4(dst_dtype *ref, ValType val, int memory_order = 0) {
+  (void)memory_order;
+  float4 add_val = ToFloat4(val);
+  atomicAdd(ref + 0, add_val.x);
+  atomicAdd(ref + 1, add_val.y);
+  atomicAdd(ref + 2, add_val.z);
+  atomicAdd(ref + 3, add_val.w);
+}
+
+template <typename dst_dtype, typename ValType>
+TL_DEVICE float4 AtomicAddx4Ret(dst_dtype *ref, ValType val,
+                                int memory_order = 0) {
+  (void)memory_order;
+  float4 add_val = ToFloat4(val);
+  float4 ret;
+  ret.x = atomicAdd(ref + 0, add_val.x);
+  ret.y = atomicAdd(ref + 1, add_val.y);
+  ret.z = atomicAdd(ref + 2, add_val.z);
+  ret.w = atomicAdd(ref + 3, add_val.w);
+  return ret;
+}
+
+// AtomicLoad / AtomicStore
+template <typename T> TL_DEVICE T AtomicLoad(T *ref, int memory_order) {
+  (void)memory_order;
+  volatile T *vref = reinterpret_cast<volatile T *>(ref);
+  return *vref;
+}
+
+template <typename T1, typename T2>
+TL_DEVICE void AtomicStore(T1 *ref, T2 value, int memory_order) {
+  (void)memory_order;
+  volatile T1 *vref = reinterpret_cast<volatile T1 *>(ref);
+  *vref = static_cast<T1>(value);
 }

@@ -199,36 +199,6 @@ def run_atomic_return_prev(M, N, block_M, block_N, dtype=T.float32):
     torch.testing.assert_close(B, initial_B + A, atol=1e-3, rtol=1e-3)
 
 
-@tilelang.jit
-def tma_atomic_add_program(out, explicit_swizzle=False):
-    out: T.Tensor[(16, 16), T.float32]
-
-    with T.Kernel(
-        1,
-    ):
-        out_shared = T.alloc_shared((16, 16), dtype=T.float32)
-        if explicit_swizzle:
-            T.annotate_layout({out_shared: tilelang.layout.make_swizzled_layout(out_shared)})
-        T.fill(out_shared, 1)
-        for _ in range(16):
-            T.atomic_add(out, out_shared, use_tma=True)
-
-
-@tilelang.testing.requires_cuda
-def test_tma_atomic_add():
-    out = torch.zeros((16, 16), dtype=torch.float32, device="cuda")
-    tma_atomic_add_program(out)
-    torch.testing.assert_close(out, torch.ones((16, 16), dtype=torch.float32, device="cuda") * 16)
-
-    kernel = tma_atomic_add_program.compile(out=T.Tensor[(16, 16), T.float32])
-    assert "tma_store_add" in kernel.get_kernel_source()
-    assert "desc" in kernel.get_kernel_source()  # Ensure using cp.reduce.async.bulk.tensor
-
-    kernel_with_explicit_swizzle = tma_atomic_add_program.compile(out=T.Tensor[(16, 16), T.float32], explicit_swizzle=True)
-    # Ensure auto swizzled layout is applied
-    assert kernel.get_kernel_source() == kernel_with_explicit_swizzle.get_kernel_source()
-
-
 def run_atomic_add_auto_vectorized(K, M, N, block_M, block_N, dtype=T.float32):
     tilelang.disable_cache()
     kernel = atomic_add_program(K, M, N, block_M, block_N, dtype=dtype)
@@ -274,12 +244,10 @@ def run_atomic_add_complicated_parallel(K, M, N, block_M, block_N, dtype=T.float
     assert "AtomicAddx4" in kernel.get_kernel_source()
 
 
-@tilelang.testing.requires_cuda
 def test_atomic_memory_order():
     run_atomic_memory_order(4, 64, 64, 16, 16)
 
 
-@tilelang.testing.requires_cuda
 def test_atomic_addx2_half():
     run_atomic_addx2(32, 64, 8, 16, dtype=T.float16)
 
@@ -288,7 +256,6 @@ def test_atomic_addx2_float():
     run_atomic_addx2(32, 64, 8, 16, dtype=T.float32)
 
 
-@tilelang.testing.requires_cuda
 def test_atomic_different_memory_orders():
     run_atomic_different_memory_orders(32, 32, 8, 8, dtype=T.float32)
     run_atomic_different_memory_orders(32, 32, 8, 8, dtype=T.float16)
@@ -308,14 +275,10 @@ def test_atomic_add():
     run_atomic_add(8, 128, 128, 32, 32)
 
 
-@tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(9, 0)
 def test_atomic_add_auto_vectorized():
     run_atomic_add_auto_vectorized(8, 128, 128, 32, 32, dtype=T.float32)
 
 
-@tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(9, 0)
 def test_atomic_add_auto_vectorized_unit_test():
     run_atomic_add_auto_vectorized_unit_test(2, dtype=T.float32)
     run_atomic_add_auto_vectorized_unit_test(4, dtype=T.float32)
@@ -323,7 +286,6 @@ def test_atomic_add_auto_vectorized_unit_test():
     run_atomic_add_auto_vectorized_unit_test(2, dtype=T.bfloat16)
 
 
-@tilelang.testing.requires_cuda_compute_version_ge(9, 0)
 def test_atomic_add_complicated_parallel():
     run_atomic_add_complicated_parallel(8, 128, 128, 32, 32, dtype=T.float32)
 
@@ -534,7 +496,6 @@ def test_atomic_min():
     run_atomic_min(4, 64, 64, 16, 16)
 
 
-@tilelang.testing.requires_cuda
 def test_atomic_load_store():
     run_atomic_load_store(64, 64, 16, 16)
 

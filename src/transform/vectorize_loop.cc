@@ -180,7 +180,7 @@ inline int GetMaxAtomicVectorSize(DataType dtype, Target target) {
     return 2;
   }
   if (dtype.is_float() && dtype.bits() == 32 &&
-      TargetHasSMVersionGE(target, 90)) {
+      (TargetHasSMVersionGE(target, 90) || TargetIsMaca(target))) {
     return 4;
   }
   return 1;
