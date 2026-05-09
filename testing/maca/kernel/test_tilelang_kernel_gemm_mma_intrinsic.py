@@ -215,10 +215,18 @@ def assert_tl_matmul_correctness(M, N, K, in_dtype, out_dtype, accum_dtype):
     tilelang.testing.torch_assert_close(C, ref_c, rtol=1e-2, atol=1e-2)
 
 
-@tilelang.testing.pytest.mark.xfail
-def test_assert_tl_matmul():
-    assert_tl_matmul_correctness(128, 128, 128, T.float16, T.float16, T.float16)
+def test_assert_tl_matmul_fp16_fp16_fp32():
+    # Note: MACA __builtin_mxc_mma_16x16x16f16 requires float[4] accumulator.
+    # FP16 accumulation is not supported on MACA sm100, so we use fp32 accum.
+    assert_tl_matmul_correctness(128, 128, 128, T.float16, T.float16, T.float32)
+
+
+def test_assert_tl_matmul_fp16_fp32_fp32():
     assert_tl_matmul_correctness(128, 256, 256, T.float16, T.float32, T.float32)
+
+
+@tilelang.testing.pytest.mark.xfail
+def test_assert_tl_matmul_int8_int32_int32():
     assert_tl_matmul_correctness(128, 256, 256, T.int8, T.int32, T.int32)
 
 
