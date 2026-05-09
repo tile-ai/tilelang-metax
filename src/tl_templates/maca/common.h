@@ -137,6 +137,68 @@ template <> struct numeric_limits<__half> {
     return *reinterpret_cast<__half *>(&val);
   }
 };
+
+template <> struct numeric_limits<maca_bfloat16> {
+  static bool const is_specialized = true;
+  static bool const is_signed = true;
+  static bool const is_integer = false;
+  static bool const is_exact = false;
+  static bool const has_infinity = true;
+  static bool const has_quiet_NaN = true;
+  static bool const has_signaling_NaN = false;
+  static std::float_denorm_style const has_denorm = std::denorm_present;
+  static bool const has_denorm_loss = true;
+  static std::float_round_style const round_style = std::round_to_nearest;
+  static bool const is_iec559 = false;
+  static bool const is_bounded = true;
+  static bool const is_modulo = false;
+  static int const digits = 7;
+
+  /// Least positive value
+  __device__ static mctlass::bfloat16_t min() {
+    return mctlass::bfloat16_t::bitcast(0x01);
+  }
+
+  /// Minimum finite value
+  __device__ static mctlass::bfloat16_t lowest() {
+    return mctlass::bfloat16_t::bitcast(0xff7f);
+  }
+
+  /// Maximum finite value
+  __device__ static mctlass::bfloat16_t max() {
+    return mctlass::bfloat16_t::bitcast(0x7f7f);
+  }
+
+  /// Returns smallest finite value
+  __device__ static mctlass::bfloat16_t epsilon() {
+    return mctlass::bfloat16_t::bitcast(0x1000);
+  }
+
+  /// Returns smallest finite value
+  __device__ static mctlass::bfloat16_t round_error() {
+    return mctlass::bfloat16_t(0.5f);
+  }
+
+  /// Returns smallest finite value
+  __device__ static mctlass::bfloat16_t infinity() {
+    return mctlass::bfloat16_t::bitcast(0x7f80);
+  }
+
+  /// Returns smallest finite value
+  __device__ static mctlass::bfloat16_t quiet_NaN() {
+    return mctlass::bfloat16_t::bitcast(0x7fff);
+  }
+
+  /// Returns smallest finite value
+  __device__ static mctlass::bfloat16_t signaling_NaN() {
+    return mctlass::bfloat16_t::bitcast(0x7fff);
+  }
+
+  /// Returns smallest finite value
+  __device__ static mctlass::bfloat16_t denorm_min() {
+    return mctlass::bfloat16_t::bitcast(0x1);
+  }
+};
 } // namespace platform
 
 using half_t = __half;
