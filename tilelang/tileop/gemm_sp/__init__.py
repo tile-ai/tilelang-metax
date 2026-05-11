@@ -8,6 +8,7 @@ from tvm.runtime import Scriptable
 import tvm_ffi
 from tilelang.tileop.base import GemmWarpPolicy
 from .gemm_sp_mma import GemmSPMMA
+from .gemm_sp_maca_mma import GemmSPMACAMMA
 
 
 @tvm_ffi.register_global_func("tl.gemm_sp_py.infer_layout")
@@ -52,16 +53,20 @@ class GemmSPPy(Node, Scriptable):
     policy: GemmWarpPolicy
 
     def infer_layout(self, target: Target, thread_nums: int):
-        if target_is_cuda(target) or target_is_maca(target):
+        if target_is_cuda(target):
             # TODO(lei): Support more cuda architectures, now mma only
             return GemmSPMMA(self).infer_layout(target, thread_nums)
+        elif target_is_maca(target):
+            return GemmSPMACAMMA(self).infer_layout(target, thread_nums)
         else:
             raise ValueError(f"Unsupported target: {target}")
 
     def lower(self, target: Target, thread_nums: int, thread_var: tir.Var):
-        if target_is_cuda(target) or target_is_maca(target):
+        if target_is_cuda(target):
             # TODO(lei): Support more cuda architectures, now mma only
             # Now only implement ssr layout
             return GemmSPMMA(self).lower(target, thread_nums, thread_var)
+        elif target_is_maca(target):
+            return GemmSPMACAMMA(self).lower(target, thread_nums, thread_var)
         else:
             raise ValueError(f"Unsupported target: {target}")
