@@ -83,7 +83,7 @@ apt-get install -y cmake git
 **Python packages prerequisites**
 
 ``` bash
-pip install z3-solver cython psutil cloudpickle tqdm torch-c-dlpack-ext
+pip install z3-solver cython psutil cloudpickle tqdm
 ```
 
 > **Note**: Version of z3-solver should be >= 4.13.0, include and lib directories should be found at installation path.
@@ -93,7 +93,7 @@ pip install z3-solver cython psutil cloudpickle tqdm torch-c-dlpack-ext
 Clone the tilelang repository
 
 ``` bash
-git clone --recursive https://gitee.com/metax-maca/mcTileLang.git
+git clone --recursive https://github.com/ventijing/tilelang-metax.git
 ```
 
 Build with MACA enabled, git committer must be identified.
