@@ -94,6 +94,15 @@ class GemmBase:
 
     @property
     def chunk(self) -> int:
+        """
+        Get the logical compute width for the GEMM instruction.
+        Prioritizes the actual sliced extent from ARegion over physical buffer size.
+        """
+        if self.ARegion is not None:
+            k_axis = -2 if self.trans_A else -1
+            return self.ARegion.region[k_axis].extent
+        if self.K is not None:
+            return self.K
         return self.A.shape[-2] if self.trans_A else self.A.shape[-1]
 
     @property
