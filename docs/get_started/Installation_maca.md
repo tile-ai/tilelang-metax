@@ -93,7 +93,7 @@ pip install z3-solver cython psutil cloudpickle tqdm
 Clone the tilelang repository
 
 ``` bash
-git clone --recursive https://github.com/ventijing/tilelang-metax.git
+git clone --recursive https://github.com/tile-ai/tilelang-metax.git
 ```
 
 Build with MACA enabled, git committer must be identified.
