@@ -118,7 +118,7 @@ cd 3rdparty/tvm/3rdparty/tvm-ffi && pip install . && cd -
 ``` bash
 export MACA_PATH=/opt/maca
 export LD_LIBRARY_PATH=${MACA_PATH}/lib:${MACA_PATH}/mxgpu_llvm/lib:$LD_LIBRARY_PATH
-export PYTH=${MACA_PATH}/mxgpu_llvm/bin:${PATH}
+export PATH=${MACA_PATH}/mxgpu_llvm/bin:${PATH}
 export PYTHONPATH=/path/to/tilelang-metax:$PYTHONPATH
 
 python -c "import tilelang; print(tilelang.__version__)"
