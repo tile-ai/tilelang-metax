@@ -83,7 +83,7 @@ apt-get install -y cmake git
 **Python packages prerequisites**
 
 ``` bash
-pip install z3-solver cython psutil cloudpickle tqdm
+pip install z3-solver cython psutil cloudpickle tqdm torch-c-dlpack-ext
 ```
 
 > **Note**: Version of z3-solver should be >= 4.13.0, include and lib directories should be found at installation path.
