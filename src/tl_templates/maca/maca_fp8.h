@@ -234,7 +234,48 @@ public:
 };
 
 struct fp8_e8_t {
-  unsigned char data;
+  using value_t = unsigned char;
+  value_t v;
+
+  TL_DEVICE constexpr fp8_e8_t() : v{} {}
+
+  // construct from underlying storage
+  TL_DEVICE explicit fp8_e8_t(value_t x) : v(x) {}
+
+  // allow construction from types that can initialize the storage (e.g. int)
+  template <class T,
+            std::enable_if_t<!std::is_same_v<std::decay_t<T>, fp8_e8_t> &&
+                                 std::is_constructible_v<value_t, T>,
+                             int> = 0>
+  TL_DEVICE explicit fp8_e8_t(T &&x)
+      : v(static_cast<value_t>(std::forward<T>(x))) {}
+
+  // assignment from underlying storage
+  TL_DEVICE fp8_e8_t &operator=(value_t x) {
+    v = x;
+    return *this;
+  }
+
+  // implicit cast back to underlying storage when needed
+  TL_DEVICE operator value_t() const { return v; }
+
+private:
+  template <class To, class = void>
+  struct is_static_castable : std::false_type {};
+  template <class To>
+  struct is_static_castable<
+      To, std::void_t<decltype(static_cast<To>(std::declval<value_t>()))>>
+      : std::true_type {};
+
+public:
+  template <class To,
+            std::enable_if_t<!std::is_same_v<std::decay_t<To>, value_t> &&
+                                 !std::is_same_v<std::decay_t<To>, fp8_e8_t> &&
+                                 is_static_castable<To>::value,
+                             int> = 0>
+  TL_DEVICE operator To() const {
+    return static_cast<To>(v);
+  }
 };
 
 struct __MACA_ALIGN__(2) fp8_e4_2_t {
