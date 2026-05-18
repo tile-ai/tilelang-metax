@@ -258,6 +258,10 @@ TVM_REGISTER_OP("tir.rsqrt")
     .set_attr<FLowerIntrinsic>("maca.FLowerIntrinsic",
                                DispatchPureExtern<MACAMath>);
 
+TVM_REGISTER_OP("tir.isfinite")
+    .set_attr<FLowerIntrinsic>("maca.FLowerIntrinsic",
+                               DispatchPureExtern<Direct, true>);
+
 // Register low-level builtin ops.
 // TODO(tvm-team): consider make MACA its own subfolder and create a file for
 // low-level builtins.
