@@ -1845,9 +1845,9 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
         {"float8_e4m3fnx4", "int32x2"},
         {"float8_e4m3fnuzx8", "int32x2"},
         {"float8_e4m3fnx8", "int32x2"},
-        {"float8_e5m2fnuzx4", "fp8_e5_4_t"},
+        {"float8_e5m2fnuzx4", "int32x2"},
         {"float8_e5m2fnuzx8", "int32x2"},
-        {"float8_e5m2x4", "fp8_e5_4_t"},
+        {"float8_e5m2x4", "int32x2"},
         {"float8_e5m2x8", "int32x2"},
         {"float32x16", "float32x16"},
         {"float32x32", "float32x32"}};

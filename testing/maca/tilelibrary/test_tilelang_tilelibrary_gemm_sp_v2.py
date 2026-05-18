@@ -150,7 +150,6 @@ def generate_dense_input(M, N, K, trans_A, trans_B, in_dtype):
     return A, B
 
 
-@pytest.mark.xfail
 @pytest.mark.parametrize(
     "M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeAccum, block_M, block_N, block_K, num_stages, num_threads",
     [
@@ -158,7 +157,8 @@ def generate_dense_input(M, N, K, trans_A, trans_B, in_dtype):
         (512, 1024, 768, False, False, T.float16, T.float16, T.float, 128, 128, 32, 2, 128),
         (512, 1024, 768, True, False, T.float16, T.float16, T.float, 128, 128, 32, 2, 128),
         (512, 1024, 768, True, True, T.float16, T.float16, T.float, 128, 128, 32, 2, 128),
-        (128, 8, 64, False, True, T.float16, T.float16, T.float, 128, 8, 32, 0, 128),
+        # FIXME: config should meets MACA
+        # (128, 8, 64, False, True, T.float16, T.float16, T.float, 128, 8, 32, 0, 128),
         (128, 128, 128, False, True, T.int8, T.int32, T.int32, 128, 128, 64, 2, 128),
         (128, 128, 128, False, False, T.int8, T.int8, T.int32, 128, 128, 64, 2, 128),
         (128, 128, 128, True, False, T.int8, T.int8, T.int32, 128, 128, 64, 2, 128),

@@ -103,7 +103,6 @@ class GemmSPMMA(GemmSPBase):
                 accumulating into C_local.
                 """
                 A_local = T.alloc_local((warp_rows * local_size_a), in_dtype)
-                E_local = T.alloc_local((warp_rows * local_size_e), self.e_dtype)
                 B_local = T.alloc_local((warp_cols * local_size_b), in_dtype)
 
                 if clear_accum:
@@ -114,12 +113,6 @@ class GemmSPMMA(GemmSPBase):
                     mma_emitter.ldmatrix_a(
                         A_local,
                         A_shared,
-                        ki,
-                    )
-
-                    # Load E into fragment
-                    mma_emitter.ldmatrix_e(
-                        E_local,
                         E_shared,
                         ki,
                     )
@@ -132,7 +125,7 @@ class GemmSPMMA(GemmSPBase):
                     )
 
                     # Perform Matrix Multiplication
-                    mma_emitter.mma_sp(A_local, E_local, B_local, C_local, ki)
+                    mma_emitter.mma(A_local, B_local, C_local, ki)
 
             # Simplify to optimize the index computing
             # Must inline let statements to simplify the analysis

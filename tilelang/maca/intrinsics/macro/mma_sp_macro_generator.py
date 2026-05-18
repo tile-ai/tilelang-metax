@@ -120,10 +120,17 @@ class SparseTensorCoreIntrinEmitter:
 
     def _initialize_k_dim(self, a_dtype=T.float16):
         if isinstance(a_dtype, str):
+            if a_dtype in ["float8_e4m3fn", "float8_e4m3fnuz", "float8_e5m2", "float8_e5m2fnuz"]:
+                self.k_dim = 32
+                return
             a_dtype = DataType(a_dtype)
-        # NOTE: k_dim here represents the logical shape of the MMA operation.
-        # When referring to the physical data movement, it should be divided by sparse_factor.
-        self.k_dim = 256 // a_dtype.bits
+
+        if a_dtype.bits == 32:
+            self.k_dim = 4
+        elif a_dtype.bits in {16, 8}:
+            self.k_dim = 16
+        else:
+            raise ValueError(f"Unsupported a_dtype = {a_dtype}")
 
     def _initialize_local_size(self, m_dim=16, n_dim=16, k_dim=16, warp_size=64):
         self.local_size_a = (m_dim * k_dim) // warp_size
@@ -139,7 +146,6 @@ class SparseTensorCoreIntrinEmitter:
     def _initialize_mma_prefix(self, k_dim: int = 16):
         in_dtype = self.a_dtype
         M_DIM, N_DIM = self.M_DIM, self.N_DIM
-
         in_dtype_abbrv = {
             "bfloat16": "bf16",
             "float16": "f16",
@@ -151,17 +157,7 @@ class SparseTensorCoreIntrinEmitter:
             "float8_e5m2": "bf8",
             "float8_e5m2fnuz": "bf8",
         }[in_dtype]
-        k_dim = 16
-        if in_dtype_abbrv == "f8":
-            self.mma_suffix = f"{M_DIM}x{N_DIM}x{k_dim}f8"
-        elif in_dtype_abbrv == "bf8":
-            self.mma_suffix = f"{M_DIM}x{N_DIM}x{k_dim}bf8"
-        elif in_dtype_abbrv == "i8":
-            self.mma_suffix = f"{M_DIM}x{N_DIM}x{k_dim}i8"
-        elif in_dtype_abbrv == "bf16":
-            self.mma_suffix = f"{M_DIM}x{N_DIM}x{k_dim}bf16"
-        else:
-            self.mma_suffix = f"{M_DIM}x{N_DIM}x{k_dim}{in_dtype_abbrv}"
+        self.mma_suffix = f"{M_DIM}x{N_DIM}x{k_dim}{in_dtype_abbrv}"
 
     def _initialize_micro_size(self, m_dim: int = 16, k_dim: int = 16):
         warp_row_tiles = self.warp_row_tiles
@@ -249,7 +245,9 @@ class SparseTensorCoreIntrinEmitter:
         micro_size_x = self.micro_size_x
         micro_size_k = self.micro_size_k
         local_size_a = self.local_size_a
-
+        a_transposed = self.a_transposed
+        e_transposed = self.e_transposed
+        e_factor = self.e_factor
         thread_binding = self.get_thread_binding()
 
         A_region = self._legalize_to_buffer_region(A_shared_buf)
@@ -265,10 +263,10 @@ class SparseTensorCoreIntrinEmitter:
         E_other = [r.min for r in E_region.region[:-2]]
 
         def getindex(tx, local_id):
-            return tx % 16, ((tx // 16) * 2) + local_id
+            return tx % 16, ((tx // 16) * local_size_a // 2) + local_id
 
         def getindexe(tx, local_id):
-            return tx % 16, (tx // 16) * 4
+            return tx % 16, (tx // 16) * local_size_a
 
         @T.macro
         def _warp_ldmatrix_a(
@@ -281,15 +279,30 @@ class SparseTensorCoreIntrinEmitter:
         ):
             tx, _, warp_m = self.extract_thread_binding(thread_binding)
             for i in T.serial(warp_rows):
-                for k in T.serial(self.SPARSE_FACTOR):
-                    row, col = getindex(tx, k)
-                    l, r = (warp_m * warp_row_tiles + i * micro_size_x, ki * micro_size_k // 2)
-                    Ak = A_buf[tuple(A_other) + (A_base0 + l + row, A_base1 + r + col)]
+                for k in T.serial(local_size_a):
+                    A_local_buf[i * local_size_a + k] = 0
+                for groupoffset in T.serial(0, local_size_a, 4):
+                    for k in T.serial(self.SPARSE_FACTOR):
+                        row, col = getindex(tx, k)
+                        l, r = (warp_m * warp_row_tiles + i * micro_size_x, ki * micro_size_k // 2)
+                        Ak = (
+                            A_buf[tuple(A_other) + (A_base0 + r + col + groupoffset // 2, A_base1 + l + row)]
+                            if a_transposed
+                            else A_buf[tuple(A_other) + (A_base0 + l + row, A_base1 + r + col + groupoffset // 2)]
+                        )
 
-                    rowe, cole = getindexe(tx, k)
-                    le, re = (warp_m * warp_row_tiles + i * micro_size_x, ki * micro_size_k // 2)
-                    E_elementi = (E_buf[tuple(E_other) + (E_base0 + rowe + le, E_base1 + re)] >> (cole + k * 2)) & 0b11
-                    A_local_buf[i * local_size_a + E_elementi] = Ak
+                        rowe, cole = getindexe(tx, k)
+                        le, re = (warp_m * warp_row_tiles + i * micro_size_x, ki * micro_size_k // e_factor)
+                        offsetk = ki * micro_size_k % e_factor
+                        if e_transposed:
+                            E_elementi = (
+                                E_buf[tuple(E_other) + (E_base0 + re, E_base1 + rowe + le)] >> (cole + groupoffset + offsetk + k * 2)
+                            ) & 0b11
+                        else:
+                            E_elementi = (
+                                E_buf[tuple(E_other) + (E_base0 + rowe + le, E_base1 + re)] >> (cole + groupoffset + offsetk + k * 2)
+                            ) & 0b11
+                        A_local_buf[i * local_size_a + groupoffset + E_elementi] = Ak
 
         return _warp_ldmatrix_a(A_local_buf, A_region, E_region, ki, thread_binding, rk)
 
@@ -305,7 +318,7 @@ class SparseTensorCoreIntrinEmitter:
         # ldmatrix cannot be used for int8 + trans case.
 
         def mma_load_layout(tx, local_id):
-            return tx % 16, (tx // 16) * 4 + local_id
+            return tx % 16, (tx // 16) * local_size_b + local_id
 
         B_region = self._legalize_to_buffer_region(B_shared_buf)
         B_buf = B_region.buffer
@@ -332,7 +345,7 @@ class SparseTensorCoreIntrinEmitter:
                 for j in T.serial(local_size_b):
                     mi, mk = mma_load_layout(tx, j)
                     B_local_buf[i * local_size_b + j] = (
-                        B_buf[tuple(B_other) + (B_base0 + wi + mi, B_base1 + wi + mi)]
+                        B_buf[tuple(B_other) + (B_base0 + wi + mi, B_base1 + wk + mk)]
                         if b_transposed
                         else B_buf[tuple(B_other) + (B_base0 + wk + mk, B_base1 + wi + mi)]
                     )
@@ -368,9 +381,9 @@ class SparseTensorCoreIntrinEmitter:
         mma_suffix = self.mma_suffix
         k_pack = 1
         a_dtype, b_dtype, out_dtype = self.a_dtype, self.b_dtype, self.accum_dtype
-        compute_a_dtype = a_dtype if local_size_a == 1 else f"{a_dtype}x{4}"
-        compute_b_dtype = b_dtype if local_size_b == 1 else f"{b_dtype}x{4}"
-        compute_out_dtype = out_dtype if local_size_out == 1 else f"{out_dtype}x{4}"
+        compute_a_dtype = a_dtype if local_size_a == 1 else f"{a_dtype}x{local_size_a}"
+        compute_b_dtype = b_dtype if local_size_b == 1 else f"{b_dtype}x{local_size_b}"
+        compute_out_dtype = out_dtype if local_size_out == 1 else f"{out_dtype}x{local_size_out}"
 
         a_is_fragment = is_fragment(A_local_buf)
         b_is_fragment = is_fragment(B_local_buf)
