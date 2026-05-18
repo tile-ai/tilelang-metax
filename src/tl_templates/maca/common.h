@@ -174,27 +174,23 @@ template <> struct numeric_limits<maca_bfloat16> {
     return mctlass::bfloat16_t::bitcast(0x1000);
   }
 
-  /// Returns smallest finite value
+  /// Returns maximum rounding error
   __device__ static mctlass::bfloat16_t round_error() {
     return mctlass::bfloat16_t(0.5f);
   }
-
-  /// Returns smallest finite value
+  /// Returns positive infinity value
   __device__ static mctlass::bfloat16_t infinity() {
     return mctlass::bfloat16_t::bitcast(0x7f80);
   }
-
-  /// Returns smallest finite value
+  /// Returns quiet NaN value
   __device__ static mctlass::bfloat16_t quiet_NaN() {
     return mctlass::bfloat16_t::bitcast(0x7fff);
   }
-
-  /// Returns smallest finite value
+  /// Returns signaling NaN value
   __device__ static mctlass::bfloat16_t signaling_NaN() {
     return mctlass::bfloat16_t::bitcast(0x7fff);
   }
-
-  /// Returns smallest finite value
+  /// Returns smallest positive subnormal value
   __device__ static mctlass::bfloat16_t denorm_min() {
     return mctlass::bfloat16_t::bitcast(0x1);
   }

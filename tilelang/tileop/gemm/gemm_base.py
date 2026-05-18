@@ -94,6 +94,15 @@ class GemmBase:
 
     @property
     def chunk(self) -> int:
+        """
+        Get the logical compute width for the GEMM instruction.
+        Prioritizes the actual sliced extent from ARegion over physical buffer size.
+        """
+        if self.ARegion is not None:
+            k_axis = -2 if self.trans_A else -1
+            return self.ARegion.region[k_axis].extent
+        if self.K is not None:
+            return self.K
         return self.A.shape[-2] if self.trans_A else self.A.shape[-1]
 
     @property
@@ -171,6 +180,26 @@ class GemmBase:
             zero = tvm.tir.const(0, T.int32)
             return [zero, zero]
         return [coords[i] for i in range(len(coords))]
+
+    @property
+    def SFARegion(self):
+        return getattr(self.gemm_node, "sfaRegion", None)
+
+    @property
+    def SFBRegion(self):
+        return getattr(self.gemm_node, "sfbRegion", None)
+
+    @property
+    def sf_a_id(self) -> PrimExpr:
+        return getattr(self.gemm_node, "sfAId", tvm.tir.const(0, T.int32))
+
+    @property
+    def sf_b_id(self) -> PrimExpr:
+        return getattr(self.gemm_node, "sfBId", tvm.tir.const(0, T.int32))
+
+    @property
+    def is_blockscaled(self) -> bool:
+        return self.SFARegion is not None and self.SFBRegion is not None
 
     def get_region_base_offsets(self, region):
         """

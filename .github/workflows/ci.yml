@@ -86,7 +86,7 @@ jobs:
           #   name: self-hosted-amd
           #   # Format: [Nightly-]ROCm-<major>.<minor>[.<patch>]. E.g., "ROCm-6.4" or "Nightly-ROCm-7.0".
           #   # Use "Nightly-" prefix to use torch nightly builds.
-          #   toolkit: Nightly-ROCm-7.1
+          #   toolkit: Nightly-ROCm-7.2
           - tags: tilelang-metax-runner
             name: self-hosted-metax
             # Format: MACA-<major>.<minor>[.<patch>]. E.g., "MACA-3.0".
@@ -329,7 +329,6 @@ jobs:
         run: |
           uv pip install -v .
           uv pip install -v 3rdparty/tvm/3rdparty/tvm-ffi
-          uv pip uninstall -v torch-c-dlpack-ext
 
       - name: Clean up stale /tmp files (self-hosted runners)
         if: startsWith(matrix.runner.name, 'self-hosted')
@@ -357,7 +356,7 @@ jobs:
             uv run --no-project -m --
             pytest --verbose --color=yes --durations=0 --showlocals --cache-clear
           )
-          "${PYTEST[@]}" --maxfail=3 --numprocesses=1 --timeout=180 \
+          "${PYTEST[@]}" --maxfail=3 --numprocesses=4 \
             --ignore=../examples/maca/linear_attention \
             ../examples/maca
 

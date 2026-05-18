@@ -7,7 +7,7 @@ on:
 
 jobs:
   remind:
-    runs-on: tilelang-metax-runner
+    runs-on: ubuntu-latest
     if: github.repository_owner == 'tile-ai'
     steps:
       - name: Remind

@@ -591,8 +591,10 @@ private:
         }
         buffer_oob_vec_.push_back(src_oob || dst_oob);
 
-        if (TargetIsMaca(target_) && copy->GetIsAsyncCopy()) {
-          maca_async_copy_buffers_.push_back(dst_tensor);
+        if (auto val = copy->annotations.Get("is_async_copy")) {
+          if (TargetIsMaca(target_) && val->as<IntImmNode>()->value != 0) {
+            maca_async_copy_buffers_.push_back(dst_tensor);
+          }
         }
       } else {
         buffer_oob_vec_.push_back(false);

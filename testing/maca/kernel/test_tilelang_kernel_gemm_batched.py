@@ -114,7 +114,6 @@ def run_gemm_batched(
     profiler.assert_allclose(ref_program, atol=1e-2, rtol=1e-2)
 
 
-@tilelang.testing.requires_cuda
 def test_gemm_f16f16f16_nn():
     run_gemm_batched(
         2,
@@ -125,7 +124,7 @@ def test_gemm_f16f16f16_nn():
         False,
         T.float16,
         T.float16,
-        T.float16,
+        T.float,
         64,
         64,
         32,

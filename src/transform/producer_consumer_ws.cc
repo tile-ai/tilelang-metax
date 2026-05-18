@@ -21,12 +21,15 @@
  */
 
 #include <tvm/arith/analyzer.h>
+#include <tvm/ffi/cast.h>
 #include <tvm/ffi/reflection/registry.h>
+#include <tvm/tir/analysis.h>
 #include <tvm/tir/builtin.h>
 #include <tvm/tir/op.h>
 #include <tvm/tir/stmt_functor.h>
 #include <tvm/tir/transform.h>
 
+#include "../backend/cuda/op/copy.h"
 #include "../op/builtin.h"
 #include "../op/copy.h"
 #include "../op/fill.h"
@@ -37,7 +40,6 @@
 #include "../target/utils.h"
 #include "common/mbarrier.h"
 #include "multi_version_buffer_rewriter.h"
-#include "warp_specialized_rewriter.h"
 
 namespace tvm {
 namespace tl {
@@ -362,7 +364,7 @@ private:
   }
 
   void VisitStmt_(const BlockNode *op) final {
-    CollectBuffers(GetRef<Block>(op));
+    CollectBuffers(ffi::GetRef<Block>(op));
     StmtExprVisitor::VisitStmt_(op);
   }
 
@@ -423,7 +425,7 @@ private:
   }
 
   void VisitExpr_(const VarNode *op) final {
-    Var var = GetRef<Var>(op);
+    Var var = ffi::GetRef<Var>(op);
     if (bound_vars_.count(var) || buffer_data_to_buffer_.count(var)) {
       return;
     }
@@ -487,7 +489,7 @@ private:
       ICHECK_EQ(op->args.size(), 5);
       const auto *var = op->args[1].as<VarNode>();
       ICHECK(var);
-      auto it = buffer_data_to_buffer_.find(GetRef<Var>(var));
+      auto it = buffer_data_to_buffer_.find(ffi::GetRef<Var>(var));
       if (it != buffer_data_to_buffer_.end() &&
           IsBranchPrivateBuffer(it->second)) {
         int rw_mask = GetConstAccessMask(op->args[4]);
@@ -594,6 +596,27 @@ static bool IsBarrierOrTmaControlCall(const CallNode *call) {
          call->op.same_as(builtin::tvm_storage_sync());
 }
 
+static bool HasGlobalToSharedCopyShape(const CopyNode *copy) {
+  return copy != nullptr && IsGlobalBuffer(copy->src) &&
+         IsSharedBuffer(copy->dst) && copy->src->dtype == copy->dst->dtype;
+}
+
+static cuda::CopyInstSelection ClassifyWarpSpecializedCopy(const CopyNode *copy,
+                                                           Target target) {
+  if (copy == nullptr) {
+    return {cuda::CopyInst::kNormal, true, ""};
+  }
+  return cuda::ClassifyWarpSpecializedProducerCopy(*copy, target);
+}
+
+static bool CheckPipelineManagedCPAsyncCopy(const CopyNode *copy,
+                                            Target target) {
+  if (copy == nullptr) {
+    return false;
+  }
+  return cuda::IsPipelineManagedCPAsyncCopy(*copy, target);
+}
+
 static bool IsSyncGlobalToSharedCopyLikeStmt(const Stmt &stmt, Target target) {
   const auto *call = GetEvaluateCallInSimpleWrapper(stmt);
   if (!call) {
@@ -604,13 +627,14 @@ static bool IsSyncGlobalToSharedCopyLikeStmt(const Stmt &stmt, Target target) {
     return false;
   }
   const auto *copy = tile_op.as<CopyNode>();
-  if (copy == nullptr || !copy->CheckCPAsyncCopyPreconditions() ||
-      copy->GetIsTmaCopy() || copy->GetIsAsyncCopy()) {
+  if (copy == nullptr) {
     return false;
   }
 
-  arith::Analyzer analyzer;
-  return !copy->CheckBulkLoad(target, &analyzer, /*check_last_dim=*/true);
+  cuda::CopyInstSelection result = ClassifyWarpSpecializedCopy(copy, target);
+  return HasGlobalToSharedCopyShape(copy) && result.supported &&
+         !cuda::CopyInstIsTMA(result.inst) &&
+         !cuda::CopyInstIsCPAsync(result.inst);
 }
 
 static bool IsProducerMovableLoopPrefixStmt(const Stmt &stmt, Target target) {
@@ -661,32 +685,20 @@ static bool IsProducerMovableLoopPrefixStmt(const Stmt &stmt, Target target) {
 }
 
 /// Classify a tile-op copy as TMA load producer, cp.async producer, or
-/// consumer. Replicates the coarse checks from InstructionAnnotation inline so
-/// that the tiled WS pass does not depend on a prior annotation pass.
+/// consumer using coarse pre-layout checks.
 static TileStmtKind ClassifyCopy(const CopyNode *copy, Target target) {
-  // Explicit T.tma_copy() is a load-side primitive: only treat valid
-  // global->shared TMA loads as producers.  TMA stores consume previously
-  // produced shared data and must stay on the consumer side to preserve
-  // per-iteration ordering.
-  if (copy->GetIsTmaCopy()) {
-    arith::Analyzer analyzer;
-    if (copy->CheckBulkLoad(target, &analyzer, /*check_last_dim=*/false)) {
-      return TileStmtKind::kTmaProducer;
-    }
-    return TileStmtKind::kConsumer; // target doesn't support TMA
+  if (copy == nullptr) {
+    return TileStmtKind::kConsumer;
   }
-  // Explicit T.async_copy()
-  if (copy->GetIsAsyncCopy()) {
+
+  cuda::CopyInstSelection result = ClassifyWarpSpecializedCopy(copy, target);
+  if (cuda::CopyInstIsTMA(result.inst)) {
+    return TileStmtKind::kTmaProducer;
+  }
+  if (cuda::CopyInstIsCPAsync(result.inst)) {
     return TileStmtKind::kCpAsyncProducer;
   }
-  // Generic T.copy(): check if TMA is possible
-  {
-    arith::Analyzer analyzer;
-    if (!copy->GetDisableTMA() &&
-        copy->CheckBulkLoad(target, &analyzer, /*check_last_dim=*/true)) {
-      return TileStmtKind::kTmaProducer;
-    }
-  }
+
   return TileStmtKind::kConsumer;
 }
 
@@ -808,11 +820,10 @@ private:
     if (copy == nullptr) {
       return false;
     }
-    return copy->CheckPipelineManagedCPAsyncCopy(target_, &analyzer_);
+    return CheckPipelineManagedCPAsyncCopy(copy, target_);
   }
 
   Target target_;
-  mutable arith::Analyzer analyzer_;
 };
 
 class TileOpMbarPhaseAnnotator : public StmtExprMutator {
@@ -919,7 +930,7 @@ AnalyzeBufferDataAccess(const Stmt &stmt, const Var &buffer_data,
         ICHECK_EQ(op->args.size(), 5);
         const auto *var = op->args[1].as<VarNode>();
         ICHECK(var);
-        auto it = buffer_map_.find(GetRef<Var>(var));
+        auto it = buffer_map_.find(ffi::GetRef<Var>(var));
         if (it != buffer_map_.end() && it->second->data.same_as(buffer_data_)) {
           MarkAccess(op->args[4]);
         }
@@ -1860,7 +1871,7 @@ private:
     ws_transformed_ = true;
 
     // Rebuild BlockRealize.
-    BlockRealize new_realize = GetRef<BlockRealize>(orig_realize);
+    BlockRealize new_realize = ffi::GetRef<BlockRealize>(orig_realize);
     new_realize.CopyOnWrite()->block = new_block;
     return new_realize;
   }
@@ -1934,7 +1945,7 @@ private:
       if (!SameExpr(ge->b, consumer_extent_)) {
         return false;
       }
-      *branch = GetRef<IfThenElse>(if_node);
+      *branch = ffi::GetRef<IfThenElse>(if_node);
       return true;
     }
 
@@ -2165,7 +2176,7 @@ private:
       }
       Block block = realize->block;
       block.CopyOnWrite()->body = result.stmt;
-      BlockRealize new_realize = GetRef<BlockRealize>(realize);
+      BlockRealize new_realize = ffi::GetRef<BlockRealize>(realize);
       new_realize.CopyOnWrite()->block = block;
       return {new_realize, true};
     }
@@ -2175,7 +2186,7 @@ private:
       if (!result.found) {
         return {stmt, false};
       }
-      Block new_block = GetRef<Block>(block);
+      Block new_block = ffi::GetRef<Block>(block);
       new_block.CopyOnWrite()->body = result.stmt;
       return {new_block, true};
     }
@@ -2185,7 +2196,7 @@ private:
       if (!result.found) {
         return {stmt, false};
       }
-      AttrStmt new_attr = GetRef<AttrStmt>(attr);
+      AttrStmt new_attr = ffi::GetRef<AttrStmt>(attr);
       new_attr.CopyOnWrite()->body = result.stmt;
       return {new_attr, true};
     }
