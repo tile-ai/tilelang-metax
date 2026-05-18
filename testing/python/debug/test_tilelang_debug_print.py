@@ -11,7 +11,8 @@ def debug_print_buffer(M=16, N=16, dtype=T.float16):
     def program(Q: T.Tensor((M, N), dtype)):
         with T.Kernel(4, 4, 2, threads=128 * 2) as (bx, by, bz):
             shared_buf = T.alloc_shared([M, N], dtype)
-            T.print(shared_buf)
+            if bx == 0 and by == 0 and bz == 0:
+                T.print(shared_buf)
 
     jit_kernel = tilelang.compile(program)
     profiler = jit_kernel.get_profiler()
@@ -84,7 +85,8 @@ def debug_print_register_files(M=16, N=16):
         with T.Kernel(4, 4, 2, threads=128 * 2) as (bx, by, bz):
             register_buf = T.alloc_fragment([M, N], dtype)
             for i, j in T.Parallel(M, N):
-                T.print(register_buf[i, j])
+                if bx == 0 and by == 0 and bz == 0 and T.get_thread_binding() == 0:
+                    T.print(register_buf[i, j])
 
     jit_kernel = tilelang.compile(program)
     profiler = jit_kernel.get_profiler()

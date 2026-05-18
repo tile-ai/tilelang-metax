@@ -67,6 +67,9 @@ def test_rms_norm(M=1024, N=1024, blk_m=1):
     program = rms_norm(M, N, blk_m)
     kernel = tilelang.compile(program, out_idx=-1)
     profiler = kernel.get_profiler()
+    import os
+
+    os.environ.pop("CXX", None)
     profiler.assert_allclose(ref_program, rtol=0.01, atol=0.01)
 
 

@@ -72,7 +72,7 @@ Check out [Metax docker](https://sw-download.metax-tech.com/docker) and download
 ``` bash
 docker login --username=cr_temp_user --password=eyJpbnN0YW5jZUlkIjoiY3JpLXpxYTIzejI2YTU5M3R3M2QiLCJ0aW1lIjoiMTc3MDg5NTI0MzAwMCIsInR5cGUiOiJzdWIiLCJ1c2VySWQiOiIyMDcwOTQwMTA1NjYzNDE3OTIifQ:91ecedb8bd5c4af6858745f0329d069263e1bf82 cr.metax-tech.com && docker pull cr.metax-tech.com/public-library/maca-pytorch:3.3.0.4-torch2.6-py310-ubuntu24.04-amd64
 
-docker run -it --net=host --device=/dev/dri --device=/dev/mxcd --group-add video --name mctilelang cr.metax-tech.com/public-library/maca-pytorch:3.3.0.4-torch2.6-py310-ubuntu24.04-amd64 /bin/bash
+docker run -it --net=host --device=/dev/dri --device=/dev/mxcd --group-add video --name tilelang-metax cr.metax-tech.com/public-library/maca-pytorch:3.3.0.4-torch2.6-py310-ubuntu24.04-amd64 /bin/bash
 
 apt-get update
 apt-get install -y cmake git
@@ -93,7 +93,7 @@ pip install z3-solver cython psutil cloudpickle tqdm torch-c-dlpack-ext
 Clone the tilelang repository
 
 ``` bash
-git clone --recursive https://gitee.com/metax-maca/mcTileLang.git
+git clone --recursive https://github.com/tile-ai/tilelang-metax.git
 ```
 
 Build with MACA enabled, git committer must be identified.
@@ -102,7 +102,7 @@ Build with MACA enabled, git committer must be identified.
 git config --global user.email "you@example.com"
 git config --global user.name "Your Name"
 
-cd mcTileLang
+cd tilelang-metax
 USE_MACA=ON cmake -B build
 make -C build -j 32
 ```
@@ -118,10 +118,10 @@ cd 3rdparty/tvm/3rdparty/tvm-ffi && pip install . && cd -
 ``` bash
 export MACA_PATH=/opt/maca
 export LD_LIBRARY_PATH=${MACA_PATH}/lib:${MACA_PATH}/mxgpu_llvm/lib:$LD_LIBRARY_PATH
-export PYTH=${MACA_PATH}/mxgpu_llvm/bin:${PATH}
-export PYTHONPATH=/path/to/mcTileLang:$PYTHONPATH
+export PATH=${MACA_PATH}/mxgpu_llvm/bin:${PATH}
+export PYTHONPATH=/path/to/tilelang-metax:$PYTHONPATH
 
 python -c "import tilelang; print(tilelang.__version__)"
 
-python path/to/mcTileLang/examples/quickstart.py
+python path/to/tilelang-metax/examples/quickstart.py
 ```

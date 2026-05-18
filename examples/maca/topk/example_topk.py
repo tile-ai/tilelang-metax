@@ -75,6 +75,9 @@ def main(argv=None):
     logits = torch.rand((M, N), device="cuda", dtype=torch.float32)
 
     kernel = tl_topk(M=M, N=N, topk=topk, blk_m=blk_m)
+    import os
+
+    os.environ.pop("CXX", None)
     tl_gates, tl_indices = kernel(logits)
 
     torch_gates, torch_indices = ref_program(logits, topk)

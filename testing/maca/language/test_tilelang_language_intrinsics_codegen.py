@@ -3,7 +3,6 @@ import tilelang.language as T
 import tilelang.testing
 
 
-@tilelang.testing.requires_cuda
 def test_language_ldg_codegen():
     N = 128
 
@@ -17,7 +16,7 @@ def test_language_ldg_codegen():
             y[pid] = T.__ldg(x[pid]) + 1.0
 
     # Compile for CUDA and retrieve generated CUDA source
-    kernel = tilelang.compile(main, out_idx=[1], target="cuda")
+    kernel = tilelang.compile(main, out_idx=[1], target="maca")
     src = kernel.get_kernel_source()
     print(src)
     # Assert that codegen uses __ldg on CUDA backend

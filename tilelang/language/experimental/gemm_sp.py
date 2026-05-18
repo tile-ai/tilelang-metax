@@ -15,6 +15,9 @@ from tilelang.language.utils import (
     buffer_region_to_tile_region,
 )
 from tilelang._typing import BufferLikeType
+from tilelang.utils.target import target_is_maca, determine_target
+
+_is_maca_target = target_is_maca(determine_target(return_object=True))
 
 
 def gemm_sp(
@@ -65,6 +68,9 @@ def gemm_sp(
         if isinstance(arg, tir.Var) and T.has_let_value(arg):
             return T.get_let_value(arg).buffer
         return arg
+
+    if _is_maca_target:
+        return gemm_sp_v2(A_sparse, E, B, C, transpose_A, transpose_B, False, policy, clear_accum, k_pack, wg_wait)
 
     A_sparse = legalize_arguments(A_sparse)
     B = legalize_arguments(B)
