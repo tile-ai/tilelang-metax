@@ -4,11 +4,10 @@ import tilelang.testing
 import tilelang.language as T
 
 
-@tilelang.testing.requires_cuda
 def test_issue_1719_layout_1():
     @tilelang.jit
     def _buggy_kernel():
-        with T.Kernel(threads=32):
+        with T.Kernel(threads=64):
             tmp1 = T.alloc_shared([32, 32], T.float16)
             tmp2 = T.alloc_shared([32, 32], T.float16)
             tmp3 = T.alloc_fragment([32, 32], T.float32)
@@ -40,7 +39,6 @@ def test_issue_1719_layout_2():
     assert "tmp2[(((int)threadIdx.x) & 3)]" not in kernel.get_kernel_source()
 
 
-@tilelang.testing.requires_cuda
 def test_issue_1719_layout_3():
     @tilelang.jit
     def _buggy_kernel(A, dtype=T.float32):
