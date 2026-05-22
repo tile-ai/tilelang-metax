@@ -4,6 +4,12 @@ on:
   issue_comment:
     types:
       - created
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to test (e.g. 53)
+        required: true
+        type: number
 
 permissions:
   contents: read
@@ -12,7 +18,7 @@ permissions:
 
 concurrency:
   # Use the issue/PR number to differentiate between different PRs
-  group: "${{ github.workflow }}-${{ github.event.issue.number }}"
+  group: "${{ github.workflow }}-${{ github.event.issue.number || inputs.pr_number }}"
   cancel-in-progress: true
 
 env:
@@ -35,8 +41,14 @@ jobs:
     name: Check bot permissions
     if: |
       github.repository_owner == 'tile-ai' &&
-      github.event.issue.pull_request &&
-      (contains(github.event.comment.body, '@regression-perf'))
+      (
+        (
+          github.event_name == 'issue_comment' &&
+          github.event.issue.pull_request &&
+          contains(github.event.comment.body, '@regression-perf')
+        ) ||
+        github.event_name == 'workflow_dispatch'
+      )
     runs-on: ubuntu-latest
     steps:
       - name: Get commenter permission
@@ -44,7 +56,9 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
-            const username = context.payload.comment.user.login
+            const username = context.eventName === 'workflow_dispatch'
+              ? context.actor
+              : context.payload.comment.user.login
             const { owner, repo } = context.repo
             const { data } = await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username })
             core.setOutput('permission', data.permission) // admin|maintain|write|triage|read|none
@@ -57,6 +71,7 @@ jobs:
 
   pr-regression:
     name: Performance regression test between PR and main (${{ matrix.runner.toolkit }})
+    if: github.repository_owner == 'tile-ai'
     needs: [permissions-check]
     runs-on: ${{ matrix.runner.tags }}
     strategy:
@@ -83,7 +98,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          ref: refs/pull/${{ github.event.issue.number }}/merge
+          ref: refs/pull/${{ github.event.issue.number || inputs.pr_number }}/merge
           fetch-depth: 0
           submodules: recursive
 
@@ -298,11 +313,17 @@ jobs:
             const md = fs.readFileSync('regression_result.md', 'utf8');
 
             const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            const issueNumber = context.eventName === 'workflow_dispatch'
+              ? Number('${{ inputs.pr_number }}')
+              : context.issue.number;
+            const triggerUser = context.eventName === 'workflow_dispatch'
+              ? context.actor
+              : context.payload.comment.user.login;
 
             const body =
               'Performance Regression Test Report\n' +
               '============================\n\n' +
-              `Triggered by: @${context.payload.comment.user.login}\n` +
+              `Triggered by: @${triggerUser}\n` +
               `Workflow run: ${runUrl}\n\n` +
               'Results\n' +
               '-------\n\n' +
@@ -314,6 +335,6 @@ jobs:
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: issueNumber,
               body
             });
