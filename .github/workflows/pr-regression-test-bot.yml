@@ -1,6 +1,12 @@
 name: Performance Regression Bot
 
 on:
+  # TEMP: validate workflow from PR branch (like ci.yml). Remove before merge to main.
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
   issue_comment:
     types:
       - created
@@ -18,7 +24,7 @@ permissions:
 
 concurrency:
   # Use the issue/PR number to differentiate between different PRs
-  group: "${{ github.workflow }}-${{ github.event.issue.number || inputs.pr_number }}"
+  group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}"
   cancel-in-progress: true
 
 env:
@@ -41,7 +47,9 @@ jobs:
     name: Check bot permissions
     if: |
       github.repository_owner == 'tile-ai' &&
+      (github.event_name != 'pull_request' || !github.event.pull_request.draft) &&
       (
+        github.event_name == 'pull_request' ||
         (
           github.event_name == 'issue_comment' &&
           github.event.issue.pull_request &&
@@ -56,9 +64,9 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
-            const username = context.eventName === 'workflow_dispatch'
-              ? context.actor
-              : context.payload.comment.user.login
+            const username = context.eventName === 'issue_comment'
+              ? context.payload.comment.user.login
+              : context.actor
             const { owner, repo } = context.repo
             const { data } = await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username })
             core.setOutput('permission', data.permission) // admin|maintain|write|triage|read|none
@@ -98,7 +106,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          ref: refs/pull/${{ github.event.issue.number || inputs.pr_number }}/merge
+          ref: refs/pull/${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}/merge
           fetch-depth: 0
           submodules: recursive
 
@@ -315,10 +323,12 @@ jobs:
             const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
             const issueNumber = context.eventName === 'workflow_dispatch'
               ? Number('${{ inputs.pr_number }}')
-              : context.issue.number;
-            const triggerUser = context.eventName === 'workflow_dispatch'
-              ? context.actor
-              : context.payload.comment.user.login;
+              : context.eventName === 'pull_request'
+                ? context.payload.pull_request.number
+                : context.issue.number;
+            const triggerUser = context.eventName === 'issue_comment'
+              ? context.payload.comment.user.login
+              : context.actor;
 
             const body =
               'Performance Regression Test Report\n' +
