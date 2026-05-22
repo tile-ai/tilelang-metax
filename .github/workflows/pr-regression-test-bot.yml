@@ -243,7 +243,7 @@ jobs:
           fi
 
           git clean -dxf -e new/ -e .cache/
-          git checkout main
+          git checkout dev
           git submodule update --init --recursive
 
           if [[ -n "${EXAMPLES_MACA_BAK}" ]] && [[ ! -d examples/maca ]]; then
