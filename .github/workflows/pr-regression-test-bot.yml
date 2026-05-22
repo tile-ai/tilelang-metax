@@ -28,6 +28,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  BASELINE_REF: dev
   PYTHONDEVMODE: "1"
   PYTHONUNBUFFERED: "1"
   PYTHONPATH: "" # explicit cleanup
@@ -78,7 +79,7 @@ jobs:
           exit 1
 
   pr-regression:
-    name: Performance regression test between PR and main (${{ matrix.runner.toolkit }})
+    name: Performance regression test between PR and dev (${{ matrix.runner.toolkit }})
     if: github.repository_owner == 'tile-ai'
     needs: [permissions-check]
     runs-on: ${{ matrix.runner.tags }}
@@ -232,25 +233,13 @@ jobs:
           fi
           uv pip install -v .
 
-      - name: Install Main version (Baseline)
+      - name: Install dev branch (Baseline)
         run: |
           set -e
-
-          EXAMPLES_MACA_BAK=""
-          if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]] && [[ -d examples/maca ]]; then
-            EXAMPLES_MACA_BAK="/tmp/examples-maca.${GITHUB_RUN_ID}"
-            cp -a examples/maca "${EXAMPLES_MACA_BAK}"
-          fi
-
           git clean -dxf -e new/ -e .cache/
-          git checkout dev
+          git fetch origin "${BASELINE_REF}"
+          git checkout "origin/${BASELINE_REF}"
           git submodule update --init --recursive
-
-          if [[ -n "${EXAMPLES_MACA_BAK}" ]] && [[ ! -d examples/maca ]]; then
-            echo "::warning::examples/maca is not on main yet; using copy from the PR branch for benchmarks."
-            mkdir -p examples
-            cp -a "${EXAMPLES_MACA_BAK}" examples/maca
-          fi
           uv venv --python "${{ matrix.python-version }}" old
           source old/bin/activate
 
@@ -305,19 +294,13 @@ jobs:
         run: |
           set -e
           source test_regression/bin/activate
-          EXTRA_ENV=()
+          REGRESSION_ARGS=()
           if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
-            if [[ ! -d examples/maca ]]; then
-              echo "::error::examples/maca not found. Ensure the PR branch contains MACA examples or merge them to main."
-              exit 1
-            fi
-            EXTRA_ENV+=(TL_PERF_REGRESSION_EXAMPLES_ROOT=examples/maca)
-            echo "MACA regression: benchmarks under examples/maca only ($(find examples/maca -name 'regression_*.py' | wc -l) driver(s))"
+            REGRESSION_ARGS=(--examples-root examples/maca)
           fi
           OLD_PYTHON=./old/bin/python NEW_PYTHON=./new/bin/python \
             PERF_REGRESSION_MD=regression_result.md PERF_REGRESSION_PNG=regression_result.png \
-            "${EXTRA_ENV[@]}" \
-            python ./maint/scripts/test_perf_regression.py
+            python ./maint/scripts/test_perf_regression.py "${REGRESSION_ARGS[@]}"
 
       - name: Read markdown table
         id: read_md
