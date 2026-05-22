@@ -225,11 +225,10 @@ jobs:
 
           if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
             cp -rf /opt/conda/lib/python3.12/site-packages/* new/lib/python3.12/site-packages/
-            uv pip install -v -r requirements-test.txt
-            uv pip install -v -r requirements-test-maca.txt
+          fi
+          uv pip install -v -r requirements-test.txt
+          if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
             uv pip install -v --no-deps --python-version 3.10.0 flash_linear_attention==0.4.0+metax3.5.3.9torch2.8 -i https://repos.metax-tech.com/r/maca-pypi/simple --trusted-host repos.metax-tech.com
-          else
-            uv pip install -v -r requirements-test.txt
           fi
           uv pip install -v .
 
@@ -244,11 +243,10 @@ jobs:
 
           if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
             cp -rf /opt/conda/lib/python3.12/site-packages/* old/lib/python3.12/site-packages/
-            uv pip install -v -r requirements-test.txt
-            uv pip install -v -r requirements-test-maca.txt
+          fi
+          uv pip install -v -r requirements-test.txt
+          if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
             uv pip install -v --no-deps --python-version 3.10.0 flash_linear_attention==0.4.0+metax3.5.3.9torch2.8 -i https://repos.metax-tech.com/r/maca-pypi/simple --trusted-host repos.metax-tech.com
-          else
-            uv pip install -v -r requirements-test.txt
           fi
           uv pip install -v .
           rm -rf tilelang build
@@ -257,11 +255,10 @@ jobs:
           source test_regression/bin/activate
           if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
             cp -rf /opt/conda/lib/python3.12/site-packages/* test_regression/lib/python3.12/site-packages/
-            uv pip install -v -r requirements-test.txt
-            uv pip install -v -r requirements-test-maca.txt
+          fi
+          uv pip install -v -r requirements-test.txt
+          if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
             uv pip install -v --no-deps --python-version 3.10.0 flash_linear_attention==0.4.0+metax3.5.3.9torch2.8 -i https://repos.metax-tech.com/r/maca-pypi/simple --trusted-host repos.metax-tech.com
-          else
-            uv pip install -v -r requirements-test.txt
           fi
 
       - name: Clear uv cache for self-hosted runners (if setup failed)
