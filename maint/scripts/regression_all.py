@@ -57,8 +57,7 @@ def _parse_table(output: str) -> dict[str, float]:
 
 
 def _examples_root() -> Path:
-    # repo_root/tilelang/testing/perf_regression.py -> repo_root
-    return Path(__file__).resolve().parents[2] / "examples"
+    return Path(__file__).resolve().parents[2] / "examples" / "maca"
 
 
 def _discover_bench_files(examples_root: Path) -> list[Path]:

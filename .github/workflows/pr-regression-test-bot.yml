@@ -294,13 +294,9 @@ jobs:
         run: |
           set -e
           source test_regression/bin/activate
-          REGRESSION_ARGS=()
-          if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
-            REGRESSION_ARGS=(--examples-root examples/maca)
-          fi
           OLD_PYTHON=./old/bin/python NEW_PYTHON=./new/bin/python \
             PERF_REGRESSION_MD=regression_result.md PERF_REGRESSION_PNG=regression_result.png \
-            python ./maint/scripts/test_perf_regression.py "${REGRESSION_ARGS[@]}"
+            python ./maint/scripts/test_perf_regression.py
 
       - name: Read markdown table
         id: read_md
