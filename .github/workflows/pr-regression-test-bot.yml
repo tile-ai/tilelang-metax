@@ -220,6 +220,8 @@ jobs:
         id: setup-venv
         run: |
           set -e
+          # checkout origin/dev below overwrites maint/scripts; keep PR regression driver list.
+          cp maint/scripts/regression_all.py "${RUNNER_TEMP}/regression_all.py"
 
           uv venv --python "${{ matrix.python-version }}" new
           source new/bin/activate
@@ -240,6 +242,8 @@ jobs:
           git fetch origin "${BASELINE_REF}"
           git checkout "origin/${BASELINE_REF}"
           git submodule update --init --recursive
+          cp "${RUNNER_TEMP}/regression_all.py" maint/scripts/regression_all.py
+          echo "Regression drivers: $(grep -E 'examples.*maca' maint/scripts/regression_all.py || grep _examples_root maint/scripts/regression_all.py)"
           uv venv --python "${{ matrix.python-version }}" old
           source old/bin/activate
 
