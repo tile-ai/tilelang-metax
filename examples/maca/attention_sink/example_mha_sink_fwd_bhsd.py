@@ -217,7 +217,7 @@ def main(
     else:
         block_M = 64
         block_N = 64
-        num_stages = 0
+        num_stages = 1
         threads = 256
         print(f"{block_M=}, {block_N=}, {num_stages=}, {threads=}")
 
