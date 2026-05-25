@@ -217,7 +217,7 @@ def main(
     else:
         block_M = 64
         block_N = 64
-        num_stages = 1
+        num_stages = 0
         threads = 256
         print(f"{block_M=}, {block_N=}, {num_stages=}, {threads=}")
 
@@ -252,7 +252,7 @@ def main(
 
 def run_regression_perf(
     batch: int = 1,
-    heads: int = 32,
+    heads: int = 1,
     seq_q: int = 256,
     seq_kv: int = 256,
     dim: int = 128,
