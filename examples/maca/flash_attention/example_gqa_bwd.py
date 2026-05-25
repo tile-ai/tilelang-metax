@@ -513,7 +513,7 @@ def run_regression_perf():
             block_M=32,
             block_N=32,
             threads=128,
-            num_stages=2,
+            num_stages=0,
             groups=groups,
         )
     dQ = torch.zeros_like(Q, dtype=torch.float32)

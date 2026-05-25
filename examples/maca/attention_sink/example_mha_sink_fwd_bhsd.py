@@ -252,7 +252,7 @@ def main(
 
 def run_regression_perf(
     batch: int = 1,
-    heads: int = 1,
+    heads: int = 32,
     seq_q: int = 256,
     seq_kv: int = 256,
     dim: int = 128,
@@ -260,10 +260,10 @@ def run_regression_perf(
     dtype: str = "float16",
 ):
     torch_dtype = {"float16": torch.float16, "bfloat16": torch.bfloat16}[dtype]
-    block_M = 128
-    block_N = 128
-    num_stages = 2
-    threads = 256
+    block_M = 64
+    block_N = 64
+    num_stages = 0
+    threads = 128
     kernel = flashattn(
         batch, heads, seq_q, seq_kv, dim, window_size, block_M=block_M, block_N=block_N, num_stages=num_stages, threads=threads, dtype=dtype
     )

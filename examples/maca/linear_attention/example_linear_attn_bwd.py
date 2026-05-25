@@ -23,8 +23,8 @@ def tl_fused_chunk_bwd_kernel(
         scale = DK**-0.5
     accum_dtype = T.float32
 
-    chunk_size = 32
-    BK = BV = 32  # Set to 128 can be faster, but has some numerical differences with FLA
+    chunk_size = 16
+    BK = BV = 16  # Set to 128 can be faster, but has some numerical differences with FLA
     assert S % chunk_size == 0 and DK % BK == 0 and DV % BV == 0
     NK = tilelang.cdiv(DK, BK)
     NV = tilelang.cdiv(DV, BV)
@@ -134,7 +134,7 @@ def ref_program(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, scale: Option
     q, k, v = q.float(), k.float(), v.float()
     if scale is None:
         scale = q.shape[-1] ** -0.5
-    chunk_size = 32
+    chunk_size = 16
     q = rearrange(q, "b (n c) h d -> b h n c d", c=chunk_size) * scale
     k = rearrange(k, "b (n c) h d -> b h n c d", c=chunk_size)
     v = rearrange(v, "b (n c) h d -> b h n c d", c=chunk_size)
