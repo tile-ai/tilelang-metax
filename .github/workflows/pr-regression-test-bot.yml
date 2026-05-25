@@ -58,7 +58,6 @@ jobs:
 
   pr-regression:
     name: Performance regression test between PR and dev (${{ matrix.runner.toolkit }})
-    if: github.repository_owner == 'tile-ai'
     needs: [permissions-check]
     runs-on: ${{ matrix.runner.tags }}
     strategy:
@@ -198,9 +197,6 @@ jobs:
         id: setup-venv
         run: |
           set -e
-          # checkout origin/dev below overwrites maint/scripts; keep PR regression driver list.
-          cp maint/scripts/regression_all.py "${RUNNER_TEMP}/regression_all.py"
-
           uv venv --python "${{ matrix.python-version }}" new
           source new/bin/activate
 
@@ -220,8 +216,6 @@ jobs:
           git fetch origin "${BASELINE_REF}"
           git checkout "origin/${BASELINE_REF}"
           git submodule update --init --recursive
-          cp "${RUNNER_TEMP}/regression_all.py" maint/scripts/regression_all.py
-          echo "Regression drivers: $(grep -E 'examples.*maca' maint/scripts/regression_all.py || grep _examples_root maint/scripts/regression_all.py)"
           uv venv --python "${{ matrix.python-version }}" old
           source old/bin/activate
 
@@ -274,7 +268,6 @@ jobs:
 
       - name: Run performance regression test
         run: |
-          set -e
           source test_regression/bin/activate
           OLD_PYTHON=./old/bin/python NEW_PYTHON=./new/bin/python \
             PERF_REGRESSION_MD=regression_result.md PERF_REGRESSION_PNG=regression_result.png \
