@@ -36,7 +36,7 @@ def sparse_mla_fwd(
     CP0=True,
     block_I=64,
     num_stages=0,
-    threads=128,
+    threads=384,
 ):
     assert dim == tilelang.math.next_power_of_2(dim), f"haven't check padding correctness yet, dim={dim}"
     assert tail_dim == tilelang.math.next_power_of_2(tail_dim), f"haven't check padding correctness yet, dim={tail_dim}"
