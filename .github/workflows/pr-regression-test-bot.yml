@@ -197,7 +197,7 @@ jobs:
         id: setup-venv
         run: |
           set -e
-          
+
           uv venv --python "${{ matrix.python-version }}" new
 
           source new/bin/activate
