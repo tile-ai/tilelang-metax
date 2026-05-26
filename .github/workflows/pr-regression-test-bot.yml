@@ -196,8 +196,10 @@ jobs:
       - name: Setup environments
         id: setup-venv
         run: |
+
           set -e
           uv venv --python "${{ matrix.python-version }}" new
+
           source new/bin/activate
 
           if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
@@ -296,6 +298,7 @@ jobs:
             const md = fs.readFileSync('regression_result.md', 'utf8');
 
             const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+
             const body =
               'Performance Regression Test Report\n' +
               '============================\n\n' +
