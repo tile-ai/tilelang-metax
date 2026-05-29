@@ -15,12 +15,16 @@ from tilelang.utils.language import get_buffer_region_from_load
 from tilelang.maca.intrinsics.layout.mma_layout import (
     shared_16x4_to_local_64x1_layout_A,
     shared_4x16_to_local_64x1_layout_B,
+    shared_16x8_to_local_64x2_layout_A,
+    shared_8x16_to_local_64x2_layout_B,
     shared_16x16_to_local_64x4_layout_A,
     shared_16x16_to_local_64x4_layout_B,
     shared_16x32_to_local_64x8_layout_A,
     shared_16x32_to_local_64x8_layout_B,
     thread_id_shared_access_64x1_to_16x4_layout_A,
     thread_id_shared_access_64x1_to_4x16_layout_B,
+    thread_id_shared_access_64x2_to_16x8_layout_A,
+    thread_id_shared_access_64x2_to_8x16_layout_B,
     thread_id_shared_access_64x4_to_16x16_layout_A,
     thread_id_shared_access_64x4_to_16x16_layout_B,
     thread_id_shared_access_64x8_to_16x32_layout_A,
@@ -89,6 +93,7 @@ class TensorCoreIntrinEmitter:
         self.warp_row_tiles = warp_row_tiles
         self.warp_col_tiles = warp_col_tiles
         self.chunk = chunk
+        self._initialize_whether_use_tf32()
         self._initialize_k_dim(a_dtype)
         self._initialize_abbrev(a_dtype, b_dtype, accum_dtype)
         self._initialize_local_size(self.M_DIM, self.N_DIM, self.k_dim, self.WARP_SIZE)
@@ -105,6 +110,11 @@ class TensorCoreIntrinEmitter:
         self.num_elems_per_byte = num_elems_per_byte
         self.thread_var = thread_var
 
+    def _initialize_whether_use_tf32(self):
+        pass_ctx = tvm.get_global_func("transform.GetCurrentPassContext")()
+        enable_tf32_insteadof_f32 = pass_ctx.config.get("tl.enable_tf32_insteadof_f32", False)
+        self.enable_tf32_insteadof_f32 = enable_tf32_insteadof_f32
+
     def _initialize_k_dim(self, a_dtype=T.float16):
         if isinstance(a_dtype, str):
             if a_dtype in ["float8_e4m3fn", "float8_e4m3fnuz", "float8_e5m2", "float8_e5m2fnuz"]:
@@ -113,7 +123,10 @@ class TensorCoreIntrinEmitter:
             a_dtype = DataType(a_dtype)
 
         if a_dtype.bits == 32:
-            self.k_dim = 4
+            if self.enable_tf32_insteadof_f32:
+                self.k_dim = 8
+            else:
+                self.k_dim = 4
         elif a_dtype.bits in {16, 8}:
             self.k_dim = 16
         else:
@@ -147,7 +160,7 @@ class TensorCoreIntrinEmitter:
         in_dtype_map = {
             "bfloat16": "bf16",
             "float16": "f16",
-            "float32": "f32",
+            "float32": "tf32" if self.enable_tf32_insteadof_f32 else "f32",
             "int8": "i8",
             "int32": "i32",
             "float8_e4m3": "f8",
@@ -167,6 +180,8 @@ class TensorCoreIntrinEmitter:
             self.mma_suffix = f"{M_DIM}x{N_DIM}x{k_dim}i8"
         elif in_dtype_abbrv == "bf16":
             self.mma_suffix = f"{M_DIM}x{N_DIM}x{k_dim}bf16"
+        elif in_dtype_abbrv == "tf32":
+            self.mma_suffix = f"{M_DIM}x{N_DIM}x{k_dim}tf32"
         else:
             self.mma_suffix = f"{M_DIM}x{N_DIM}x{k_dim}{in_dtype_abbrv}"
 
@@ -199,6 +214,16 @@ class TensorCoreIntrinEmitter:
                 index_map = shared_16x4_to_local_64x1_layout_A if transposed else shared_4x16_to_local_64x1_layout_B
                 reverse_index_map = (
                     thread_id_shared_access_64x1_to_16x4_layout_A if transposed else thread_id_shared_access_64x1_to_4x16_layout_B
+                )
+        elif k_dim == 8:
+            index_map = shared_8x16_to_local_64x2_layout_B if transposed else shared_16x8_to_local_64x2_layout_A
+            reverse_index_map = (
+                thread_id_shared_access_64x2_to_8x16_layout_B if transposed else thread_id_shared_access_64x2_to_16x8_layout_A
+            )
+            if is_b:
+                index_map = shared_16x8_to_local_64x2_layout_A if transposed else shared_8x16_to_local_64x2_layout_B
+                reverse_index_map = (
+                    thread_id_shared_access_64x2_to_16x8_layout_A if transposed else thread_id_shared_access_64x2_to_8x16_layout_B
                 )
         elif k_dim == 16:
             index_map = shared_16x16_to_local_64x4_layout_B if transposed else shared_16x16_to_local_64x4_layout_A
@@ -376,9 +401,9 @@ class TensorCoreIntrinEmitter:
         k_pack = self.k_pack
         mma_suffix = self.mma_suffix
         a_dtype, b_dtype, out_dtype = self.a_dtype, self.b_dtype, self.accum_dtype
-        compute_a_dtype = a_dtype if local_size_a == 1 else f"{a_dtype}x{local_size_a}"
-        compute_b_dtype = b_dtype if local_size_b == 1 else f"{b_dtype}x{local_size_b}"
-        compute_out_dtype = out_dtype if local_size_out == 1 else f"{out_dtype}x{local_size_out}"
+        compute_a_dtype = str(a_dtype) if local_size_a == 1 else f"{a_dtype}x{local_size_a}"
+        compute_b_dtype = str(b_dtype) if local_size_b == 1 else f"{b_dtype}x{local_size_b}"
+        compute_out_dtype = str(out_dtype) if local_size_out == 1 else f"{out_dtype}x{local_size_out}"
 
         a_is_fragment = is_fragment(A_local_buf)
         b_is_fragment = is_fragment(B_local_buf)
@@ -492,6 +517,9 @@ class TensorCoreIntrinEmitter:
         if k_dim == 4:
             transform_func_sr_a = shared_16x4_to_local_64x1_layout_A
             transform_func_sr_b = shared_16x4_to_local_64x1_layout_A
+        elif k_dim == 8:
+            transform_func_sr_a = shared_16x8_to_local_64x2_layout_A
+            transform_func_sr_b = shared_16x8_to_local_64x2_layout_A
         elif k_dim == 16:
             transform_func_sr_a = shared_16x16_to_local_64x4_layout_A
             transform_func_sr_b = shared_16x16_to_local_64x4_layout_A
@@ -599,7 +627,7 @@ class TensorCoreIntrinEmitter:
 
         shape = local_buf.shape
         inverse_mma_store_layout = self.get_store_index_map(inverse=True)
-        assert is_fragment(local_buf), "local_buf must be a fragment"
+        assert is_fragment(local_buf), f"local_buf {local_buf} must be a fragment"
         micro_size_x, micro_size_y = self.micro_size_x, self.micro_size_y
         local_size_out = self.local_size_out
         block_row_warps, block_col_warps = self.block_row_warps, self.block_col_warps
@@ -780,7 +808,6 @@ class TensorCorePreshuffleIntrinEmitter(TensorCoreIntrinEmitter):
                         )
                         A_local_buf[i * k_pack * local_size_a + local_id] = A_shared_buf[l, r, row, col]
             else:
-                print(self.a_preshuffle)
                 for i in T.serial(warp_rows):
                     for local_id in T.vectorized(k_pack * local_size_a):
                         row, col = T.meta_var(reverse_index_map(tx, local_id))

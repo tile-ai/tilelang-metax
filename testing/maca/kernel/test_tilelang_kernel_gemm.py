@@ -153,7 +153,6 @@ def test_gemm_bf16bf16f32_nn():
     )
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_gemm_f32f32f32_nn():
     run_gemm(
         512,
@@ -219,7 +218,6 @@ def test_gemm_f64f64f64_nt():
     run_gemm(512, 512, 512, False, True, T.float64, T.float64, T.float64, 64, 32, 16)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_gemm_f32f32f32_nt():
     run_gemm(
         512,
@@ -237,7 +235,6 @@ def test_gemm_f32f32f32_nt():
 
 
 # TODO(Gong): Meets precision issue on ROCm, disable for now
-@tilelang.testing.pytest.mark.xfail
 def test_gemm_f32f32f32_tn():
     run_gemm(
         512,

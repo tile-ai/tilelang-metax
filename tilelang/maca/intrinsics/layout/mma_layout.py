@@ -26,6 +26,30 @@ def thread_id_shared_access_64x1_to_4x16_layout_B(thread_id, local_id):
     return i, j
 
 
+def shared_16x8_to_local_64x2_layout_A(i, j):
+    thread_id = i + 16 * (j // 2)
+    local = j % 2
+    return thread_id, local
+
+
+def thread_id_shared_access_64x2_to_16x8_layout_A(thread_id, local_id):
+    i = thread_id % 16
+    j = (thread_id // 16) * 2 + local_id
+    return i, j
+
+
+def shared_8x16_to_local_64x2_layout_B(i, j):
+    thread_id = j + 16 * (i // 2)
+    local = i % 2
+    return thread_id, local
+
+
+def thread_id_shared_access_64x2_to_8x16_layout_B(thread_id, local_id):
+    i = (thread_id // 16) * 2 + local_id
+    j = thread_id % 16
+    return i, j
+
+
 def shared_16x16_to_local_64x4_layout_C(i, j):
     thread_id = j + (i // 4) * 16
     local = i % 4

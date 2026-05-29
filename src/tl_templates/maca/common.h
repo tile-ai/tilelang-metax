@@ -67,6 +67,8 @@ using float16x8 =
     __attribute__((__vector_size__(8 * sizeof(float16_t)))) float16_t;
 using float16x16 =
     __attribute__((__vector_size__(16 * sizeof(float16_t)))) float16_t;
+
+using float32x2 = __attribute__((__vector_size__(2 * sizeof(float)))) float;
 namespace platform {
 
 /// Numeric limits

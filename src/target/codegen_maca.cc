@@ -473,6 +473,20 @@ void CodeGenTileLangMACA::PrintType(DataType t, std::ostream &os) { // NOLINT(*)
       os << GetTileLangFP6Type(t);
     }
     return;
+  } else if (t.is_tfloat32()) {
+    if (t.is_scalar()) {
+      os << "float";
+    } else if (lanes <= 4) {
+      os << "float" << lanes;
+    } else if (lanes <= 8) {
+      ICHECK_EQ(lanes % 2, 0)
+          << "only support even lane for tfloat32 type with lanes > 4";
+      os << "float" << lanes / 2;
+    } else {
+      fail = true;
+    }
+    if (!fail)
+      return;
   } else if (t.is_float4()) {
     enable_fp4_ = true;
     if (t.lanes() <= 64) {
@@ -1894,6 +1908,7 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
         {"float16x8", "float16x8"},
         {"bfloat16x4", "bfloat16x4_vec"},
         {"bfloat16x8", "bfloat16x8_vec"},
+        {"float32x2", "float32x2"},
         {"float32x4", "float32x4"},
         {"float8_e4m3fnuzx4", "int32x2"},
         {"float8_e4m3fnx4", "int32x2"},
@@ -1904,6 +1919,7 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
         {"float8_e5m2x4", "fp8_e5_4_t"},
         {"float8_e5m2x8", "int32x2"},
         {"float32x16", "float32x16"},
+        {"custom[tfloat32]x2", "float32x2"},
         {"float32x32", "float32x32"}};
     std::string call_mfma_code = R"({
       *((({C_dtype}*){c_ref}) + {c_bias}) = {mfma_buildin}(*((({A_dtype}*){a_ref}) + {a_bias}),
@@ -1911,6 +1927,21 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
                     *((({C_dtype}*){c_ref}) + {c_bias}));
     })";
     std::string mfma_buildin = "__builtin_mxc_mma_" + prefix;
+    std::string target_value =
+        Target()::Current()->GetAttr<String>("mcpu").value();
+
+    if ((target_value == "xcore1600") || (target_value == "xcore1500")) {
+      tvm::transform::PassContext ctx = tvm::transform::PassContext::Current();
+      bool kEnableTF32InsteadofF32 =
+          ctx->GetConfig(tvm::tl::kEnableTF32InsteadofF32, Bool(false))
+              .value()
+              ->value;
+      if ((A_type == "int8x4") || (!kEnableTF32InsteadofF32))) {
+          mfma_buildin = "tl::mxc_mma_" + prefix;
+          need_mma_instruction_h_ = true;
+        }
+    }
+
     Replacer replacer;
 
     replacer.register_rule("{mfma_buildin}", mfma_buildin);

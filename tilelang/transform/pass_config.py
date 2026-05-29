@@ -58,6 +58,9 @@ class PassConfigKey(str, Enum):
     TL_DISABLE_WARP_SPECIALIZED = "tl.disable_warp_specialized"
     """Disable warp specialization optimization. Default: False"""
 
+    TL_ENABLE_TF32_INSTEADOF_F32 = "tl.enable_tf32_insteadof_f32"
+    """enable tf32 be used instead of f32. Default: False"""
+
     TL_ENABLE_FAST_MATH = "tl.enable_fast_math"
     """
         Enable fast math optimization. Default: False

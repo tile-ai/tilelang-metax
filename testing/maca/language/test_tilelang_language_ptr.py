@@ -79,7 +79,7 @@ def pointer_table_grouped_matmul_test(batch_sizes_list, N, K, block_M, block_N, 
         c_ptrs: T.Tensor([batch_count], T.ptr),
         batch_tile_offsets: T.Tensor([batch_count], T.int32),
     ):
-        with T.Kernel(total_m_blocks, T.ceildiv(N, block_N), threads=32) as (bx, by):
+        with T.Kernel(total_m_blocks, T.ceildiv(N, block_N), threads=64) as (bx, by):
             A_shared = T.alloc_shared((block_M, block_K), dtype)
             B_shared = T.alloc_shared((block_K, block_N), dtype)
             C_local = T.alloc_fragment((block_M, block_N), accum_dtype)
@@ -227,7 +227,6 @@ def test_pointer_table_multi_copy():
     run_pointer_table_multi_copy(2, 64)
 
 
-@tilelang.testing.requires_cuda
 def test_pointer_table_grouped_matmul():
     run_pointer_table_grouped_matmul([8, 12, 17], 32, 32, 16, 16, 16)
 
