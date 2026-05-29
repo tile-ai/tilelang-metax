@@ -527,7 +527,7 @@ class TensorCoreIntrinEmitter:
             transform_func_sr_a = shared_16x32_to_local_64x8_layout_A
             transform_func_sr_b = shared_16x32_to_local_64x8_layout_A
         else:
-            raise ValueError(f"k_dim must be 0 currently but got {k_dim}")
+            raise ValueError(f"Unsupported k_dim={k_dim}; expected one of 4, 8, 16, 32")
 
         is_sr_conditions = [False]
         is_sr_conditions.append(matrix_is_a and not transposed)

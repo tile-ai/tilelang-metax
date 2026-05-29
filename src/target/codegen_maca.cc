@@ -1927,19 +1927,19 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
                     *((({C_dtype}*){c_ref}) + {c_bias}));
     })";
     std::string mfma_buildin = "__builtin_mxc_mma_" + prefix;
-    std::string target_value =
-        Target()::Current()->GetAttr<String>("mcpu").value();
 
+    std::string target_value =
+        Target::Current()->GetAttr<String>("mcpu").value();
     if ((target_value == "xcore1600") || (target_value == "xcore1500")) {
       tvm::transform::PassContext ctx = tvm::transform::PassContext::Current();
       bool kEnableTF32InsteadofF32 =
           ctx->GetConfig(tvm::tl::kEnableTF32InsteadofF32, Bool(false))
               .value()
               ->value;
-      if ((A_type == "int8x4") || (!kEnableTF32InsteadofF32))) {
-          mfma_buildin = "tl::mxc_mma_" + prefix;
-          need_mma_instruction_h_ = true;
-        }
+      if ((A_dtype == "int8x4") || (!kEnableTF32InsteadofF32)) {
+        mfma_buildin = "tl::mxc_mma_" + prefix;
+        need_mma_instruction_h_ = true;
+      }
     }
 
     Replacer replacer;
