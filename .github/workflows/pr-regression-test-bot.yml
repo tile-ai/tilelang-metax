@@ -210,6 +210,9 @@ jobs:
             uv pip install -v --no-deps --python-version 3.10.0 flash_linear_attention==0.4.0+metax3.5.3.9torch2.8 -i https://repos.metax-tech.com/r/maca-pypi/simple --trusted-host repos.metax-tech.com
           fi
           uv pip install -v .
+          if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
+            uv pip install -v 3rdparty/tvm/3rdparty/tvm-ffi
+          fi
 
       - name: Install dev branch (Baseline)
         run: |
@@ -229,6 +232,9 @@ jobs:
             uv pip install -v --no-deps --python-version 3.10.0 flash_linear_attention==0.4.0+metax3.5.3.9torch2.8 -i https://repos.metax-tech.com/r/maca-pypi/simple --trusted-host repos.metax-tech.com
           fi
           uv pip install -v .
+          if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
+            uv pip install -v 3rdparty/tvm/3rdparty/tvm-ffi
+          fi
           rm -rf tilelang build
 
           uv venv --python "${{ matrix.python-version }}" test_regression
