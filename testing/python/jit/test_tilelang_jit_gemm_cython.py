@@ -245,12 +245,17 @@ def run_cython_kernel_multi_stream(
         tensor_b = tensor_b.T
     tensor_c = torch.randn(M, N, dtype=out_dtype).cuda()
 
-    num_streams = 4
-    for _ in range(num_streams):
-        stream = torch.cuda.Stream()
+    streams = [torch.cuda.Stream() for _ in range(4)]
+    for stream in streams:
         with torch.cuda.stream(stream):
             matmul_kernel(tensor_a, tensor_b, tensor_c)
     torch.cuda.synchronize()
+
+    # The kernel launch is asynchronous with respect to the host. Wait for all
+    # side streams to finish before the test releases their tensors or the next
+    # test allocates new buffers on the default stream.
+    for stream in streams:
+        stream.synchronize()
 
 
 def test_cython_kernel_multi_stream():
