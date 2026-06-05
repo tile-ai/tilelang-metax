@@ -24,7 +24,6 @@ def _buggy_kernel(S: T.Tensor((8), T.bfloat16), D: T.Tensor((4, 64), T.bfloat16)
         T.copy(D_shared, D)
 
 
-@tilelang.testing.requires_cuda
 def test():
     test_S = torch.randn((8), dtype=torch.bfloat16, device="cuda")
     test_D = torch.zeros((4, 64), dtype=torch.bfloat16, device="cuda")

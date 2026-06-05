@@ -16,7 +16,6 @@ def _empty_kernel():
     return empty_kernel
 
 
-@tilelang.testing.requires_cuda
 def test_empty_kernel_lowering():
     # Ensure a valid CUDA runtime context is current on this thread for the
     # target device before using driver API calls. Without this, calls like
@@ -64,7 +63,6 @@ def _empty_kernel_with_binding_variants(use_tuple_binding: bool = False):
     return kernel_with_tuple_kernel_binding if use_tuple_binding else kernel_with_scalar_kernel_binding
 
 
-@tilelang.testing.requires_cuda
 def test_empty_kernel_with_binding_variants():
     torch.cuda.set_device(0)
     kernel = _empty_kernel_with_binding_variants()

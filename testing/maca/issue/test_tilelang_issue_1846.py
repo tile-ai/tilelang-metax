@@ -14,7 +14,6 @@ def _issue1846_fill_scalar(fill, M):
     return X
 
 
-@tilelang.testing.requires_cuda
 def test_issue_1846_eager_jit_call_executes():
     """Regression test for issue #1846.
 

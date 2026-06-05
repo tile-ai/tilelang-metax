@@ -37,7 +37,6 @@ def run_chain_equal(N=128, block_size=64, dtype=T.float32):
     torch.testing.assert_close(C, ref)
 
 
-@tilelang.testing.requires_cuda
 def test_chain_equal():
     run_chain_equal()
 

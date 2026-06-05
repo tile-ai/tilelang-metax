@@ -18,8 +18,6 @@ def test_unroll_with_step():
     assert "#pragma unroll" in kernel.get_kernel_source()
 
 
-# TODO: unroll factor is not supported on hip, skip.
-@tilelang.testing.requires_cuda
 def test_unroll_with_unroll_factor():
     @T.prim_func
     def main(A_ptr: T.handle):
