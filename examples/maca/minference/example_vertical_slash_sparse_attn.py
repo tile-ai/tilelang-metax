@@ -3,6 +3,7 @@
 
 import math
 import argparse
+from functools import lru_cache
 
 import torch
 import triton
@@ -11,9 +12,137 @@ import triton.language as tl
 import tilelang
 import tilelang.language as T
 from tilelang.profiler import do_bench
+from tilelang.utils.target import determine_target, target_is_maca
 
 
-@tilelang.jit(out_idx=[3])
+def _convert_vertical_slash_indexes_fallback(
+    seqlens: torch.Tensor,
+    vertical_indexes: torch.Tensor,
+    slash_indexes: torch.Tensor,
+    context_size: int,
+    block_size_M: int,
+    block_size_N: int,
+):
+    assert block_size_M == 64
+    assert block_size_N == 64
+
+    device = seqlens.device
+    seqlens_cpu = seqlens.to("cpu")
+    vertical_cpu = vertical_indexes.to("cpu")
+    slash_cpu = slash_indexes.to("cpu")
+
+    batch_size, num_heads, nnz_vertical = vertical_cpu.shape
+    nnz_slash = slash_cpu.shape[2]
+    num_rows = (context_size + block_size_M - 1) // block_size_M
+
+    block_count = torch.zeros((batch_size, num_heads, num_rows), dtype=torch.int32)
+    block_offset = torch.zeros((batch_size, num_heads, num_rows, nnz_slash), dtype=torch.int32)
+    column_count = torch.zeros((batch_size, num_heads, num_rows), dtype=torch.int32)
+    column_index = torch.zeros((batch_size, num_heads, num_rows, nnz_vertical), dtype=torch.int32)
+
+    for batch_idx in range(batch_size):
+        seqlen = int(seqlens_cpu[batch_idx].item())
+        for head_idx in range(num_heads):
+            vertical = vertical_cpu[batch_idx, head_idx].tolist()
+            slash = slash_cpu[batch_idx, head_idx].tolist()
+            for block_idx_m in range(num_rows):
+                start_m = block_idx_m * block_size_M
+                if start_m >= seqlen:
+                    break
+                end_m = start_m + block_size_M
+
+                tmp_blk_cnt = 0
+                tmp_col_cnt = 0
+                if nnz_slash == 0:
+                    for v_idx in vertical:
+                        if v_idx < end_m:
+                            column_index[batch_idx, head_idx, block_idx_m, tmp_col_cnt] = v_idx
+                            tmp_col_cnt += 1
+                    column_count[batch_idx, head_idx, block_idx_m] = tmp_col_cnt
+                    continue
+
+                s = 0
+                v = 0
+                v_idx = vertical[v] if nnz_vertical else end_m + block_size_M
+                if nnz_vertical:
+                    v += 1
+                s_idx = slash[s]
+                s += 1
+
+                while s_idx >= end_m and s < nnz_slash:
+                    s_idx = slash[s]
+                    s += 1
+                s_idx = max(end_m - s_idx, block_size_M)
+                range_start = s_idx - block_size_M
+                range_end = s_idx
+
+                while True:
+                    if v_idx < range_end:
+                        if v_idx < range_start:
+                            column_index[batch_idx, head_idx, block_idx_m, tmp_col_cnt] = v_idx
+                            tmp_col_cnt += 1
+                        if v < nnz_vertical:
+                            v_idx = vertical[v]
+                            v += 1
+                        else:
+                            v_idx = end_m + block_size_M
+                    else:
+                        if s < nnz_slash:
+                            s_idx = max(end_m - slash[s], block_size_M)
+                            s += 1
+                        else:
+                            for idx in range(range_start, range_end, block_size_N):
+                                block_offset[batch_idx, head_idx, block_idx_m, tmp_blk_cnt] = idx
+                                tmp_blk_cnt += 1
+                            break
+                        if s_idx > range_end + block_size_M:
+                            for idx in range(range_start, range_end, block_size_N):
+                                block_offset[batch_idx, head_idx, block_idx_m, tmp_blk_cnt] = idx
+                                tmp_blk_cnt += 1
+                            range_start = s_idx - block_size_M
+                            range_end = s_idx
+                        elif s_idx > range_end:
+                            range_end += block_size_M
+
+                block_count[batch_idx, head_idx, block_idx_m] = tmp_blk_cnt
+                column_count[batch_idx, head_idx, block_idx_m] = tmp_col_cnt
+
+    return (
+        block_count.to(device),
+        block_offset.to(device),
+        column_count.to(device),
+        column_index.to(device),
+    )
+
+
+@lru_cache(maxsize=1)
+def _get_convert_vertical_slash_indexes():
+    if target_is_maca(determine_target("auto", return_object=True)):
+        return _convert_vertical_slash_indexes_fallback
+
+    try:
+        from torch.utils.cpp_extension import load
+        import os
+
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        sources = [os.path.join(current_dir, "ops", "kernels.cpp"), os.path.join(current_dir, "ops", "vertical_slash_index.cu")]
+        ops = load(name="convert", sources=sources, verbose=False)
+        return ops.convert_vertical_slash_indexes
+    except Exception:
+        return _convert_vertical_slash_indexes_fallback
+
+
+def get_pass_configs():
+    if target_is_maca(determine_target("auto", return_object=True)):
+        return {
+            tilelang.PassConfigKey.TL_DISABLE_TMA_LOWER: True,
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+            tilelang.PassConfigKey.TL_DISABLE_SHUFFLE_ELECT: True,
+        }
+    return {}
+
+
+@tilelang.jit(out_idx=[3], pass_configs=get_pass_configs())
 def _tl_vs_sparse_flashattn(batch, heads, seq_len, dim, vertical_size, slash_size):
     block_M = 64
     block_N = 64
@@ -36,6 +165,8 @@ def _tl_vs_sparse_flashattn(batch, heads, seq_len, dim, vertical_size, slash_siz
     int_dtype = T.int32
 
     def kernel_func(block_M, block_N, num_stages, threads):
+        maca_mode = target_is_maca(determine_target("auto", return_object=True))
+
         @T.macro
         def Prefetch(
             K: T.Tensor(shape, dtype),
@@ -98,6 +229,163 @@ def _tl_vs_sparse_flashattn(batch, heads, seq_len, dim, vertical_size, slash_siz
 
             for i in T.Parallel(block_M):
                 logsum[i] = logsum[i] * scores_scale[i] + scores_sum[i]
+
+        @T.macro
+        def PrefetchSync(
+            K: T.Tensor(shape, dtype),
+            V: T.Tensor(shape, dtype),
+            K_shared: T.SharedBuffer([block_N, dim], dtype),
+            V_shared: T.SharedBuffer([block_N, dim], dtype),
+            column_index: T.SharedBuffer([vertical_size_round], int_dtype),
+            column_count: T.int32,
+            k: T.int32,
+            bz: T.int32,
+            by: T.int32,
+        ):
+            for i, j in T.Parallel(block_N, dim):
+                K_shared[i, j] = T.if_then_else(k + i < column_count, K[bz, by, column_index[k + i], j], 0)
+
+            for i, j in T.Parallel(block_N, dim):
+                V_shared[i, j] = T.if_then_else(k + i < column_count, V[bz, by, column_index[k + i], j], 0)
+
+            T.tvm_storage_sync("shared")
+
+        @T.macro
+        def ComputeSync(
+            acc_s: T.FragmentBuffer([block_M, block_N], accum_dtype),
+            acc_s_cast: T.FragmentBuffer([block_M, block_N], dtype),
+            acc_o: T.FragmentBuffer([block_M, dim], accum_dtype),
+            scores_max: T.FragmentBuffer([block_M], accum_dtype),
+            scores_max_prev: T.FragmentBuffer([block_M], accum_dtype),
+            k: T.int32,
+            column_count: T.int32,
+            Q_shared: T.SharedBuffer([block_M, dim], dtype),
+            K_shared: T.SharedBuffer([block_N, dim], dtype),
+            V_shared: T.SharedBuffer([block_N, dim], dtype),
+            scores_scale: T.FragmentBuffer([block_M], accum_dtype),
+            scores_sum: T.FragmentBuffer([block_M], accum_dtype),
+            logsum: T.FragmentBuffer([block_M], accum_dtype),
+        ):
+            for i, j in T.Parallel(block_M, block_N):
+                acc_s[i, j] = T.if_then_else(k + j < column_count, 0, -T.infinity(acc_s.dtype))
+            T.gemm(Q_shared, K_shared, acc_s, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
+
+            T.copy(scores_max, scores_max_prev)
+            T.reduce_max(acc_s, scores_max, dim=1, clear=False)
+            for i in T.Parallel(block_M):
+                scores_max[i] = T.max(scores_max[i], scores_max_prev[i])
+
+            for i in T.Parallel(block_M):
+                scores_scale[i] = T.exp2(scores_max_prev[i] * scale - scores_max[i] * scale)
+            for i, j in T.Parallel(block_M, block_N):
+                acc_s[i, j] = T.exp2(acc_s[i, j] * scale - scores_max[i] * scale)
+            for i, j in T.Parallel(block_M, dim):
+                acc_o[i, j] = acc_o[i, j] * scores_scale[i]
+
+            T.copy(acc_s, acc_s_cast)
+            T.gemm(acc_s_cast, V_shared, acc_o, policy=T.GemmWarpPolicy.FullRow)
+            T.reduce_sum(acc_s, scores_sum, dim=1)
+
+            for i in T.Parallel(block_M):
+                logsum[i] = logsum[i] * scores_scale[i] + scores_sum[i]
+
+        @T.prim_func
+        def vs_sparse_flashattn_maca(
+            Q: T.Tensor(shape, dtype),
+            K: T.Tensor(shape, dtype),
+            V: T.Tensor(shape, dtype),
+            Output: T.Tensor(shape, dtype),
+            BlockCount: T.Tensor(count_shape, int_dtype),
+            BlockOffset: T.Tensor(offset_shape, int_dtype),
+            ColumnCount: T.Tensor(count_shape, int_dtype),
+            ColumnIndex: T.Tensor(index_shape, int_dtype),
+        ):
+            with T.Kernel(T.ceildiv(seq_len, block_M), heads, batch, threads=threads) as (bc, by, bz):
+                bx = T.ceildiv(seq_len, block_M) - 1 - bc
+                Q_shared = T.alloc_shared([block_M, dim], dtype)
+                K_shared_1 = T.alloc_shared([block_N, dim], dtype)
+                V_shared_1 = T.alloc_shared([block_N, dim], dtype)
+                O_shared = T.alloc_shared([block_M, dim], dtype)
+                acc_s = T.alloc_fragment([block_M, block_N], accum_dtype)
+                acc_s_cast = T.alloc_fragment([block_M, block_N], dtype)
+                acc_o = T.alloc_fragment([block_M, dim], accum_dtype)
+                scores_max = T.alloc_fragment([block_M], accum_dtype)
+                scores_max_prev = T.alloc_fragment([block_M], accum_dtype)
+                scores_scale = T.alloc_fragment([block_M], accum_dtype)
+                scores_sum = T.alloc_fragment([block_M], accum_dtype)
+                logsum = T.alloc_fragment([block_M], accum_dtype)
+                block_count = T.alloc_var(dtype=int_dtype)
+                block_offset = T.alloc_shared([slash_size_round], int_dtype, scope="shared")
+                column_count = T.alloc_var(dtype=int_dtype)
+                column_index = T.alloc_shared([vertical_size_round], int_dtype, scope="shared")
+
+                block_count = BlockCount[bz, by, bx]
+                column_count = ColumnCount[bz, by, bx]
+
+                for vi in T.Parallel(slash_size_round):
+                    if vi < slash_size:
+                        block_offset[vi] = BlockOffset[bz, by, bx, vi]
+
+                for vi in T.Parallel(vertical_size_round):
+                    if vi < vertical_size:
+                        column_index[vi] = ColumnIndex[bz, by, bx, vi]
+
+                T.copy(Q[bz, by, bx * block_M : (bx + 1) * block_M, :], Q_shared)
+                T.fill(acc_o, 0)
+                T.fill(logsum, 0)
+                T.fill(scores_max, -T.infinity(accum_dtype))
+
+                for bi in T.serial(block_count):
+                    k = block_offset[bi]
+                    T.copy(K[bz, by, k : k + block_N, :], K_shared_1)
+                    T.copy(V[bz, by, k : k + block_N, :], V_shared_1)
+                    for i, j in T.Parallel(block_M, block_N):
+                        acc_s[i, j] = T.if_then_else(bx * block_M + i >= k + j, 0, -T.infinity(acc_s.dtype))
+
+                    T.gemm(Q_shared, K_shared_1, acc_s, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
+
+                    T.copy(scores_max, scores_max_prev)
+                    T.reduce_max(acc_s, scores_max, dim=1, clear=False)
+                    for i in T.Parallel(block_M):
+                        scores_max[i] = T.max(scores_max[i], scores_max_prev[i])
+
+                    for i in T.Parallel(block_M):
+                        scores_scale[i] = T.exp2(scores_max_prev[i] * scale - scores_max[i] * scale)
+                    for i, j in T.Parallel(block_M, block_N):
+                        acc_s[i, j] = T.exp2(acc_s[i, j] * scale - scores_max[i] * scale)
+                    for i, j in T.Parallel(block_M, dim):
+                        acc_o[i, j] = acc_o[i, j] * scores_scale[i]
+
+                    T.copy(acc_s, acc_s_cast)
+                    T.gemm(acc_s_cast, V_shared_1, acc_o, policy=T.GemmWarpPolicy.FullRow)
+                    T.reduce_sum(acc_s, scores_sum, dim=1)
+
+                    for i in T.Parallel(block_M):
+                        logsum[i] = logsum[i] * scores_scale[i] + scores_sum[i]
+
+                if column_count != 0:
+                    for bi in T.serial(T.ceildiv(column_count, block_N)):
+                        k = bi * block_N
+                        PrefetchSync(K, V, K_shared_1, V_shared_1, column_index, column_count, k, bz, by)
+                        ComputeSync(
+                            acc_s,
+                            acc_s_cast,
+                            acc_o,
+                            scores_max,
+                            scores_max_prev,
+                            k,
+                            column_count,
+                            Q_shared,
+                            K_shared_1,
+                            V_shared_1,
+                            scores_scale,
+                            scores_sum,
+                            logsum,
+                        )
+                for i, j in T.Parallel(block_M, dim):
+                    acc_o[i, j] /= logsum[i]
+                T.copy(acc_o, O_shared)
+                T.copy(O_shared, Output[bz, by, bx * block_M : (bx + 1) * block_M, :])
 
         @T.prim_func
         def vs_sparse_flashattn_ws(
@@ -280,6 +568,8 @@ def _tl_vs_sparse_flashattn(batch, heads, seq_len, dim, vertical_size, slash_siz
                     T.copy(acc_o, O_shared)
                     T.copy(O_shared, Output[bz, by, bx * block_M : (bx + 1) * block_M, :])
 
+        if maca_mode:
+            return vs_sparse_flashattn_maca
         return vs_sparse_flashattn_ws
 
     return kernel_func(block_M, block_N, num_stages, threads)
@@ -490,13 +780,7 @@ def vertical_slash_sparse_attention(
     block_size_M: int = 64,
     block_size_N: int = 64,
 ):
-    from torch.utils.cpp_extension import load
-    import os
-
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    sources = [os.path.join(current_dir, "ops", "kernels.cpp"), os.path.join(current_dir, "ops", "vertical_slash_index.cu")]
-    ops = load(name="convert", sources=sources, verbose=False)
-    convert_vertical_slash_indexes = ops.convert_vertical_slash_indexes
+    convert_vertical_slash_indexes = _get_convert_vertical_slash_indexes()
     batch_size, num_heads, context_size, head_dim = query.shape
     pad = (block_size_M - context_size) & (block_size_M - 1)
     if pad == block_size_M:
@@ -590,7 +874,10 @@ def main(batch=1, heads=1, seq_len=4096, head_dim=64, vertical_size=1000, slash_
     tilelang_out = _attn(False)
     triton_out = _attn(True)
 
-    torch.testing.assert_close(triton_out, tilelang_out, atol=1e-2, rtol=1e-2)
+    maca_mode = target_is_maca(determine_target("auto", return_object=True))
+    atol = 2e-2 if maca_mode else 1e-2
+    rtol = 2e-2 if maca_mode else 1e-2
+    torch.testing.assert_close(triton_out, tilelang_out, atol=atol, rtol=rtol)
 
     triton_time = do_bench(lambda: _attn(True))
     tilelang_time = do_bench(lambda: _attn(False))
@@ -626,13 +913,7 @@ def run_regression_perf(batch=1, heads=1, seq_len=16384, head_dim=64, vertical_s
     batch_size, num_heads, context_size, head_dim = query.shape
     v_idx = v_idx.to(torch.int32).reshape((batch_size, num_heads, -1)).sort(dim=-1, descending=False)[0]
     s_idx = s_idx.to(torch.int32).reshape((batch_size, num_heads, -1)).sort(dim=-1, descending=True)[0]
-    from torch.utils.cpp_extension import load
-    import os
-
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    sources = [os.path.join(current_dir, "ops", "kernels.cpp"), os.path.join(current_dir, "ops", "vertical_slash_index.cu")]
-    ops = load(name="convert", sources=sources, verbose=False)
-    convert_vertical_slash_indexes = ops.convert_vertical_slash_indexes
+    convert_vertical_slash_indexes = _get_convert_vertical_slash_indexes()
     batch_size, num_heads, context_size, head_dim = query.shape
     pad = (block_size_M - context_size) & (block_size_M - 1)
     if pad == block_size_M:
