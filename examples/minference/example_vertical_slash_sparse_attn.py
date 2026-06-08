@@ -493,6 +493,8 @@ def vertical_slash_sparse_attention(
     from torch.utils.cpp_extension import load
     import os
 
+    os.environ.pop("CXX", None)
+
     current_dir = os.path.dirname(os.path.abspath(__file__))
     sources = [os.path.join(current_dir, "ops", "kernels.cpp"), os.path.join(current_dir, "ops", "vertical_slash_index.cu")]
     ops = load(name="convert", sources=sources, verbose=False)
@@ -628,6 +630,8 @@ def run_regression_perf(batch=1, heads=1, seq_len=16384, head_dim=64, vertical_s
     s_idx = s_idx.to(torch.int32).reshape((batch_size, num_heads, -1)).sort(dim=-1, descending=True)[0]
     from torch.utils.cpp_extension import load
     import os
+
+    os.environ.pop("CXX", None)
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
     sources = [os.path.join(current_dir, "ops", "kernels.cpp"), os.path.join(current_dir, "ops", "vertical_slash_index.cu")]

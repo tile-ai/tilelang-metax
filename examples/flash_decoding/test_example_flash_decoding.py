@@ -21,7 +21,6 @@ def test_example_example_mha_inference():
     example_mha_inference.main(BATCH=1, H=32, Q_CTX=128, KV_CTX=2048, D_HEAD=128, causal=False)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_example_example_gqa_decode_varlen_logits():
     example_gqa_decode_varlen_logits.main()
 

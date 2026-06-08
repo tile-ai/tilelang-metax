@@ -4,6 +4,7 @@ import pytest
 import random
 import torch
 import numpy as np
+from tilelang.contrib import nvcc
 from tilelang.utils.target import determine_target, target_is_cdna, target_is_cuda, target_is_gfx950, target_is_maca
 from tvm.testing.utils import requires_package, requires_llvm, requires_metal, requires_rocm, _compose
 
@@ -159,9 +160,14 @@ def requires_cuda_compute_version(major_version, minor_version=0, mode="ge"):
         - "le": less than or equal to
         - "lt": less than
     """
+    is_maca = _check_is_maca()
     min_version = (major_version, minor_version)
     try:
-        compute_version = torch.cuda.get_device_capability()
+        if is_maca:
+            compute_version = torch.cuda.get_device_capability()
+        else:
+            arch = nvcc.get_target_compute_version()
+            compute_version = nvcc.parse_compute_version(arch)
     except ValueError:
         # No GPU present.  This test will be skipped from the
         # requires_cuda() marks as well.
@@ -190,7 +196,7 @@ def requires_cuda_compute_version(major_version, minor_version=0, mode="ge"):
             reason=f"Requires CUDA compute {mode} {min_version_str}, but have {compute_version_str}",
         ),
         pytest.mark.skipif(
-            not _check_is_maca(),
+            not is_maca,
             reason="Requires CUDA like target",
         ),
     ]
