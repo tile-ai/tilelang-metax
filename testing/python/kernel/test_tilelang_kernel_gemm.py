@@ -240,7 +240,6 @@ def test_gemm_f32f32f32_nt():
 
 
 # TODO(Gong): Meets precision issue on ROCm, disable for now
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_gemm_f32f32f32_tn():
     run_gemm(

@@ -4,7 +4,6 @@ import tilelang as tl
 import tilelang.language as T
 from tilelang.engine.phase import LowerAndLegalize
 from tvm import tirx
-import tilelang.testing
 
 
 sm100_target = tvm.target.Target({"kind": "cuda", "arch": "sm_100"})
@@ -94,7 +93,6 @@ def test_storage_sync_is_wrapped_with_tcgen05_fences():
     _check(before, after)
 
 
-@tilelang.testing.requires_cuda
 def test_lower_tmem_copy_uses_tcgen05_ld_intrin():
     @T.prim_func
     def func(X: T.Tensor((256, 256), T.float16), Y: T.Tensor((256, 256), T.float16)):
@@ -128,7 +126,6 @@ def test_lower_tmem_copy_uses_tcgen05_ld_intrin():
     assert _count_extern_calls_with_prefix(body, "tl::tcgen05_ld_") == 0
 
 
-@tilelang.testing.requires_cuda
 def test_lower_tmem_copy_uses_tcgen05_st_intrin():
     @T.prim_func
     def func(X: T.Tensor((256, 256), T.bfloat16)):

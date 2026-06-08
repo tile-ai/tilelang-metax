@@ -124,7 +124,6 @@ def vectorize_test_all_dtypes(dtype, vec_num):
     return main
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     "dtype",

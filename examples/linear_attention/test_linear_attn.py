@@ -9,7 +9,6 @@ def test_example_linear_attn_fwd():
     example_linear_attn_fwd.main()
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_example_linear_attn_bwd():
     example_linear_attn_bwd.main()

@@ -4,7 +4,6 @@ import tilelang.testing
 from tilelang import language as T
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_nullable_shared_shape():
     """Test that buffers sharing a shape variable can be nullable."""
 
@@ -70,7 +69,6 @@ def test_nullable_shared_shape():
     return True
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_nullable_single_source_shape():
     """Test that a single buffer with a symbolic shape var must be non-null.
 

@@ -254,7 +254,6 @@ def test_marco_return():
             check(d, (int, float, T.PrimExpr))
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_serial_for_with_step():
     @tilelang.jit
     def stepped_serial():

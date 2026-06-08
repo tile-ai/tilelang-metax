@@ -24,7 +24,6 @@ def grid_sync(N=1024):
     return kernel
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @tilelang.testing.requires_cuda_compute_version_ge(6, 0)
 def test_grid_sync():
