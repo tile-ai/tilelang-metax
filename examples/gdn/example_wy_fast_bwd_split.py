@@ -62,15 +62,15 @@ def prepare_input(
     state_dtype,
 ):
     BS = chunk_size
-    K = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
+    K = torch.randn(B, S, H, DK, dtype=input_dtype, device="cuda")
     K = F.normalize(K, dim=-1, p=2)
-    V = torch.randn(B, S, H, DV, dtype=input_dtype).cuda()
+    V = torch.randn(B, S, H, DV, dtype=input_dtype, device="cuda")
     V = F.normalize(V, dim=-1, p=2)
-    Beta = torch.randn(B, S, H, dtype=input_dtype).cuda()
-    G = torch.randn(B, S, H, dtype=gate_dtype).cuda()
-    A = torch.randn(B, S, H, BS, dtype=input_dtype).cuda()
-    dw = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
-    du = torch.randn(B, S, H, DV, dtype=input_dtype).cuda()
+    Beta = torch.randn(B, S, H, dtype=input_dtype, device="cuda")
+    G = torch.randn(B, S, H, dtype=gate_dtype, device="cuda")
+    A = torch.randn(B, S, H, BS, dtype=input_dtype, device="cuda")
+    dw = torch.randn(B, S, H, DK, dtype=input_dtype, device="cuda")
+    du = torch.randn(B, S, H, DV, dtype=input_dtype, device="cuda")
     return K, V, Beta, G, A, dw, du
 
 

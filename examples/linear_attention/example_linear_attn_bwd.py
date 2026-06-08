@@ -23,7 +23,7 @@ def tl_fused_chunk_bwd_kernel(
         scale = DK**-0.5
     accum_dtype = T.float32
 
-    chunk_size = 64
+    chunk_size = 32
     BK = BV = 64  # Set to 128 can be faster, but has some numerical differences with FLA
     assert S % chunk_size == 0 and DK % BK == 0 and DV % BV == 0
     NK = tilelang.cdiv(DK, BK)

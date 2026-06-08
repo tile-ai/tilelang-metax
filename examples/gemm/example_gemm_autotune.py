@@ -177,7 +177,7 @@ def get_heuristic_config() -> dict:
     sm_version = sm_major * 10 + sm_minor
     print(f"CUDA device capability: {sm_version}")
     if sm_version in {80}:
-        return {"block_M": 128, "block_N": 256, "block_K": 32, "num_stages": 2, "thread_num": 128, "enable_rasteration": True}
+        return {"block_M": 64, "block_N": 64, "block_K": 32, "num_stages": 2, "thread_num": 128, "enable_rasteration": True}
     elif sm_version in {90}:
         return {"block_M": 128, "block_N": 256, "block_K": 64, "num_stages": 3, "thread_num": 256, "enable_rasteration": True}
     else:

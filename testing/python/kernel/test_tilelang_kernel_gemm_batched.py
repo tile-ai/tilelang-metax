@@ -122,7 +122,7 @@ def test_gemm_f16f16f16_nn():
         False,
         T.float16,
         T.float16,
-        T.float16,
+        T.float32,
         64,
         64,
         32,

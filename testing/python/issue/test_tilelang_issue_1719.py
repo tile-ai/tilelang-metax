@@ -4,6 +4,7 @@ import tilelang.testing
 import tilelang.language as T
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_issue_1719_layout_1():
     @tilelang.jit

@@ -51,7 +51,7 @@ def native_sparse_attention(
     BS = block_S
     BK = BV = block_T
     num_stages = 0
-    threads = 32
+    threads = 64
 
     Q: T.Tensor(q_shape, dtype)  # [batch, 1, heads, dim]
     K: T.Tensor(kv_shape, dtype)  # [batch, seq_len, head_kv, dim]
@@ -129,7 +129,7 @@ def native_sparse_attention(
 
 
 def main():
-    B, SEQ_LEN, H, HQ, D, S, block_size, dtype = 2, 64, 1, 16, 16, 1, 32, torch.float16
+    B, SEQ_LEN, H, HQ, D, S, block_size, dtype = 2, 64, 1, 16, 16, 1, 64, torch.float16
     groups = HQ // H
     SEQ_LEN_Q = 1
 

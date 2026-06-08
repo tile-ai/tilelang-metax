@@ -6,7 +6,7 @@ from tilelang.engine.phase import LowerAndLegalize
 
 
 def _apply_plan_update(func: tvm.tirx.PrimFunc) -> tvm.IRModule:
-    target = tvm.target.Target("cuda")
+    target = tl.utils.determine_target(return_object=True)
     mod = tvm.IRModule.from_expr(func.with_attr("global_symbol", "main"))
     with target:
         mod = LowerAndLegalize(mod, target)

@@ -264,7 +264,7 @@ class _attention(torch.autograd.Function):
 
         do, q, k, v, o = [maybe_contiguous(x) for x in (do, q, k, v, o)]
         block_M = 64
-        block_N = 64 if D_HEAD <= 64 else 32
+        block_N = 32
         kernel_prep = flashattn_bwd_preprocess(BATCH, H, N_CTX, D_HEAD)
         kernel_post = flashattn_bwd_postprocess(BATCH, H, N_CTX, D_HEAD)
         delta = kernel_prep(o, do)

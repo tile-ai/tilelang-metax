@@ -425,7 +425,7 @@ def assert_tl_matmul_with_ladder_weight_only_transform_block_reduce_int4_correct
 
 @tilelang.testing.requires_package("bitblas")
 def test_run_dequantize_gemm():
-    run_gemm(256, 256, 256, T.float16, T.float16, T.float16, 128, 128, 32, num_threads=128)
+    run_gemm(256, 256, 256, T.float16, T.float16, T.float32, 128, 128, 32, num_threads=128)
     run_gemm(256, 256, 256, T.int8, T.int32, T.int32, 128, 128, 32, num_threads=128)
 
 

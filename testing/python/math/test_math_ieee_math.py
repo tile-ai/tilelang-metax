@@ -77,7 +77,6 @@ def run_ieee_math_test(
     kernel = tilelang.compile(
         main_func,
         out_idx=out_idx,
-        target="cuda",
         pass_configs={
             tilelang.PassConfigKey.TL_ENABLE_FAST_MATH: False,
         },
@@ -199,7 +198,6 @@ def test_ieee_frsqrt_rn_only():
     kernel = tilelang.compile(
         main,
         out_idx=[1],
-        target="cuda",
         pass_configs={
             tilelang.PassConfigKey.TL_ENABLE_FAST_MATH: False,
         },

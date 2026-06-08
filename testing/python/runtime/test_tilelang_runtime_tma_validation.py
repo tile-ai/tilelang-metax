@@ -66,6 +66,7 @@ def test_tma_runtime_validation_surfaces_invalid_argument_constraints():
     assert "format         7 (CU_TENSOR_MAP_DATA_TYPE_FLOAT32)" in message
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 def test_tma_host_codegen_aligns_tvm_ffi_stack_alloca_for_descriptor():
     m, k = 16, 256

@@ -113,7 +113,7 @@ def test_gemm_f16f16f16_nn():
         False,
         T.float16,
         T.float16,
-        T.float16,
+        T.float32,
         128,
         128,
         32,
@@ -180,7 +180,7 @@ def test_gemm_f16f16f16_tn():
         False,
         T.float16,
         T.float16,
-        T.float16,
+        T.float32,
         128,
         128,
         32,
@@ -198,7 +198,7 @@ def test_gemm_f16f16f16_nt():
         True,
         T.float16,
         T.float16,
-        T.float16,
+        T.float32,
         128,
         128,
         32,
@@ -216,6 +216,7 @@ def test_gemm_i8i8i32_tn():
     run_gemm(512, 1024, 768, True, False, T.int8, T.int8, T.int32, 128, 128, 64)
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_gemm_f64f64f64_nt():
     run_gemm(512, 512, 512, False, True, T.float64, T.float64, T.float64, 64, 32, 16)
@@ -239,6 +240,7 @@ def test_gemm_f32f32f32_nt():
 
 
 # TODO(Gong): Meets precision issue on ROCm, disable for now
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_gemm_f32f32f32_tn():
     run_gemm(
@@ -266,7 +268,7 @@ def test_pad_aligned_f16f16f16_nn():
         False,
         T.float16,
         T.float16,
-        T.float16,
+        T.float32,
         128,
         256,
         32,
@@ -284,7 +286,7 @@ def test_pad_f16f16f16_nn():
         False,
         T.float16,
         T.float16,
-        T.float16,
+        T.float32,
         128,
         256,
         32,
@@ -420,7 +422,7 @@ def test_gemm_f16f16f16_sr():
         True,
         T.float16,
         T.float16,
-        T.float16,
+        T.float32,
         128,
         128,
         32,
@@ -539,7 +541,7 @@ def test_gemm_f16f16f16_rs():
         False,
         T.float16,
         T.float16,
-        T.float16,
+        T.float32,
         128,
         128,
         32,

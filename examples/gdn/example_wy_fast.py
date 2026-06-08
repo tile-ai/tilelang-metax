@@ -23,11 +23,11 @@ torch.random.manual_seed(1)
 
 def prepare_input(B, S, H, DK, DV, chunk_size, input_dtype, output_dtype, gate_dtype=torch.float32):
     BS = chunk_size
-    K = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
-    V = torch.randn(B, S, H, DV, dtype=input_dtype).cuda()
-    Beta = torch.randn(B, S, H, dtype=input_dtype).cuda()
-    G = torch.randn(B, S, H, dtype=gate_dtype).cuda()
-    A = torch.randn(B, S, H, BS, dtype=output_dtype).cuda()
+    K = torch.randn(B, S, H, DK, dtype=input_dtype, device="cuda")
+    V = torch.randn(B, S, H, DV, dtype=input_dtype, device="cuda")
+    Beta = torch.randn(B, S, H, dtype=input_dtype, device="cuda")
+    G = torch.randn(B, S, H, dtype=gate_dtype, device="cuda")
+    A = torch.randn(B, S, H, BS, dtype=output_dtype, device="cuda")
     return K, V, Beta, G, A
 
 

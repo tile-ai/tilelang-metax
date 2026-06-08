@@ -510,9 +510,9 @@ def run_regression_perf():
             D_HEAD_QK,
             D_HEAD_V,
             causal,
-            block_M=64,
+            block_M=32,
             block_N=32,
-            threads=256,
+            threads=128,
             num_stages=2,
             groups=groups,
         )

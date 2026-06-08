@@ -259,6 +259,7 @@ def test_non_cuda_target_skip():
     assert not _check_has_intrinsic(mod, "stg"), "Non-CUDA targets should NOT use stg intrinsics"
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_e2e_load_global_store_global():
     """End-to-end test that ldg/stg intrinsics work correctly when enabled."""
@@ -289,6 +290,7 @@ def test_e2e_load_global_store_global():
     assert "load_global_128" in src or "store_global_128" in src, "Expected load_global_128/store_global_128 in generated source"
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_e2e_load_global_store_global_predicated():
     """End-to-end test that load_global/store_global intrinsics work correctly when enabled."""

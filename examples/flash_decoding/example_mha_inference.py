@@ -241,8 +241,8 @@ def main(BATCH=1, H=32, Q_CTX=128, KV_CTX=8192, D_HEAD=128, causal=False):
     total_flops = 2 * flops_per_matmul
     if causal:
         total_flops *= 0.5
-    BLOCK_M = 128
-    BLOCK_N = 64  # if D_HEAD <= 128 else 32
+    BLOCK_M = 32
+    BLOCK_N = 32  # if D_HEAD <= 128 else 32
     kernel = flashattn(BATCH, H, Q_CTX, KV_CTX, D_HEAD, causal, BLOCK_M, BLOCK_N)
     ref_fn = partial(ref_program, causal=causal)
     profiler = kernel.get_profiler(tensor_supply_type=tilelang.TensorSupplyType.Normal)
@@ -258,8 +258,8 @@ def main(BATCH=1, H=32, Q_CTX=128, KV_CTX=8192, D_HEAD=128, causal=False):
 
 
 def run_regression_perf(BATCH=1, H=32, Q_CTX=128, KV_CTX=8192, D_HEAD=128, causal=False):
-    BLOCK_M = 128
-    BLOCK_N = 64
+    BLOCK_M = 32
+    BLOCK_N = 32
     kernel = flashattn(BATCH, H, Q_CTX, KV_CTX, D_HEAD, causal, BLOCK_M, BLOCK_N)
     profiler = kernel.get_profiler(tensor_supply_type=tilelang.TensorSupplyType.Normal)
     return profiler.do_bench(backend="cupti")

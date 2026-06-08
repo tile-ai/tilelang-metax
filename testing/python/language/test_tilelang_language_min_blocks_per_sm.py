@@ -5,7 +5,7 @@ import tilelang.language as T
 import tilelang.testing
 
 
-@tl.jit(out_idx=[2], target="cuda")
+@tl.jit(out_idx=[2])
 def _kernel_min_blocks_per_sm():
     @T.prim_func
     def main(

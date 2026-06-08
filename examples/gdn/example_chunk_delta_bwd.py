@@ -42,12 +42,12 @@ def prepare_input(
     gate_dtype,
     state_dtype,
 ):
-    Q = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
-    K = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
+    Q = torch.randn(B, S, H, DK, dtype=input_dtype, device="cuda")
+    K = torch.randn(B, S, H, DK, dtype=input_dtype, device="cuda")
     K = F.normalize(K, dim=-1, p=2)
-    W = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
+    W = torch.randn(B, S, H, DK, dtype=input_dtype, device="cuda")
     # Note: G should be in logspace and do chunkwise cumsum
-    G = torch.randn(B, S, H, dtype=gate_dtype).cuda()
+    G = torch.randn(B, S, H, dtype=gate_dtype, device="cuda")
     G = F.logsigmoid(G)
     try:
         from fla.ops.utils.cumsum import chunk_local_cumsum
@@ -56,10 +56,10 @@ def prepare_input(
     except ImportError:
         print("fla not found, skip cumsum")
 
-    h0 = torch.randn(B, H, DK, DV, dtype=input_dtype).cuda()
-    dht = torch.randn(B, H, DK, DV, dtype=input_dtype).cuda()
-    dO = torch.randn(B, S, H, DV, dtype=input_dtype).cuda()
-    dv = torch.randn(B, S, H, DV, dtype=input_dtype).cuda()
+    h0 = torch.randn(B, H, DK, DV, dtype=input_dtype, device="cuda")
+    dht = torch.randn(B, H, DK, DV, dtype=input_dtype, device="cuda")
+    dO = torch.randn(B, S, H, DV, dtype=input_dtype, device="cuda")
+    dv = torch.randn(B, S, H, DV, dtype=input_dtype, device="cuda")
     return Q, K, W, G, h0, dht, dO, dv
 
 

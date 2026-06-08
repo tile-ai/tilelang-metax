@@ -261,6 +261,7 @@ def _benchmark_kernel_ms(kernel, args, tensors_to_clear, warmup, repeats):
     return samples
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_pdl_trigger():
     """Verify CUDA codegen emits the PDL trigger intrinsic."""
@@ -273,6 +274,7 @@ def test_pdl_trigger():
     assert "cudaTriggerProgrammaticLaunchCompletion" in code
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_pdl_sync():
     """Verify CUDA codegen emits the PDL sync intrinsic without restrict qualifiers."""

@@ -2,7 +2,6 @@ import torch
 import torch.nn.functional as F
 import tilelang
 import tilelang.language as T
-from tilelang.contrib import nvcc
 import argparse
 from einops import rearrange, repeat
 from bert_padding import pad_input, unpad_input
@@ -491,8 +490,8 @@ class _attention(torch.autograd.Function):
     ):
         BATCH, N_CTX, H, D_HEAD_QK = q.shape
         D_HEAD_V = v.shape[-1]
-        block_M = 128
-        block_N = 64
+        block_M = 64
+        block_N = 32
         q_unpad, indices_q, _, _ = unpad_input(q, (torch.arange(N_CTX, device=q.device).unsqueeze(0) < seqlens_q.unsqueeze(1)))
         k_unpad, indices_k, _, _ = unpad_input(k, (torch.arange(N_CTX, device=k.device).unsqueeze(0) < seqlens_k.unsqueeze(1)))
         v_unpad, _, _, _ = unpad_input(v, (torch.arange(N_CTX, device=v.device).unsqueeze(0) < seqlens_k.unsqueeze(1)))
@@ -530,8 +529,8 @@ class _attention(torch.autograd.Function):
             return x
 
         do, q, k, v, o = [maybe_contiguous(x) for x in (do_unpad, q, k, v, o)]
-        block_M = 128
-        block_N = 32
+        block_M = 32
+        block_N = 16
         mod_prep = flashattn_bwd_preprocess(BATCH, H, total_q, N_CTX, ctx.max_seqlen_q, D_HEAD_V)
         delta = mod_prep(o, do, cu_seqlens_q)
 
@@ -548,8 +547,8 @@ class _attention(torch.autograd.Function):
                 ctx.causal,
                 block_M,
                 block_N,
-                threads=256,
-                num_stages=2,
+                threads=128,
+                num_stages=0,
                 groups=groups,
             )
             dq = torch.zeros_like(q, dtype=torch.float32)
@@ -719,9 +718,9 @@ def run_regression_perf():
             D_HEAD_QK,
             D_HEAD_V,
             causal,
-            block_M=128,
+            block_M=32,
             block_N=32,
-            threads=256,
+            threads=128,
             num_stages=2,
             groups=groups,
         )
@@ -738,9 +737,6 @@ def run_regression_perf():
 
 
 if __name__ == "__main__":
-    arch = nvcc.get_target_compute_version()
-    print(f"Detected GPU compute capability: {arch}")
-    assert float(arch) >= 9.0, "This example only supports GPU with compute capability >= 9.0"
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch", type=int, default=8, help="Batch size")
     parser.add_argument("--h", type=int, default=32, help="Number of heads")

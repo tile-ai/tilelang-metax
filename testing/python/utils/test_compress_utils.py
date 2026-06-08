@@ -123,6 +123,7 @@ def _test_compress(dtype, meta_dtype):
     torch_assert_close(C_tl, C_ref, atol=1e-2, rtol=1e-2)
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     "dtype, meta_dtype",

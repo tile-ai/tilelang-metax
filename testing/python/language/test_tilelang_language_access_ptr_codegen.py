@@ -5,6 +5,7 @@ import pytest
 from tilelang import tvm
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 def test_access_ptr_cp_async_codegen():
     """Smoke-test codegen for T.access_ptr -> tl.access_ptr -> tvm_access_ptr -> cp.async."""
@@ -31,6 +32,7 @@ def test_access_ptr_cp_async_codegen():
     assert "cp_async_gs<16>" in src, "Expected cp_async_gs<16> in generated CUDA source"
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 def test_vectorized_cp_async_num_elems_codegen():
     """Check vectorized tl.ptx_cp_async widens logical element counts."""
@@ -60,6 +62,7 @@ def test_vectorized_cp_async_num_elems_codegen():
     assert "cp_async_gs<2>" not in src, "Did not expect scalar cp.async width in generated CUDA source"
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 def test_vectorized_int4_cp_async_num_elems_codegen():
     """Check subbyte tl.ptx_cp_async derives PTX bytes from logical element counts."""
@@ -88,6 +91,7 @@ def test_vectorized_int4_cp_async_num_elems_codegen():
     assert "cp_async_gs<16>" in src, "Expected 32 x int4 elems to fold into cp_async_gs<16>"
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 def test_async_copy_tileop_lowers_to_cp_async():
     """Check T.async_copy always uses CPAsync path and does not auto-wait."""
@@ -111,6 +115,7 @@ def test_async_copy_tileop_lowers_to_cp_async():
     assert "tl::cp_async_wait<0>" not in src, "Did not expect async_copy lowering to auto-emit wait"
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 def test_async_copy_tileop_rejects_invalid_cp_async_scope():
     """Check T.async_copy rejects non global->shared patterns."""
@@ -135,6 +140,7 @@ def test_async_copy_tileop_rejects_invalid_cp_async_scope():
         tilelang.compile(main, out_idx=[1], target="cuda")
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 @tilelang.testing.requires_cuda_compute_version_ge(8, 0)
 def test_parallel_simt_copy_respects_enable_async_copy_config():
@@ -163,6 +169,7 @@ def test_parallel_simt_copy_respects_enable_async_copy_config():
     assert "cp_async_gs<" not in src, "Did not expect cp_async_gs when async copy is disabled"
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 @tilelang.testing.requires_cuda_compute_version_ge(8, 0)
 def test_async_copy_oob_lowers_to_predicated_cp_async_without_wait():

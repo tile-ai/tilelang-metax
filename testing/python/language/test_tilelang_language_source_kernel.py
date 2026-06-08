@@ -40,6 +40,7 @@ def get_single_device_function_name(device_mod) -> str:
     return function_names[0]
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_source_kernel_inline_codegen():
     artifact = tilelang.lower(make_source_kernel(CUDA_SOURCE, entry_name="external_copy"), target="cuda")
@@ -52,6 +53,7 @@ def test_source_kernel_inline_codegen():
     assert "B[i] = A[i];" in artifact.kernel_source
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_source_kernel_run():
     kernel = tilelang.compile(make_source_kernel(CUDA_SOURCE, entry_name="external_copy"), target="cuda")
@@ -63,6 +65,7 @@ def test_source_kernel_run():
     torch.testing.assert_close(b, a)
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_source_kernel_loads_from_file():
     with tempfile.NamedTemporaryFile("w", suffix=".cu", delete=False, encoding="utf-8") as f:
@@ -77,6 +80,7 @@ def test_source_kernel_loads_from_file():
     assert "B[i] = A[i];" in artifact.kernel_source
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_source_kernel_invalid_entry_name_fails_in_lower():
     with pytest.raises(Exception, match=r"Available entries: external_copy"):

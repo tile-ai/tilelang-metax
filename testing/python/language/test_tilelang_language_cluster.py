@@ -117,6 +117,7 @@ def test_cluster_barrier():
     kernel()
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 def test_clc_query_codegen_includes_cluster_header():
     src = _get_clc_query_codegen_source()

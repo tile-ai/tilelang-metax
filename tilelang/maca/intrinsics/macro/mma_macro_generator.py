@@ -9,6 +9,7 @@ from tvm.runtime import convert
 from ..layout.utils import mma_store_index_map
 from typing import Literal
 from collections.abc import Callable
+from tilelang.utils.target import determine_target
 
 from tilelang.utils import is_fragment
 from tilelang.utils.language import get_buffer_region_from_load
@@ -54,6 +55,7 @@ class TensorCoreIntrinEmitter:
         "float8_e5m2": "e5m2",
         "float8_e5m2fn": "e5m2",
         "float8_e5m2fnuz": "e5m2fnuz",
+        "custom[tfloat32]": "tf32",
     }
 
     # k_pack represents the number of elements in a vectorized instruction
@@ -93,7 +95,6 @@ class TensorCoreIntrinEmitter:
         self.warp_row_tiles = warp_row_tiles
         self.warp_col_tiles = warp_col_tiles
         self.chunk = chunk
-        self._initialize_whether_use_tf32()
         self._initialize_k_dim(a_dtype)
         self._initialize_abbrev(a_dtype, b_dtype, accum_dtype)
         self._initialize_local_size(self.M_DIM, self.N_DIM, self.k_dim, self.WARP_SIZE)
@@ -110,11 +111,6 @@ class TensorCoreIntrinEmitter:
         self.num_elems_per_byte = num_elems_per_byte
         self.thread_var = thread_var
 
-    def _initialize_whether_use_tf32(self):
-        pass_ctx = tvm.get_global_func("transform.GetCurrentPassContext")()
-        enable_tf32_insteadof_f32 = pass_ctx.config.get("tl.enable_tf32_insteadof_f32", False)
-        self.enable_tf32_insteadof_f32 = enable_tf32_insteadof_f32
-
     def _initialize_k_dim(self, a_dtype=T.float16):
         if isinstance(a_dtype, str):
             if a_dtype in ["float8_e4m3fn", "float8_e4m3fnuz", "float8_e5m2", "float8_e5m2fnuz"]:
@@ -123,12 +119,18 @@ class TensorCoreIntrinEmitter:
             a_dtype = DataType(a_dtype)
 
         if a_dtype.bits == 32:
-            if self.enable_tf32_insteadof_f32:
-                self.k_dim = 8
-            else:
-                self.k_dim = 4
-        elif a_dtype.bits in {16, 8}:
+            self.k_dim = 8
+        elif a_dtype.bits == 16:
             self.k_dim = 16
+        elif a_dtype.bits == 8:
+            target = determine_target(return_object=True)
+            mcpu = int(target.attrs["mcpu"][5:])
+            if mcpu >= 1500 and mcpu <= 1600:
+                self.k_dim = 32
+            elif mcpu >= 1000 and mcpu < 1500:
+                self.k_dim = 16
+            else:
+                raise ValueError(f"Unsupported mcpu = {mcpu}")
         else:
             raise ValueError(f"Unsupported a_dtype = {a_dtype}")
 
@@ -160,15 +162,15 @@ class TensorCoreIntrinEmitter:
         in_dtype_map = {
             "bfloat16": "bf16",
             "float16": "f16",
-            "float32": "tf32" if self.enable_tf32_insteadof_f32 else "f32",
+            "float32": "tf32",
             "int8": "i8",
-            "int32": "i32",
             "float8_e4m3": "f8",
             "float8_e4m3fn": "f8",
             "float8_e4m3fnuz": "f8",
             "float8_e5m2": "bf8",
             "float8_e5m2fn": "bf8",
             "float8_e5m2fnuz": "bf8",
+            "custom[tfloat32]": "tf32",
         }
         in_dtype_abbrv = in_dtype_map[in_dtype_key]
 

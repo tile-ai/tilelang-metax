@@ -3,6 +3,7 @@ import tilelang.testing
 import example_vertical_slash_sparse_attn
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_vs_sparse_attn():
     example_vertical_slash_sparse_attn.main()

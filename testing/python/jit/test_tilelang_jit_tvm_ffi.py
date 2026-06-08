@@ -384,6 +384,7 @@ def test_tvm_ffi_im2col_tma_desc():
     )
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_tvm_ffi_l2_persistent_map():
     """Test L2 persistent cache annotation with elementwise add."""

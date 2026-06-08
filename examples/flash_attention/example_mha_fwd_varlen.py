@@ -259,7 +259,7 @@ def run_regression_perf(batch: int = 8, heads: int = 64, seq_len: int = 2048, di
     ) = generate_qkv(q, k, v, query_padding_mask, key_padding_mask, kvpacked=False)
     UQ = q_unpad.shape[0]
     UKV = k_unpad.shape[0]
-    kernel = flashattn(batch, UQ, UKV, heads, dim, causal, block_M=128, block_N=128, num_stages=2, threads=256)
+    kernel = flashattn(batch, UQ, UKV, heads, dim, causal, block_M=64, block_N=64, num_stages=2, threads=256)
 
     from tilelang.profiler import do_bench
 

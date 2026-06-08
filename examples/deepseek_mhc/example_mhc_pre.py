@@ -41,7 +41,7 @@ def mhc_pre_big_fuse_tilelang(
     comb_mix: T.Tensor[[num_tokens, hc_mult * hc_mult], T.float32]
     layer_input: T.Tensor[[num_tokens, hidden_size], T.bfloat16]
 
-    with T.Kernel(num_tokens, threads=96) as i:
+    with T.Kernel(num_tokens, threads=256) as i:
         ##################################################################
         # _pre_norm_fn_fwd_norm
         rms = T.alloc_fragment(1, T.float32)
@@ -59,7 +59,7 @@ def mhc_pre_big_fuse_tilelang(
         mixes_shared = T.alloc_shared(hc_mult3, T.float32)
         T.copy(mixes, mixes_shared)
 
-        if T.get_thread_binding() < 32:
+        if True:
             ##################################################################
             # _pre_split_mixes_fwd (post & comb)
             cm = T.alloc_fragment((hc_mult, hc_mult), T.float32)
@@ -101,7 +101,6 @@ def mhc_pre_big_fuse_tilelang(
             # save comb_mix to global memory
             for j, k in T.Parallel(hc_mult, hc_mult):
                 comb_mix[i, j * hc_mult + k] = cm[j, k]
-        else:
             ##################################################################
             # _pre_split_mixes_fwd (pre)
             pre_mix_shared = T.alloc_shared(hc_mult, T.float32)
@@ -140,7 +139,7 @@ def mhc_pre_gemm_sqrsum_tilelang(
     hc_mult3: int,
     hc_hidden_size: int,
     token_block: int = 32,
-    hidden_block: int = 256,
+    hidden_block: int = 128,
 ) -> tilelang.JITKernel:
     """Not highly optimized TileLang implementation of fused gemm and sqrsum in mHC pre block."""
     assert hc_mult3 <= 32  # should be 24 usually
@@ -154,7 +153,7 @@ def mhc_pre_gemm_sqrsum_tilelang(
 
     with T.Kernel(T.ceildiv(num_tokens, token_block)) as px:
         out_frag = T.alloc_fragment((token_block, 32), T.float32)
-        sqrsum_part = T.alloc_fragment((token_block, 4), T.float32)
+        sqrsum_part = T.alloc_fragment((token_block, 8), T.float32)
         T.clear(out_frag)
         T.clear(sqrsum_part)
         for pz in T.Pipelined(hc_hidden_size // hidden_block, num_stages=2):
@@ -171,9 +170,9 @@ def mhc_pre_gemm_sqrsum_tilelang(
             x_frag = T.alloc_fragment((token_block, hidden_block), T.tfloat32)
             T.copy(x_frag_16, x_frag)
 
-            for jj in T.serial(hidden_block // 4):
-                for i, j in T.Parallel(token_block, 4):
-                    sqrsum_part[i, j] += x_frag[i, jj * 4 + j] * x_frag[i, jj * 4 + j]
+            for jj in T.serial(hidden_block // 8):
+                for i, j in T.Parallel(token_block, 8):
+                    sqrsum_part[i, j] += x_frag[i, jj * 8 + j] * x_frag[i, jj * 8 + j]
 
             # should be TF32 gemm
             T.gemm(

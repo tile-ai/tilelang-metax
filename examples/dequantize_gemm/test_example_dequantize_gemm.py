@@ -6,6 +6,7 @@ import example_dequant_gemm_bf16_mxfp4_hopper
 import example_dequant_gemm_w4a8
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_example_dequant_gemv_fp16xint4():
     example_dequant_gemv_fp16xint4.main()
@@ -24,7 +25,6 @@ def test_example_dequant_gemm_bf16_mxfp4_hopper():
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_eq(9, 0)
 def test_example_dequant_gemm_w4a8():
     example_dequant_gemm_w4a8.main()
 

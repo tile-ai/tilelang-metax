@@ -39,6 +39,7 @@ def _run_pipeline_planning(func, target=auto_target):
     return mod
 
 
+@tilelang.testing.skip_on_maca
 def test_simple_pipeline():
     @T.prim_func
     def before(A: T.Tensor((1024, 32), T.float32), B: T.Tensor((32, 1024), T.float32), C: T.Tensor((1024, 1024), T.float32)):
@@ -534,6 +535,7 @@ def test_pipeline_planning_orders_cp_async_groups_by_group_last_use():
     )
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 def test_pipeline_predicated_copy_preserves_shared_fill_correctness():
     @T.prim_func

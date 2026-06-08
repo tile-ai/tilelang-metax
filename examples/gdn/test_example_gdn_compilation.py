@@ -4,7 +4,7 @@ from tilelang import language as T
 B = 1
 S = 1024  # small but for test only.
 H = 32
-DK = 128
+DK = 64
 DV = 128
 input_dtype = T.bfloat16
 output_dtype = T.bfloat16
@@ -73,10 +73,10 @@ def test_example_wy_fast_bwd_split_compilation():
         B, S, H, DK, DV, chunk_size, getattr(torch, output_dtype), getattr(torch, gate_dtype), getattr(torch, state_dtype)
     )
     BS = chunk_size
-    dA_tilelang = torch.empty(B, S, H, BS, dtype=getattr(torch, input_dtype)).cuda()
-    dbeta_tilelang_k = torch.empty(B, S, H, dtype=getattr(torch, output_dtype)).cuda()
-    dg_tilelang_A_positive = torch.empty(B, S, H, BS, dtype=getattr(torch, gate_dtype)).cuda()
-    dg_tilelang_A_negative = torch.empty(B, S, H, BS, dtype=getattr(torch, gate_dtype)).cuda()
+    dA_tilelang = torch.empty(B, S, H, BS, dtype=getattr(torch, input_dtype), device="cuda")
+    dbeta_tilelang_k = torch.empty(B, S, H, dtype=getattr(torch, output_dtype), device="cuda")
+    dg_tilelang_A_positive = torch.empty(B, S, H, BS, dtype=getattr(torch, gate_dtype), device="cuda")
+    dg_tilelang_A_negative = torch.empty(B, S, H, BS, dtype=getattr(torch, gate_dtype), device="cuda")
 
     # tilelang
     kernel = tilelang_wy_fast_bwd(

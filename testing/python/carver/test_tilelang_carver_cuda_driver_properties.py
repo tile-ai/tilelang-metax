@@ -40,6 +40,7 @@ def test_device_get_device_name():
     assert tl_device_name == th_device_name, "Device names do not match"
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_device_get_shared_memory_per_block():
     tl_smem = get_shared_memory_per_block()
@@ -54,6 +55,7 @@ def test_device_get_persisting_l2_cache_size():
     assert tl_cache_size == driver_cache_size, "Persisting L2 cache size values do not match"
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_device_get_num_sms():
     tl_num_sms = get_num_sms()

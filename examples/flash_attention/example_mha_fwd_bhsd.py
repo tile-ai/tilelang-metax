@@ -164,7 +164,7 @@ def run_regression_perf(
     is_causal: bool = False,
     tune: bool = False,
 ):
-    kernel = flashattn(batch, heads, seq_q, seq_kv, dim, is_causal, block_M=128, block_N=128, num_stages=2, threads=256)
+    kernel = flashattn(batch, heads, seq_q, seq_kv, dim, is_causal, block_M=64, block_N=64, num_stages=2, threads=256)
     profiler = kernel.get_profiler()
     return profiler.do_bench(backend="cupti")
 

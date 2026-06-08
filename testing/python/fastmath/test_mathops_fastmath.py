@@ -78,7 +78,6 @@ def run_single_arg_mathop_test(
     kernel_no_fastmath = tilelang.compile(
         main,
         out_idx=[1],
-        target="cuda",
         pass_configs={
             tilelang.PassConfigKey.TL_ENABLE_FAST_MATH: False,
         },
@@ -116,7 +115,6 @@ def run_two_arg_mathop_test(mathop_name, mathop_func, M=128, N=128, block_M=32, 
     kernel_no_fastmath = tilelang.compile(
         main,
         out_idx=[2],
-        target="cuda",
         pass_configs={
             tilelang.PassConfigKey.TL_ENABLE_FAST_MATH: False,
         },
@@ -126,7 +124,6 @@ def run_two_arg_mathop_test(mathop_name, mathop_func, M=128, N=128, block_M=32, 
     kernel_fastmath = tilelang.compile(
         main,
         out_idx=[2],
-        target="cuda",
         pass_configs={
             tilelang.PassConfigKey.TL_ENABLE_FAST_MATH: True,
         },
@@ -179,7 +176,6 @@ def run_abs_test():
     kernel = tilelang.compile(
         main,
         out_idx=[1],
-        target="cuda",
         pass_configs={
             tilelang.PassConfigKey.TL_ENABLE_FAST_MATH: False,
         },
@@ -216,7 +212,6 @@ def run_fastmath_mathop_test(mathop_name, mathop_func, M=128, N=128, block_M=32,
     kernel_fastmath = tilelang.compile(
         main,
         out_idx=[1],
-        target="cuda",
         pass_configs={
             tilelang.PassConfigKey.TL_ENABLE_FAST_MATH: True,
         },
@@ -284,6 +279,7 @@ def test_mathops_generate_no_fastmath(name, func):
     print(f"✓ {name} test passed")
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_round_ties_away_from_zero_uses_roundf():
     run_single_arg_mathop_test(

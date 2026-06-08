@@ -18,7 +18,7 @@ cython
 docutils
 dtlib
 einops
-flash-linear-attention==0.3.2
+flash-linear-attention
 matplotlib
 packaging>=21.0
 pandas

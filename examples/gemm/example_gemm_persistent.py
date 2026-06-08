@@ -90,9 +90,9 @@ def ref_program(A, B):
 def main(M=4096, N=4096, K=4096):
     total_flops = 2 * M * N * K
 
-    BLOCK_M = 128
-    BLOCK_N = 256
-    BLOCK_K = 64
+    BLOCK_M = 64
+    BLOCK_N = 64
+    BLOCK_K = 32
     threads = 256
     num_stages = 3
 

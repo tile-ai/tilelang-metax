@@ -3,6 +3,7 @@ import tilelang.language as T
 import tilelang.testing
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda_compute_version_eq(8, 0)
 def test_copy_and_async_copy_gemm_codegen_equivalent_sm80():
     """For SM80, T.copy(global->shared) may lower to cp.async.

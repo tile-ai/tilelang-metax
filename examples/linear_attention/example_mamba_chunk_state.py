@@ -162,7 +162,7 @@ if __name__ == "__main__":
             block_M=64,
             block_N=128,
             block_K=64,
-            num_stages=4,
+            num_stages=2,
             threads=128,
         )
         profiler = kernel.get_profiler(tilelang.TensorSupplyType.Normal)

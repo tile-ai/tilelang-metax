@@ -98,12 +98,14 @@ def run_blocksparse_copy(M, N, block_M, block_N, pass_configs=None):
     torch.testing.assert_close(c, ref_c, rtol=1e-2, atol=1e-2)
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 def test_blocksparse_copy_tma():
     """Test blocksparse copy with TMA (Tensor Memory Accelerator)."""
     run_blocksparse_copy(M=1024, N=1024, block_M=128, block_N=128, pass_configs={})
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 def test_blocksparse_copy_cp_async():
     """Test blocksparse copy with CP.ASYNC (without TMA)."""

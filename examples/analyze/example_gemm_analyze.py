@@ -3,6 +3,7 @@ import tilelang.language as T
 from tilelang.tools import Analyzer
 from tilelang.carver.arch import CUDA
 from tilelang.carver.arch import CDNA
+from tilelang.carver.arch import MACA
 import torch
 
 M = N = K = 1024
@@ -51,7 +52,7 @@ def kernel(
 def main():
     my_func = kernel.get_tir(block_M=128, block_N=128, block_K=32, num_stages=3, thread_num=128, enable_rasteration=True)
 
-    cuda_device = CUDA("cuda") if torch.version.hip is None else CDNA("hip")
+    cuda_device = MACA("maca") if hasattr(torch.version, "maca") else CUDA("cuda") if torch.version.hip is None else CDNA("hip")
     result = Analyzer.analysis(my_func, cuda_device)
 
     print(f"Analyzed FLOPs: {result.total_flops}")

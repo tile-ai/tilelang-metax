@@ -122,7 +122,7 @@ def main(
         total_flops *= 0.5
 
     if not tune:
-        kernel = flashattn(batch, heads, seq_len, dim, is_causal, block_M=128, block_N=128, num_stages=1, threads=128)
+        kernel = flashattn(batch, heads, seq_len, dim, is_causal, block_M=64, block_N=32, num_stages=1, threads=128)
         ref_program_processed = partial(ref_program, is_causal=is_causal)
         profiler = kernel.get_profiler()
         profiler.assert_allclose(ref_program_processed, rtol=0.01, atol=0.01)
@@ -145,7 +145,7 @@ def main(
 
 
 def run_regression_perf(batch: int = 8, heads: int = 32, seq_len: int = 4096, dim: int = 128, is_causal: bool = False):
-    kernel = flashattn(batch, heads, seq_len, dim, is_causal, block_M=128, block_N=128, num_stages=1, threads=128)
+    kernel = flashattn(batch, heads, seq_len, dim, is_causal, block_M=64, block_N=64, num_stages=1, threads=128)
     profiler = kernel.get_profiler()
     return profiler.do_bench(backend="cupti")
 

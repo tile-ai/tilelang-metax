@@ -125,7 +125,7 @@ def evaluate_gemv_simt(
 ):
     program = gemv_simt(M, N, K, in_dtype, out_dtype, accum_dtype, trans_A, trans_B, with_bias)
 
-    kernel = JITKernel(program, target="cuda")
+    kernel = JITKernel(program)
 
     in_dtype = T.dtype(in_dtype).as_torch()
     out_dtype = T.dtype(out_dtype).as_torch()

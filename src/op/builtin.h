@@ -89,8 +89,6 @@ static constexpr const char *kDisableSafeMemoryLegalize =
     "tl.disable_safe_memory_legalize";
 static constexpr const char *kDisableWarpSpecialized =
     "tl.disable_warp_specialized";
-static constexpr const char *kEnableTF32InsteadofF32 =
-    "tl.enable_tf32_insteadof_f32";
 static constexpr const char *kConfigIndexBitwidth = "tl.config_index_bitwidth";
 // Deprecated pass config, temporarily re-enabled. Prevents plain T.copy()
 // from auto-lowering to TMA store. Will be removed in v0.1.10.

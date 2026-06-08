@@ -54,7 +54,6 @@ def run_gemm_with_stride_ss(M: int, N: int, K: int, block_M: int, block_N: int, 
     jit_kernel = tilelang.compile(
         func,
         out_idx=[2],
-        target="cuda",
         pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True},
     )
     # Create random input tensors on the GPU

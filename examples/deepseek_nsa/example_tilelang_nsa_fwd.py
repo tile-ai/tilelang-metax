@@ -42,7 +42,7 @@ def native_sparse_attention(Q, K, V, BlockIndices, dim, is_causal, scale=None, b
     BS = block_S
     BK = BV = block_T
     num_stages = 2
-    threads = 32
+    threads = 64
 
     Q: T.Tensor(q_shape, dtype)
     K: T.Tensor(kv_shape, dtype)
@@ -119,7 +119,7 @@ def native_sparse_attention(Q, K, V, BlockIndices, dim, is_causal, scale=None, b
 
 
 def main():
-    B, SEQ_LEN, H, HQ, D, S, block_size, dtype, scale = 2, 64, 1, 16, 32, 1, 32, torch.float16, 0.1
+    B, SEQ_LEN, H, HQ, D, S, block_size, dtype, scale = 2, 64, 1, 16, 32, 1, 64, torch.float16, 0.1
 
     print(
         native_sparse_attention.get_kernel_source(

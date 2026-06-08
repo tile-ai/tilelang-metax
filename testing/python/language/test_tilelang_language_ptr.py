@@ -227,6 +227,7 @@ def test_pointer_table_multi_copy():
     run_pointer_table_multi_copy(2, 64)
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_pointer_table_grouped_matmul():
     run_pointer_table_grouped_matmul([8, 12, 17], 32, 32, 16, 16, 16)

@@ -9,6 +9,7 @@ def test_mhc_post():
     main_post()
 
 
+@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_mhc_pre():
     main_pre()

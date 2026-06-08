@@ -462,7 +462,7 @@ def get_configs():
 )
 @tilelang.jit(pass_configs={tilelang.PassConfigKey.TL_ENABLE_FAST_MATH: True, tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True})
 def tilelang_sparse_attention(
-    Q, K, V, BlockIndices, dim, is_causal, scale=None, block_size=64, groups=1, selected_blocks=16, block_T=128, num_stages=2, threads=32
+    Q, K, V, BlockIndices, dim, is_causal, scale=None, block_size=64, groups=1, selected_blocks=16, block_T=128, num_stages=2, threads=64
 ):
     batch, heads, seq_len = T.const("batch, heads, seq_len")
 

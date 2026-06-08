@@ -48,13 +48,13 @@ def prepare_input(
     accum_dtype,
     gate_dtype,
 ):
-    K = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
+    K = torch.randn(B, S, H, DK, dtype=input_dtype, device="cuda")
     K = F.normalize(K, dim=-1, p=2)
-    W = torch.randn(B, S, H, DK, dtype=input_dtype).cuda()
+    W = torch.randn(B, S, H, DK, dtype=input_dtype, device="cuda")
     W = F.normalize(W, dim=-1, p=2)
-    U = torch.randn(B, S, H, DV, dtype=input_dtype).cuda()
+    U = torch.randn(B, S, H, DV, dtype=input_dtype, device="cuda")
     U = F.normalize(U, dim=-1, p=2)
-    G = torch.randn(B, S, H, dtype=gate_dtype).cuda()
+    G = torch.randn(B, S, H, dtype=gate_dtype, device="cuda")
     G = F.logsigmoid(G)
     try:
         from fla.ops.utils.cumsum import chunk_local_cumsum
@@ -63,7 +63,7 @@ def prepare_input(
     except ImportError:
         print("fla not found, skip cumsum")
 
-    initial_state = torch.randn(B, H, DK, DV, dtype=input_dtype).cuda()
+    initial_state = torch.randn(B, H, DK, DV, dtype=input_dtype, device="cuda")
     return K, W, U, G, initial_state
 
 
@@ -78,9 +78,9 @@ def prepare_output(
     state_dtype,
 ):
     BS = S // chunk_size
-    h = torch.empty(B, BS, H, DK, DV, dtype=output_dtype).cuda()
-    final_state = torch.empty(B, H, DK, DV, dtype=state_dtype).cuda()
-    V_new = torch.empty(B, S, H, DV, dtype=output_dtype).cuda()
+    h = torch.empty(B, BS, H, DK, DV, dtype=output_dtype, device="cuda")
+    final_state = torch.empty(B, H, DK, DV, dtype=state_dtype, device="cuda")
+    V_new = torch.empty(B, S, H, DV, dtype=output_dtype, device="cuda")
     return h, final_state, V_new
 
 

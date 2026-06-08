@@ -12,11 +12,11 @@ import example_gqa_fwd_varlen
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_eq(9, 0)
 def test_example_gqa_bwd_tma_reduce_varlen():
     example_gqa_bwd_tma_reduce_varlen.main()
 
 
+@tilelang.testing.requires_cuda
 def test_example_gqa_bwd():
     example_gqa_bwd.main()
 

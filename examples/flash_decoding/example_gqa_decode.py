@@ -36,7 +36,7 @@ def get_heuristic_config() -> Tuple[Dict, int]:
     if sm_version == 89:
         cfg = dict(block_N=128, block_H=64, num_split=1, num_stages=0, threads=128)
     else:
-        cfg = dict(block_N=128, block_H=64, num_split=8, num_stages=2, threads=128)
+        cfg = dict(block_N=64, block_H=64, num_split=8, num_stages=0, threads=128)
     return cfg, sm_version
 
 

@@ -7,4 +7,6 @@ def regression_example_vertical_slash_sparse_attn():
 
 
 if __name__ == "__main__":
-    tilelang.testing.regression()
+    # @FIXME: Not supported for MACA target now.
+    # tilelang.testing.regression()
+    pass

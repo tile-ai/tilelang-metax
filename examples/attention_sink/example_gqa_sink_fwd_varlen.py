@@ -353,7 +353,7 @@ def main(
     UKV = k_unpad.shape[0]
 
     kernel = flashattn_sink(
-        batch, groups, UQ, UKV, heads, dim, is_causal, window_size=window_size, block_M=128, block_N=128, num_stages=2, threads=256
+        batch, groups, UQ, UKV, heads, dim, is_causal, window_size=window_size, block_M=64, block_N=64, num_stages=0, threads=256
     )
 
     out_unpad = kernel(q_unpad, k_unpad, v_unpad, cu_seqlens_q, cu_seqlens_k, max_seqlen_q, sinks)

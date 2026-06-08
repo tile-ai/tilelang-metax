@@ -67,8 +67,7 @@ def main(
     ref_c = a @ b
 
     assert not c.isnan().any(), "Reference result contains NaNs, please report an issue"
-    # FIXME: enable assert
-    # torch.testing.assert_close(c, ref_c.to(c.dtype), rtol=1e-2, atol=1e-2)
+    torch.testing.assert_close(c, ref_c.to(c.dtype), rtol=1e-2, atol=1e-2)
     print(f"Precision check passed. diff: {(c - ref_c).abs().mean()}")
 
     latency = do_bench(lambda: kernel(a_sparse, e, b))

@@ -19,7 +19,7 @@ def test_dynamic_shared_memory_merge_emits_named_aliases():
             T.tvm_storage_sync("shared")
             C[0] = A_shared[0] + B_shared[0]
 
-    artifact = tilelang.lower(kernel, target="cuda")
+    artifact = tilelang.lower(kernel)
     source = artifact.kernel_source
 
     assert "extern __shared__ __align__(1024) uchar buf_dyn_shmem[];" in source

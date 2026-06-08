@@ -72,7 +72,7 @@ def native_sparse_attention_varlen(
     BS = block_S
     BK = BV = block_T
     num_stages = 0
-    threads = 32
+    threads = 64
 
     Q: T.Tensor(q_shape, dtype)
     K: T.Tensor(kv_shape, dtype)

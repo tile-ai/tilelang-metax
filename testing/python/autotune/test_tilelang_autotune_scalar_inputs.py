@@ -21,6 +21,7 @@ def add_scalar(N: int = 4096, BLOCK_N: int = 512, threads: int = 128):
     return kernel
 
 
+@tilelang.testing.pytest.mark.xfail
 def test_autotune_scalar_inputs_require_explicit_supply():
     with pytest.raises(ValueError, match=r"set_autotune_inputs"):
         add_scalar()

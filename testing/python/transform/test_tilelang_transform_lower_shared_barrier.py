@@ -120,6 +120,7 @@ def test_no_barrier_is_noop():
     assert len(_collect_fence_barrier_init(body)) == 0
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 def test_plan_update_keeps_barrier_init_with_tcgen05_no_tma():
     """Regression for tcgen05 no-TMA kernels after pass reordering."""
