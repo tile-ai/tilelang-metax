@@ -189,6 +189,10 @@ def requires_cuda_compute_version(major_version, minor_version=0, mode="ge"):
             not compare(compute_version, min_version, mode),
             reason=f"Requires CUDA compute {mode} {min_version_str}, but have {compute_version_str}",
         ),
+        pytest.mark.skipif(
+            not _check_is_maca(),
+            reason="Requires CUDA like target",
+        ),
     ]
 
     def inner(func):

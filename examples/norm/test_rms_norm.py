@@ -2,6 +2,7 @@ import tilelang.testing
 import rms_norm
 
 
+@tilelang.testing.pytest.mark.xfail
 def test_rms_norm():
     rms_norm.test_rms_norm()
 

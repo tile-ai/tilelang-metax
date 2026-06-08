@@ -490,6 +490,20 @@ void CodeGenTileLangMACA::PrintType(DataType t, std::ostream &os) { // NOLINT(*)
       os << GetTileLangFP6Type(t);
     }
     return;
+  } else if (t.is_tfloat32()) {
+    if (t.is_scalar()) {
+      os << "float";
+    } else if (lanes <= 4) {
+      os << "float" << lanes;
+    } else if (lanes <= 8) {
+      ICHECK_EQ(lanes % 2, 0)
+          << "only support even lane for tfloat32 type with lanes > 4";
+      os << "ulonglong" << lanes / 2;
+    } else {
+      fail = true;
+    }
+    if (!fail)
+      return;
   } else if (t.is_float4()) {
     enable_fp4_ = true;
     if (t.lanes() <= 64) {
@@ -1801,6 +1815,7 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
         {"float16x8", "float16x8"},
         {"bfloat16x4", "bfloat16x4_vec"},
         {"bfloat16x8", "bfloat16x8_vec"},
+        {"custom[tfloat32]x2", "float32x2"},
         {"float32x4", "float32x4"},
         {"float8_e4m3fnuzx4", "int32x2"},
         {"float8_e4m3fnx4", "int32x2"},
