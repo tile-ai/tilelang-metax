@@ -279,7 +279,7 @@ jobs:
           if [[ "${UV_INDEX}" == *"/nightly/"* ]]; then
             uv pip install --prerelease=allow -v torch
           fi
-          uv pip install -v -r requirements-test.txt
+          uv pip install -r requirements-test.txt
           echo "import torch; print(f'torch: {torch.__version__}')" | uv run --no-project --script -
           if [[ "${{ matrix.runner.toolkit }}" == *"CUDA"* ]]; then
             uv pip install --no-build-isolation-package=flash-attn -v -r requirements-test-cuda.txt
@@ -357,7 +357,7 @@ jobs:
             uv run --no-project -m --
             pytest --verbose --color=yes --durations=0 --showlocals --cache-clear
           )
-          "${PYTEST[@]}" --maxfail=3 --numprocesses=2 \
+          "${PYTEST[@]}" --maxfail=3 --numprocesses=2 -v -s \
             ../examples
 
       # NVIDIA CUDA tests
