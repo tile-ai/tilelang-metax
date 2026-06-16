@@ -831,8 +831,8 @@ void CodeGenTileLangMACA::PrintVecBinaryOp(const std::string &op, DataType t,
               stream << "));\n";
             }
           } else {
-            // f32: reinterpret lane pairs as float2. For float4, pairs are at .x and .z;
-            // for ulonglong3/4, one float2 per field.
+            // f32: reinterpret lane pairs as float2. For float4, pairs are at
+            // .x and .z; for ulonglong3/4, one float2 per field.
             auto make_float_pair = [&](const std::string &vec_name,
                                        const std::string &field) {
               return "*(float2*)(&(" + vec_name + "." + field + "))";
