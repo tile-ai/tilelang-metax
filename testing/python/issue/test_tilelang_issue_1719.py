@@ -4,12 +4,11 @@ import tilelang.testing
 import tilelang.language as T
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_issue_1719_layout_1():
     @tilelang.jit
     def _buggy_kernel():
-        with T.Kernel(threads=32):
+        with T.Kernel(threads=64):
             tmp1 = T.alloc_shared([32, 32], T.float16)
             tmp2 = T.alloc_shared([32, 32], T.float16)
             tmp3 = T.alloc_fragment([32, 32], T.float32)

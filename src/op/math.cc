@@ -89,7 +89,9 @@ TVM_REGISTER_OP("tl.round_ties_away_from_zero")
     .set_attr<FLowerIntrinsic>("cuda.FLowerIntrinsic",
                                round_ties_away_from_zero_op)
     .set_attr<FLowerIntrinsic>("hip.FLowerIntrinsic",
-                               round_ties_away_from_zero_op);
+                               round_ties_away_from_zero_op)
+    .set_attr<FLowerIntrinsic>("maca.FLowerIntrinsic",
+                                round_ties_away_from_zero_op);
 
 } // namespace tl
 } // namespace tvm
