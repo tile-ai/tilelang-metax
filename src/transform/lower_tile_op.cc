@@ -5,9 +5,11 @@
 
 #include "support/check.h"
 #include <optional>
+#include <tvm/ffi/reflection/registry.h>
 #include <tvm/ir/cast.h>
 #include <tvm/runtime/logging.h>
 #include <tvm/s_tir/utils.h>
+#include <tvm/tirx/analysis.h>
 #include <tvm/tirx/builtin.h>
 #include <tvm/tirx/op.h>
 #include <tvm/tirx/stmt.h>
@@ -333,6 +335,163 @@ public:
 
 private:
   using arith::IRMutatorWithAnalyzer::IRMutatorWithAnalyzer;
+
+  static PrimExpr MakeTLAccessPtr(const Buffer &buffer,
+                                  const Array<PrimExpr> &indices, int extent,
+                                  int rw_mask) {
+    return Call(DataType::Handle(), tl::access_ptr(),
+                {BufferLoad(buffer, indices), IntImm(DataType::Int(32), extent),
+                 IntImm(DataType::Int(32), rw_mask)});
+  }
+
+  Optional<PrimExpr> FlattenToLinearOffset(const Buffer &buffer,
+                                           const Array<PrimExpr> &indices) {
+    Array<PrimExpr> physical = buffer.OffsetOf(indices);
+    Buffer flattened = buffer.GetFlattenedBuffer();
+    if (physical.empty() || physical.size() != flattened->shape.size()) {
+      return Optional<PrimExpr>();
+    }
+
+    PrimExpr linear = physical[0];
+    for (size_t i = 1; i < physical.size(); ++i) {
+      linear = linear * flattened->shape[i] + physical[i];
+    }
+    return analyzer_->Simplify(linear);
+  }
+
+  Optional<Array<PrimExpr>> GetVectorizedBaseIndices(const Array<Range> &ranges,
+                                                     const Var &loop_var) {
+    Array<PrimExpr> indices;
+    indices.reserve(ranges.size());
+    for (const Range &range : ranges) {
+      if (!is_one(range->extent)) {
+        return Optional<Array<PrimExpr>>();
+      }
+      indices.push_back(analyzer_->Simplify(tirx::Substitute(
+          range->min, {{loop_var, IntImm(loop_var->dtype, 0)}})));
+    }
+    return indices;
+  }
+
+  bool HasContiguousVectorizedRegion(const Buffer &buffer,
+                                     const Array<Range> &ranges,
+                                     const Var &loop_var, int lanes) {
+    Array<PrimExpr> indices;
+    indices.reserve(ranges.size());
+    for (const Range &range : ranges) {
+      if (!is_one(range->extent)) {
+        return false;
+      }
+      indices.push_back(range->min);
+    }
+
+    Optional<PrimExpr> offset = FlattenToLinearOffset(buffer, indices);
+    if (!offset.defined()) {
+      return false;
+    }
+
+    PrimExpr prev = analyzer_->Simplify(tirx::Substitute(
+        offset.value(), {{loop_var, IntImm(loop_var->dtype, 0)}}));
+    for (int lane = 1; lane < lanes; ++lane) {
+      PrimExpr curr = analyzer_->Simplify(tirx::Substitute(
+          offset.value(), {{loop_var, IntImm(loop_var->dtype, lane)}}));
+      PrimExpr delta = analyzer_->Simplify(curr - prev);
+      const auto *delta_imm = delta.as<IntImmNode>();
+      if (delta_imm == nullptr || delta_imm->value != 1) {
+        return false;
+      }
+      prev = curr;
+    }
+    return true;
+  }
+
+  Optional<Stmt> TryLowerVectorizedMacaAsyncCopy(const ForNode *op) {
+    if (!TargetIsMaca(target_) || !TargetHasAsyncCopy(target_) ||
+        op->kind != ForKind::kVectorized) {
+      return Optional<Stmt>();
+    }
+
+    const auto *extent_imm = op->extent.as<IntImmNode>();
+    if (extent_imm == nullptr || extent_imm->value <= 1) {
+      return Optional<Stmt>();
+    }
+    int lanes = static_cast<int>(extent_imm->value);
+
+    const auto *eval = op->body.as<EvaluateNode>();
+    if (eval == nullptr) {
+      return Optional<Stmt>();
+    }
+    const auto *call_node = eval->value.as<CallNode>();
+    if (call_node == nullptr ||
+        !call_node->op.same_as(Op::Get("tl.tileop.maca_async_copy")) ||
+        !call_node->annotations.count("barrier")) {
+      return Optional<Stmt>();
+    }
+    Call call = tvm::ffi::GetRef<Call>(call_node);
+    TileOperator tile_op = ParseOperator(call);
+    if (!tile_op.defined()) {
+      return Optional<Stmt>();
+    }
+    AccessRegions access = tile_op->GetAccessRegions();
+    if (access.reads.size() != 1 || access.writes.size() != 1) {
+      return Optional<Stmt>();
+    }
+
+    BufferRegion src_region = access.reads[0];
+    BufferRegion dst_region = access.writes[0];
+    Buffer src = src_region->buffer;
+    Buffer dst = dst_region->buffer;
+    const Array<Range> &src_range = src_region->region;
+    const Array<Range> &dst_range = dst_region->region;
+
+    if (!IsGlobalBuffer(src) || !IsSharedBuffer(dst) ||
+        src->dtype != dst->dtype || src_range.size() != dst_range.size()) {
+      return Optional<Stmt>();
+    }
+
+    Optional<Array<PrimExpr>> src_base =
+        GetVectorizedBaseIndices(src_range, op->loop_var);
+    Optional<Array<PrimExpr>> dst_base =
+        GetVectorizedBaseIndices(dst_range, op->loop_var);
+    if (!src_base.defined() || !dst_base.defined()) {
+      return Optional<Stmt>();
+    }
+
+    if (!HasContiguousVectorizedRegion(src, src_range, op->loop_var, lanes) ||
+        !HasContiguousVectorizedRegion(dst, dst_range, op->loop_var, lanes)) {
+      return Optional<Stmt>();
+    }
+
+    int total_bits = lanes * src->dtype.bits() * src->dtype.lanes();
+    if (total_bits % 8 != 0) {
+      return Optional<Stmt>();
+    }
+
+    int total_bytes = total_bits / 8;
+    if (!IsValidCPAsyncTransferBytes(total_bytes)) {
+      return Optional<Stmt>();
+    }
+
+    PrimExpr barrier = Downcast<PrimExpr>(call_node->annotations.at("barrier"));
+    PrimExpr dst_access_ptr =
+        MakeTLAccessPtr(dst, dst_base.value(), lanes, /*rw_mask=*/2);
+    PrimExpr src_access_ptr =
+        MakeTLAccessPtr(src, src_base.value(), lanes, /*rw_mask=*/1);
+
+    ffi::String barrier_type;
+    if (total_bytes == 4) {
+      barrier_type = "b32vectype";
+    } else if (total_bytes == 8) {
+      barrier_type = "b64vectype";
+    } else {
+      barrier_type = "b128vectype";
+    }
+
+    return Evaluate(Call(dst->dtype, tl::maca_memcpy_async(),
+                         {dst_access_ptr, src_access_ptr,
+                          IntImm(DataType::Int(32), total_bytes), barrier},
+                         {{"barrier_type", StringImm(barrier_type)}}));
+  }
 
   Stmt VisitStmt_(const SBlockNode *op) final {
     // Record the mapping from buffer data var to buffer for later lookup
@@ -1261,6 +1420,9 @@ private:
    * @return Stmt The lowered statement.
    */
   Stmt VisitStmt_(const ForNode *op) final {
+    if (Optional<Stmt> lowered = TryLowerVectorizedMacaAsyncCopy(op)) {
+      return arith::IRMutatorWithAnalyzer::VisitStmt(lowered.value());
+    }
     bool pushed_loop_mbar_phase = false;
     if (op->kind == ForKind::kSerial) {
       int num_stages = 1;
