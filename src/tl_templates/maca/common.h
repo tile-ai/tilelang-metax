@@ -431,10 +431,6 @@ template <typename T> TL_DEVICE ::uint1 to_uint1(T v) {
 //   1. float2          (FP32x2, scalar lanes -- no MACA f32 packed SDK API)
 //   2. maca_bfloat162  (BF16x2, MACA SDK __h*2 intrinsics)
 //   3. half2           (FP16x2, MACA SDK __h*2 intrinsics)
-//
-// MACA codegen emits explicit casts from uint1 to maca_bfloat162 or half2
-// via tl::from_uint1 / tl::to_uint1, matching the CUDA __nv_bfloat162 /
-// __half2 pattern.
 // =========================================================================
 
 // --- add2 ----------------------------------------------------------------
