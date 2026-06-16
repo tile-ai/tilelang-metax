@@ -1811,6 +1811,7 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
         {"float16", "half"},
         {"float32", "float"},
         {"float64", "double"},
+        {"float64x4", "float64x4"},
         {"float16x4", "float16x4"},
         {"float16x8", "float16x8"},
         {"bfloat16x4", "bfloat16x4_vec"},

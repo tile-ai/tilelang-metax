@@ -47,6 +47,7 @@ class TensorCoreIntrinEmitter:
         "float16": "fp16",
         "bfloat16": "bf16",
         "float32": "fp32",
+        "float64": "fp64",
         "int8": "int8",
         "int32": "int32",
         "float8_e4m3": "e4m3",
@@ -118,9 +119,11 @@ class TensorCoreIntrinEmitter:
                 return
             a_dtype = DataType(a_dtype)
 
-        if a_dtype.bits == 32:
+        if a_dtype.bits == 64:
+            self.k_dim = 4
+        elif a_dtype.bits == 32:
             self.k_dim = 8
-        elif a_dtype.bits == 16:
+        elif a_dtype.bits in {16, 8}:
             self.k_dim = 16
         elif a_dtype.bits == 8:
             target = determine_target(return_object=True)
@@ -163,6 +166,7 @@ class TensorCoreIntrinEmitter:
             "bfloat16": "bf16",
             "float16": "f16",
             "float32": "tf32",
+            "float64": "f64",
             "int8": "i8",
             "float8_e4m3": "f8",
             "float8_e4m3fn": "f8",
@@ -256,7 +260,10 @@ class TensorCoreIntrinEmitter:
 
     def get_store_index_map(self, inverse: bool = False) -> IndexMap:
         warp_size, local_size_c = self.WARP_SIZE, self.local_size_out
-        index_map = IndexMap.from_func(mma_store_index_map, index_dtype=T.int32)
+        is_float64 = DataType(self.accum_dtype).bits == 64
+        index_map = IndexMap.from_func(
+            lambda thread_id, local_id: mma_store_index_map(thread_id, local_id, is_float64=is_float64), index_dtype=T.int32
+        )
         if not inverse:
             return index_map
         inverse_index_map = index_map.inverse([warp_size, local_size_c])
@@ -446,13 +453,14 @@ class TensorCoreIntrinEmitter:
         M_DIM, N_DIM = self.M_DIM, self.N_DIM
         C_buf_dims = len(C_buf.shape)
         assert C_buf_dims in {2, 4}, "C_buf should be 2D or 4D"
+        is_float64 = DataType(self.accum_dtype).bits == 64
 
         @T.macro
         def _warp_stmatrix_shared(C_local_buf, C_buf, thread_binding):
             tx, warp_n, warp_m = self.extract_thread_binding(thread_binding)
             for i, j in T.grid(warp_rows, warp_cols):
                 for local_id in T.vectorized(local_size_out):
-                    row, col = T.meta_var(mma_store_index_map(tx, local_id))
+                    row, col = T.meta_var(mma_store_index_map(tx, local_id, is_float64=is_float64))
                     if C_buf_dims == 2:
                         C_buf[(warp_m * warp_rows + i) * M_DIM + row, (warp_n * warp_cols + j) * N_DIM + col] = C_local_buf[
                             i * (warp_cols * local_size_out) + j * local_size_out + local_id
@@ -467,7 +475,7 @@ class TensorCoreIntrinEmitter:
             tx, warp_n, warp_m = self.extract_thread_binding(thread_binding)
             for i, j in T.grid(warp_rows, warp_cols):
                 for local_id in T.vectorized(local_size_out):
-                    row, col = T.meta_var(mma_store_index_map(tx, local_id))
+                    row, col = T.meta_var(mma_store_index_map(tx, local_id, is_float64=is_float64))
                     C_buf[
                         (pid_m * BLOCK_M + warp_m * warp_rows + i) * M_DIM + row, (pid_n * BLOCK_N + warp_n * warp_cols + j) * N_DIM + col
                     ] = C_local_buf[i * warp_cols * local_size_out + j * local_size_out + local_id]
