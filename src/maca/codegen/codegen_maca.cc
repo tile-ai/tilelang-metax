@@ -699,16 +699,7 @@ void CodeGenTileLangMACA::PrintType(DataType t, std::ostream &os) { // NOLINT(*)
 void CodeGenTileLangMACA::PrintVecBinaryOp(const std::string &op, DataType t,
                                            PrimExpr lhs, PrimExpr rhs,
                                            std::ostream &os) { // NOLINT(*)
-  // Fast-path for packed x2 arithmetic (float32x2, bfloat16x2, float16x2).
-  //
-  // For float32x2: PTX `.f32x2` instructions are available on SM100+.
-  // For bfloat16x2 / float16x2: native packed half-precision instructions
-  // (__hadd2, __hsub2, etc.) are available on SM80+ (bf16) / SM53+ (fp16).
-  // The tl::*2 C++ helpers have compile-time arch guards with scalar
-  // fallbacks, so we can emit them unconditionally for 16-bit types.
-  //
-  // When lanes > 2 and is even, we decompose the vector operation into
-  // lanes/2 independent x2 packed operations on consecutive pairs.
+  // Fast-path for packed x2 arithmetic (float32x2, maca_bfloat162, half2).
   int lanes = t.lanes();
   if (lanes >= 2 && lanes % 2 == 0) {
     bool is_bf16x2 = t.is_bfloat16();
@@ -719,10 +710,8 @@ void CodeGenTileLangMACA::PrintVecBinaryOp(const std::string &op, DataType t,
       PrimExpr fma_a, fma_b, fma_c;
 
       if (op == "+") {
-        // Fuse packed mul+add here instead of relying on NVCC to recover
-        // packed FMA from tl::mul2/tl::add2 (or the underlying __fmul2 /
-        // __fadd2-style helpers). Once the pairwise ops are emitted as
-        // separate calls, NVCC does not reliably contract them back to fma2.
+        // Fuse packed mul+add here instead of emitting separate tl::mul2 and
+        // tl::add2 calls that may not contract back into tl::fma2.
         auto try_fuse_mul_add = [&](const PrimExpr &maybe_mul,
                                     const PrimExpr &addend) -> bool {
           const MulNode *mul = maybe_mul.as<MulNode>();
@@ -760,18 +749,12 @@ void CodeGenTileLangMACA::PrintVecBinaryOp(const std::string &op, DataType t,
       if (!tl_func.empty()) {
         // Decompose into lanes/2 independent x2 packed operations.
         //
-        // Vector type → CUDA struct mapping:
+        // Vector type → MACA struct mapping:
         //   bf16/fp16 x2..x8  -> uint1..uint4  (one packed x2 pair per field)
         //   bf16/fp16 x12/x16 -> ulonglong3/4 (two packed x2 pairs per field)
         //   f32x2  -> float2 {.x, .y}
         //   f32x4  -> float4 {.x,.y,.z,.w}
         //   f32x6/x8 -> ulonglong3/4 (one float2 pair per field)
-        //
-        // For bf16/fp16: each 32-bit field already packs a pair of elements,
-        //   so we apply tl::*2 on each field directly for <= 8 lanes. For
-        //   12/16 lanes, each 64-bit field stores two x2 pairs.
-        // For f32: float4 stores pairs at {x,z}; ulonglong3/4 stores one
-        //   float2 pair per field at {x,y,z,w}.
         int num_pairs = lanes / 2;
         static const char access[] = {'x', 'y', 'z', 'w'};
 
@@ -848,8 +831,8 @@ void CodeGenTileLangMACA::PrintVecBinaryOp(const std::string &op, DataType t,
               stream << "));\n";
             }
           } else {
-            // f32: apply tl::*2 on each consecutive pair of float fields,
-            // reinterpreted as float2.
+            // f32: reinterpret lane pairs as float2. For float4, pairs are at .x and .z;
+            // for ulonglong3/4, one float2 per field.
             auto make_float_pair = [&](const std::string &vec_name,
                                        const std::string &field) {
               return "*(float2*)(&(" + vec_name + "." + field + "))";
