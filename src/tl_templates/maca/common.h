@@ -424,128 +424,114 @@ template <typename T> TL_DEVICE ::uint1 to_uint1(T v) {
   return r;
 }
 
-//  --- add2
-//  --------------------------------------------------------------------------
+// =========================================================================
+// Packed x2 element-wise math helpers
+//
+// Each operation (add2, sub2, mul2, fma2, max2, min2, abs2) is provided for:
+//   1. float2          (FP32x2, scalar lanes -- no MACA f32 packed SDK API)
+//   2. maca_bfloat162  (BF16x2, MACA SDK __h*2 intrinsics)
+//   3. half2           (FP16x2, MACA SDK __h*2 intrinsics)
+//
+// MACA codegen emits explicit casts from uint1 to maca_bfloat162 or half2
+// via tl::from_uint1 / tl::to_uint1, matching the CUDA __nv_bfloat162 /
+// __half2 pattern.
+// =========================================================================
+
+// --- add2 ----------------------------------------------------------------
 
 TL_DEVICE float2 add2(float2 a, float2 b) {
   return make_float2(a.x + b.x, a.y + b.y);
 }
-TL_DEVICE float16x2 add2(float16x2 a, float16x2 b) { return a + b; }
 
-TL_DEVICE bfloat16x2 add2(bfloat16x2 a, bfloat16x2 b) {
-  bfloat16x2 out;
-  out.data[0] = a.data[0] + b.data[0];
-  out.data[1] = a.data[1] + b.data[1];
-  return out;
+TL_DEVICE maca_bfloat162 add2(maca_bfloat162 a, maca_bfloat162 b) {
+  return __hadd2(a, b);
 }
 
-//  --- sub2
-//  --------------------------------------------------------------------------
+TL_DEVICE half2 add2(half2 a, half2 b) { return __hadd2(a, b); }
+
+// --- sub2 ----------------------------------------------------------------
 
 TL_DEVICE float2 sub2(float2 a, float2 b) {
   return make_float2(a.x - b.x, a.y - b.y);
 }
 
-TL_DEVICE float16x2 sub2(float16x2 a, float16x2 b) { return a - b; }
-
-TL_DEVICE bfloat16x2 sub2(bfloat16x2 a, bfloat16x2 b) {
-  bfloat16x2 out;
-  out.data[0] = a.data[0] - b.data[0];
-  out.data[1] = a.data[1] - b.data[1];
-  return out;
+TL_DEVICE maca_bfloat162 sub2(maca_bfloat162 a, maca_bfloat162 b) {
+  return __hsub2(a, b);
 }
 
-//  --- mul2
-//  --------------------------------------------------------------------------
+TL_DEVICE half2 sub2(half2 a, half2 b) { return __hsub2(a, b); }
+
+// --- mul2 ----------------------------------------------------------------
 
 TL_DEVICE float2 mul2(float2 a, float2 b) {
   return make_float2(a.x * b.x, a.y * b.y);
 }
 
-TL_DEVICE float16x2 mul2(float16x2 a, float16x2 b) { return a * b; }
-
-TL_DEVICE bfloat16x2 mul2(bfloat16x2 a, bfloat16x2 b) {
-  bfloat16x2 out;
-  out.data[0] = a.data[0] * b.data[0];
-  out.data[1] = a.data[1] * b.data[1];
-  return out;
+TL_DEVICE maca_bfloat162 mul2(maca_bfloat162 a, maca_bfloat162 b) {
+  return __hmul2(a, b);
 }
 
-//  --- fma2
-//  --------------------------------------------------------------------------
+TL_DEVICE half2 mul2(half2 a, half2 b) { return __hmul2(a, b); }
+
+// --- fma2 ----------------------------------------------------------------
 
 TL_DEVICE float2 fma2(float2 a, float2 b, float2 c) {
   return make_float2(a.x * b.x + c.x, a.y * b.y + c.y);
 }
-TL_DEVICE float16x2 fma2(float16x2 a, float16x2 b, float16x2 c) {
-  return a * b + c;
-}
-TL_DEVICE bfloat16x2 fma2(bfloat16x2 a, bfloat16x2 b, bfloat16x2 c) {
-  bfloat16x2 out;
-  out.data[0] = a.data[0] * b.data[0] + c.data[0];
-  out.data[1] = a.data[1] * b.data[1] + c.data[1];
-  return out;
+
+TL_DEVICE maca_bfloat162 fma2(maca_bfloat162 a, maca_bfloat162 b,
+                              maca_bfloat162 c) {
+  return __hfma2(a, b, c);
 }
 
-//  --- max2
-//  --------------------------------------------------------------------------
+TL_DEVICE half2 fma2(half2 a, half2 b, half2 c) { return __hfma2(a, b, c); }
+
+// --- max2 ----------------------------------------------------------------
 
 TL_DEVICE float2 max2(float2 a, float2 b) {
   return make_float2(fmaxf(a.x, b.x), fmaxf(a.y, b.y));
 }
 
-TL_DEVICE float16x2 max2(float16x2 a, float16x2 b) {
-  float16x2 out;
-  out[0] = a[0] > b[0] ? a[0] : b[0];
-  out[1] = a[1] > b[1] ? a[1] : b[1];
-  return out;
+TL_DEVICE maca_bfloat162 max2(maca_bfloat162 a, maca_bfloat162 b) {
+  return __hmax2(a, b);
 }
 
-TL_DEVICE bfloat16x2 max2(bfloat16x2 a, bfloat16x2 b) {
-  bfloat16x2 out;
-  out.data[0] = (float(a.data[0]) > float(b.data[0])) ? a.data[0] : b.data[0];
-  out.data[1] = (float(a.data[1]) > float(b.data[1])) ? a.data[1] : b.data[1];
-  return out;
-}
+TL_DEVICE half2 max2(half2 a, half2 b) { return __hmax2(a, b); }
 
-//  --- min2
-//  --------------------------------------------------------------------------
+// --- min2 ----------------------------------------------------------------
 
 TL_DEVICE float2 min2(float2 a, float2 b) {
   return make_float2(fminf(a.x, b.x), fminf(a.y, b.y));
 }
 
-TL_DEVICE float16x2 min2(float16x2 a, float16x2 b) {
-  float16x2 out;
-  out[0] = (float(a[0]) < float(b[0])) ? a[0] : b[0];
-  out[1] = (float(a[1]) < float(b[1])) ? a[1] : b[1];
-  return out;
+TL_DEVICE maca_bfloat162 min2(maca_bfloat162 a, maca_bfloat162 b) {
+  return __hmin2(a, b);
 }
 
-TL_DEVICE bfloat16x2 min2(bfloat16x2 a, bfloat16x2 b) {
-  bfloat16x2 out;
-  out.data[0] = (float(a.data[0]) < float(b.data[0])) ? a.data[0] : b.data[0];
-  out.data[1] = (float(a.data[1]) < float(b.data[1])) ? a.data[1] : b.data[1];
-  return out;
+TL_DEVICE half2 min2(half2 a, half2 b) { return __hmin2(a, b); }
+
+// --- max2_nan ------------------------------------------------------------
+
+TL_DEVICE maca_bfloat162 max2_nan(maca_bfloat162 a, maca_bfloat162 b) {
+  return __hmax2_nan(a, b);
 }
 
-//  --- abs2
-//  --------------------------------------------------------------------------
+TL_DEVICE half2 max2_nan(half2 a, half2 b) { return __hmax2_nan(a, b); }
+
+// --- min2_nan ------------------------------------------------------------
+
+TL_DEVICE maca_bfloat162 min2_nan(maca_bfloat162 a, maca_bfloat162 b) {
+  return __hmin2_nan(a, b);
+}
+
+TL_DEVICE half2 min2_nan(half2 a, half2 b) { return __hmin2_nan(a, b); }
+
+// --- abs2 ----------------------------------------------------------------
 
 TL_DEVICE float2 abs2(float2 a) { return make_float2(fabsf(a.x), fabsf(a.y)); }
 
-TL_DEVICE float16x2 abs2(float16x2 a) {
-  float16x2 out;
-  out[0] = (a[0] < _Float16(0.0f)) ? -a[0] : a[0];
-  out[1] = (a[1] < _Float16(0.0f)) ? -a[1] : a[1];
-  return out;
-}
+TL_DEVICE maca_bfloat162 abs2(maca_bfloat162 a) { return __habs2(a); }
 
-TL_DEVICE bfloat16x2 abs2(bfloat16x2 a) {
-  bfloat16x2 out;
-  out.data[0] = (float(a.data[0]) < 0.0f) ? -a.data[0] : a.data[0];
-  out.data[1] = (float(a.data[1]) < 0.0f) ? -a.data[1] : a.data[1];
-  return out;
-}
+TL_DEVICE half2 abs2(half2 a) { return __habs2(a); }
 
 } // namespace tl
