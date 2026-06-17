@@ -15,6 +15,8 @@ file(GLOB TILE_LANG_MACA_SRCS
   src/maca/runtime/maca_target_kind.cc
   src/maca/runtime/maca_device_api.cc
   src/cuda/transform/*.cc
+  src/maca/transform/*.cc
+  src/maca/runtime/maca_runtime.cc
 )
 list(APPEND TILE_LANG_SRCS ${TILE_LANG_MACA_SRCS})
 
