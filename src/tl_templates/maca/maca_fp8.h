@@ -615,3 +615,80 @@ __tl_cvt_fp8x2_to_float2(const __maca_fp8x2_storage_t x,
   }
   return result;
 }
+
+// ==========================================================================
+// FP8 E8M0 Related Conversions
+// ==========================================================================
+
+// e8m0 -> float
+TL_DEVICE float __tl_cvt_e8m0_to_float(const unsigned char src) {
+  unsigned int bits = (static_cast<unsigned int>(src) << 23);
+  return *reinterpret_cast<float *>(&bits);
+}
+
+// e8m0 -> bfloat16
+TL_DEVICE bfloat16_t __tl_cvt_e8m0_to_bfloat16(const unsigned char src) {
+  return static_cast<bfloat16_t>(__tl_cvt_e8m0_to_float(src));
+}
+
+// e8m0x2 -> bfloat16x2
+TL_DEVICE __maca_bfloat162
+__tl_cvt_e8m0x2_to_bfloat162(const __maca_fp8x2_storage_t src) {
+  unsigned char lo = static_cast<unsigned char>(src & 0xFF);
+  unsigned char hi = static_cast<unsigned char>((src >> 8) & 0xFF);
+  float f_lo = __tl_cvt_e8m0_to_float(lo);
+  float f_hi = __tl_cvt_e8m0_to_float(hi);
+  return __floats2bfloat162_rn(f_lo, f_hi);
+}
+
+// float -> e8m0
+TL_DEVICE unsigned char __tl_cvt_float_to_e8m0(const float src) {
+  unsigned int bits = *reinterpret_cast<const unsigned int *>(&src);
+  unsigned int exponent = (bits >> 23) & 0xFF;
+  unsigned int mantissa = bits & 0x7FFFFF;
+  if (mantissa > 0 && exponent < 0xFF) {
+    exponent += 1;
+  }
+  return static_cast<unsigned char>(exponent);
+}
+
+// float2 -> e8m0x2
+TL_DEVICE __maca_fp8x2_storage_t __tl_cvt_float2_to_e8m0x2(const float2 src) {
+  unsigned char lo = __tl_cvt_float_to_e8m0(src.x);
+  unsigned char hi = __tl_cvt_float_to_e8m0(src.y);
+  return static_cast<__maca_fp8x2_storage_t>(lo) |
+         (static_cast<__maca_fp8x2_storage_t>(hi) << 8);
+}
+
+// double -> e8m0
+TL_DEVICE unsigned char __tl_cvt_double_to_e8m0(const double src) {
+  return __tl_cvt_float_to_e8m0(static_cast<float>(src));
+}
+
+// double2 -> e8m0x2
+TL_DEVICE __maca_fp8x2_storage_t __tl_cvt_double2_to_e8m0x2(const double2 src) {
+  unsigned char lo = __tl_cvt_double_to_e8m0(static_cast<float>(src.x));
+  unsigned char hi = __tl_cvt_double_to_e8m0(static_cast<float>(src.y));
+  return static_cast<__maca_fp8x2_storage_t>(lo) |
+         (static_cast<__maca_fp8x2_storage_t>(hi) << 8);
+}
+
+// bfloat16 -> e8m0
+TL_DEVICE unsigned char __tl_cvt_bfloat16_to_e8m0(const bfloat16_t src) {
+  return __tl_cvt_float_to_e8m0(static_cast<float>(src));
+}
+
+// bfloat162 -> e8m0x2
+TL_DEVICE __maca_fp8x2_storage_t
+__tl_cvt_bfloat162_to_e8m0x2(const __maca_bfloat162 src) {
+  const bfloat16_t *val_ptr = reinterpret_cast<const bfloat16_t *>(&src);
+
+  float low_f = static_cast<float>(val_ptr[0]);
+  float high_f = static_cast<float>(val_ptr[1]);
+
+  unsigned char lo = __tl_cvt_float_to_e8m0(low_f);
+  unsigned char hi = __tl_cvt_float_to_e8m0(high_f);
+
+  return static_cast<__maca_fp8x2_storage_t>(lo) |
+         (static_cast<__maca_fp8x2_storage_t>(hi) << 8);
+}

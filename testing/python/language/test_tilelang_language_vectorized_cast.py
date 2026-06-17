@@ -78,7 +78,6 @@ def run_vectorized_cast(src_dtype: T.dtype, dst_dtype: T.dtype, check_str: str, 
     torch.testing.assert_close(A.to(dst_dtype.as_torch()), C)
 
 
-@tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     "src_dtype, dst_dtype, check_str, lanes",
     [
@@ -96,16 +95,14 @@ def test_vectorized_cast(src_dtype, dst_dtype, check_str, lanes):
     run_vectorized_cast(src_dtype, dst_dtype, check_str, lanes)
 
 
-@tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(8, 9)
 @pytest.mark.parametrize(
     "src_dtype, dst_dtype, check_str, lanes",
     [
         # FP8 <-> FP32
-        (T.float32, T.float8_e4m3fn, "__nv_cvt_float2_to_fp8x2", 2),
-        (T.float32, T.float8_e4m3fn, "__nv_cvt_float2_to_fp8x2", 4),
-        (T.float32, T.float8_e5m2, "__nv_cvt_float2_to_fp8x2", 2),
-        (T.float32, T.float8_e5m2, "__nv_cvt_float2_to_fp8x2", 4),
+        (T.float32, T.float8_e4m3fn, "__maca_cvt_float2_to_fp8x2", 2),
+        (T.float32, T.float8_e4m3fn, "__maca_cvt_float2_to_fp8x2", 4),
+        (T.float32, T.float8_e5m2, "__maca_cvt_float2_to_fp8x2", 2),
+        (T.float32, T.float8_e5m2, "__maca_cvt_float2_to_fp8x2", 4),
         (T.float8_e4m3fn, T.float32, "__tl_cvt_fp8x2_to_float2", 2),
         (T.float8_e4m3fn, T.float32, "__tl_cvt_fp8x2_to_float2", 4),
         (T.float8_e5m2, T.float32, "__tl_cvt_fp8x2_to_float2", 2),
@@ -123,8 +120,6 @@ def test_vectorized_cast_fp8(src_dtype, dst_dtype, check_str, lanes):
     run_vectorized_cast(src_dtype, dst_dtype, check_str, lanes)
 
 
-@tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(10, 0)
 @pytest.mark.parametrize(
     "src_dtype, dst_dtype, check_str, lanes",
     [
