@@ -154,9 +154,7 @@ def assert_tl_matmul_correctness(M, N, K, in_dtype, out_dtype, accum_dtype):
 
     # Get Reference Result
     if in_dtype == T.int8:
-        ref_c = (
-            A.cpu().to(torch.int32) @ B.cpu().to(torch.int32).T
-        ).to(device=A.device, dtype=getattr(torch, out_dtype))
+        ref_c = (A.cpu().to(torch.int32) @ B.cpu().to(torch.int32).T).to(device=A.device, dtype=getattr(torch, out_dtype))
     else:
         ref_c = torch.matmul(A.to(torch.float32), B.T.to(torch.float32)).to(getattr(torch, out_dtype))
     print(C)

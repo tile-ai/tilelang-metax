@@ -42,7 +42,7 @@ def get_single_device_function_name(device_mod) -> str:
 
 @tilelang.testing.requires_cuda
 def test_source_kernel_inline_codegen():
-    artifact = tilelang.lower(make_source_kernel(CUDA_SOURCE, entry_name="external_copy"), target="maca")
+    artifact = tilelang.lower(make_source_kernel(CUDA_SOURCE, entry_name="external_copy"), target="auto")
     function_name = get_single_device_function_name(artifact.device_mod)
 
     assert re.search(
@@ -54,7 +54,7 @@ def test_source_kernel_inline_codegen():
 
 @tilelang.testing.requires_cuda
 def test_source_kernel_run():
-    kernel = tilelang.compile(make_source_kernel(CUDA_SOURCE, entry_name="external_copy"), target="maca")
+    kernel = tilelang.compile(make_source_kernel(CUDA_SOURCE, entry_name="external_copy"), target="auto")
     print(kernel.get_kernel_source())
     print(kernel.get_host_source())
     a = torch.randn(128, dtype=torch.float32, device="cuda")
@@ -70,7 +70,7 @@ def test_source_kernel_loads_from_file():
         source_path = f.name
 
     try:
-        artifact = tilelang.lower(make_source_kernel(Path(source_path), entry_name="external_copy"), target="maca")
+        artifact = tilelang.lower(make_source_kernel(Path(source_path), entry_name="external_copy"), target="auto")
     finally:
         os.unlink(source_path)
 
@@ -80,7 +80,7 @@ def test_source_kernel_loads_from_file():
 @tilelang.testing.requires_cuda
 def test_source_kernel_invalid_entry_name_fails_in_lower():
     with pytest.raises(Exception, match=r"Available entries: external_copy"):
-        tilelang.lower(make_source_kernel(CUDA_SOURCE, entry_name="main_kernel"), target="maca")
+        tilelang.lower(make_source_kernel(CUDA_SOURCE, entry_name="main_kernel"), target="auto")
 
 
 if __name__ == "__main__":
