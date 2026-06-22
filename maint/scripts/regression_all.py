@@ -57,7 +57,7 @@ def _parse_table(output: str) -> dict[str, float]:
 
 
 def _examples_root() -> Path:
-    return Path(__file__).resolve().parents[2] / "examples" / "maca"
+    return Path(__file__).resolve().parents[2] / "examples" 
 
 
 def _discover_bench_files(examples_root: Path) -> list[Path]:
