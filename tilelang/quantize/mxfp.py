@@ -1,5 +1,10 @@
 from typing import Literal
+
+from tvm.target import Target
+
 from tilelang import language as T
+from tilelang.backend.target import determine_target
+from tilelang.rocm.target import target_is_gfx950
 
 # Implementation asm for fp4 to bf16, using twiddling
 # Reference: https://github.com/triton-lang/triton/blob/main/python/triton_kernels/triton_kernels/tensor_details/layout_details/hopper_value.py#L11-L18
@@ -157,6 +162,26 @@ __device__ void decode_fp4_to_bf16(T1 *B_local, T2 *B_local_decode, const int N 
 """
 
 
+def _resolve_mxfp_target(target):
+    if target is not None:
+        return target
+    current = Target.current(allow_none=True)
+    if current is not None:
+        return current
+    return determine_target("auto", return_object=True)
+
+
+def _target_uses_portable_mxfp_dequant(target) -> bool:
+    """Return True for targets that cannot compile CUDA PTX inline asm (e.g. Maca, AMD gfx950)."""
+    if target is None:
+        return False
+    if not isinstance(target, Target):
+        target = Target(target)
+    if target.kind.name == "maca":
+        return True
+    return target_is_gfx950(target)
+
+
 def get_mxfp_intrin_group(
     out_dtype: Literal[T.float16, T.bfloat16] = T.bfloat16,
     source_format: Literal[T.int, T.uint] = T.uint,
@@ -195,33 +220,24 @@ def get_mxfp_intrin_group(
     assert source_format in [T.int, T.uint], f"Invalid source_format: {source_format}. Expected 'int' or 'uint'."
     assert storage_dtype in [T.int32, T.int8, T.uint8], f"Invalid storage_dtype: {storage_dtype}. Expected 'int32' or 'int8' or 'uint8'."
 
-    # Detect AMD gfx950 target to select the HIP C++ dequantization implementation.
-    # All other targets (NV, RDNA, MI300) use the default CUDA PTX path below.
-    _is_gfx950 = False
-    if target is not None:
-        try:
-            from tilelang.rocm.target import target_is_gfx950
-
-            _is_gfx950 = target_is_gfx950(target)
-        except (ImportError, ModuleNotFoundError, AttributeError):
-            # target_is_gfx950 unavailable in this build; assume non-gfx950.
-            pass
+    # Maca and AMD gfx950 cannot compile CUDA PTX; use portable C++ below.
+    # All other targets (NV, RDNA, MI300) use the default CUDA PTX path.
+    _use_portable = _target_uses_portable_mxfp_dequant(_resolve_mxfp_target(target))
 
     dtype_map = {T.float16: "f16", T.bfloat16: "bf16"}
     func_name = f"decode_fp{source_bit}_to_{dtype_map[out_dtype]}"
     if use_twiddling:
         func_name += "_twiddling"
 
-    if _is_gfx950:
-        # AMD gfx950 path: use portable HIP C++ implementations.
-        # The function name stays the same so the call site is unchanged.
+    if _use_portable:
+        # Portable C++ path (Maca / AMD gfx950). Function name unchanged for call sites.
         if use_twiddling and source_bit == 4 and out_dtype == T.bfloat16:
             return {"func_name": func_name, "c_source": decode_f4_to_bf16_twiddling_hip}
         elif not use_twiddling and source_bit == 4 and out_dtype == T.bfloat16:
             return {"func_name": func_name, "c_source": decode_f4_to_bf16_simple_hip}
         else:
             raise AssertionError(
-                f"AMD gfx950 MXFP dequant only supports source_bit=4 and out_dtype=bfloat16, "
+                f"Portable MXFP dequant only supports source_bit=4 and out_dtype=bfloat16, "
                 f"got source_bit={source_bit}, out_dtype={out_dtype}"
             )
 
