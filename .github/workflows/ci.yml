@@ -292,7 +292,7 @@ jobs:
             uv pip uninstall -y flash-linear-attention flash_linear_attention 2>/dev/null || true
             rm -rf "${SITE}/fla" "${SITE}"/flash_linear_attention*.dist-info "${SITE}"/flash-linear-attention*.dist-info
             uv pip install --force-reinstall --no-deps --python-version 3.10.0 \
-              flash_linear_attention==0.4.0+metax3.7.2.0torch2.8 \
+              flash_linear_attention==0.4.0 \
               -i https://repos.metax-tech.com/r/maca-pypi/simple --trusted-host repos.metax-tech.com
           elif [[ "${{ matrix.runner.toolkit }}" == *"Metal"* ]]; then
             uv pip install -v -r requirements-test-metal.txt

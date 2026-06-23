@@ -207,7 +207,13 @@ jobs:
           fi
           uv pip install -v -r requirements-test.txt
           if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
-            uv pip install -v --no-deps --python-version 3.10.0 flash_linear_attention==0.4.0+metax3.5.3.9torch2.8 -i https://repos.metax-tech.com/r/maca-pypi/simple --trusted-host repos.metax-tech.com
+            uv pip install -r requirements-test-maca.txt
+            SITE="new/lib/python${{ matrix.python-version }}/site-packages"
+            uv pip uninstall -y flash-linear-attention flash_linear_attention 2>/dev/null || true
+            rm -rf "${SITE}/fla" "${SITE}"/flash_linear_attention*.dist-info "${SITE}"/flash-linear-attention*.dist-info
+            uv pip install --force-reinstall --no-deps --python-version 3.10.0 \
+              flash_linear_attention==0.4.0 \
+              -i https://repos.metax-tech.com/r/maca-pypi/simple --trusted-host repos.metax-tech.com
           fi
           uv pip install -v .
           if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
@@ -229,7 +235,13 @@ jobs:
           fi
           uv pip install -v -r requirements-test.txt
           if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
-            uv pip install -v --no-deps --python-version 3.10.0 flash_linear_attention==0.4.0+metax3.5.3.9torch2.8 -i https://repos.metax-tech.com/r/maca-pypi/simple --trusted-host repos.metax-tech.com
+            uv pip install -r requirements-test-maca.txt
+            SITE="old/lib/python${{ matrix.python-version }}/site-packages"
+            uv pip uninstall -y flash-linear-attention flash_linear_attention 2>/dev/null || true
+            rm -rf "${SITE}/fla" "${SITE}"/flash_linear_attention*.dist-info "${SITE}"/flash-linear-attention*.dist-info
+            uv pip install --force-reinstall --no-deps --python-version 3.10.0 \
+              flash_linear_attention==0.4.0 \
+              -i https://repos.metax-tech.com/r/maca-pypi/simple --trusted-host repos.metax-tech.com
           fi
           uv pip install -v .
           if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
@@ -244,7 +256,13 @@ jobs:
           fi
           uv pip install -v -r requirements-test.txt
           if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
-            uv pip install -v --no-deps --python-version 3.10.0 flash_linear_attention==0.4.0+metax3.5.3.9torch2.8 -i https://repos.metax-tech.com/r/maca-pypi/simple --trusted-host repos.metax-tech.com
+            uv pip install -r requirements-test-maca.txt
+            SITE="test_regression/lib/python${{ matrix.python-version }}/site-packages"
+            uv pip uninstall -y flash-linear-attention flash_linear_attention 2>/dev/null || true
+            rm -rf "${SITE}/fla" "${SITE}"/flash_linear_attention*.dist-info "${SITE}"/flash-linear-attention*.dist-info
+            uv pip install --force-reinstall --no-deps --python-version 3.10.0 \
+              flash_linear_attention==0.4.0 \
+              -i https://repos.metax-tech.com/r/maca-pypi/simple --trusted-host repos.metax-tech.com
           fi
 
       - name: Clear uv cache for self-hosted runners (if setup failed)
