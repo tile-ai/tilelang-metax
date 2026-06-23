@@ -163,7 +163,7 @@ __device__ void decode_fp4_to_bf16(T1 *B_local, T2 *B_local_decode, const int N 
 
 
 def _resolve_mxfp_target(target):
-    if target is not None:
+    if target is not None and target != "auto":
         return target
     current = Target.current(allow_none=True)
     if current is not None:
@@ -222,7 +222,9 @@ def get_mxfp_intrin_group(
 
     # Maca and AMD gfx950 cannot compile CUDA PTX; use portable C++ below.
     # All other targets (NV, RDNA, MI300) use the default CUDA PTX path.
-    _use_portable = _target_uses_portable_mxfp_dequant(_resolve_mxfp_target(target))
+    # target=None keeps the CUDA PTX default; only target="auto" resolves from context.
+    _resolved = _resolve_mxfp_target(target) if target == "auto" else target
+    _use_portable = _target_uses_portable_mxfp_dequant(_resolved)
 
     dtype_map = {T.float16: "f16", T.bfloat16: "bf16"}
     func_name = f"decode_fp{source_bit}_to_{dtype_map[out_dtype]}"
