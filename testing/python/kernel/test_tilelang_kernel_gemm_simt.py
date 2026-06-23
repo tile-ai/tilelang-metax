@@ -153,10 +153,7 @@ def assert_tl_matmul_correctness(M, N, K, in_dtype, out_dtype, accum_dtype):
     assert latency is not None
 
     # Get Reference Result
-    if in_dtype == T.int8:
-        ref_c = (A.cpu().to(torch.int32) @ B.cpu().to(torch.int32).T).to(device=A.device, dtype=getattr(torch, out_dtype))
-    else:
-        ref_c = torch.matmul(A.to(torch.float32), B.T.to(torch.float32)).to(getattr(torch, out_dtype))
+    ref_c = torch.matmul(A.to(torch.float32), B.T.to(torch.float32)).to(getattr(torch, out_dtype))
     print(C)
     print(ref_c)
     torch.testing.assert_close(C, ref_c, rtol=1e-2, atol=1e-2)
@@ -169,7 +166,9 @@ def test_assert_tl_matmul():
 
 @tilelang.testing.requires_cuda
 def test_assert_tl_matmul_int8():
+    torch.backends.cuda.matmul.allow_tf32 = False
     assert_tl_matmul_correctness(128, 256, 256, T.int8, T.int32, T.int32)
+    torch.backends.cuda.matmul.allow_tf32 = True
 
 
 if __name__ == "__main__":
