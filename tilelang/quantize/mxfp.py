@@ -4,7 +4,7 @@ from tvm.target import Target
 
 from tilelang import language as T
 from tilelang.backend.target import determine_target
-from tilelang.rocm.target import target_is_gfx950
+from tilelang.rocm.target import target_is_gfx950, target_is_hip
 
 # Implementation asm for fp4 to bf16, using twiddling
 # Reference: https://github.com/triton-lang/triton/blob/main/python/triton_kernels/triton_kernels/tensor_details/layout_details/hopper_value.py#L11-L18
@@ -179,7 +179,9 @@ def _target_uses_portable_mxfp_dequant(target) -> bool:
         target = Target(target)
     if target.kind.name == "maca":
         return True
-    return target_is_gfx950(target)
+    if target_is_hip(target):
+        return target_is_gfx950(target)
+    return False
 
 
 def get_mxfp_intrin_group(
