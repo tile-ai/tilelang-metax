@@ -207,7 +207,6 @@ jobs:
           fi
           uv pip install -v -r requirements-test.txt
           if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
-            uv pip install -r requirements-test-maca.txt
             SITE="new/lib/python${{ matrix.python-version }}/site-packages"
             uv pip uninstall -y flash-linear-attention flash_linear_attention 2>/dev/null || true
             rm -rf "${SITE}/fla" "${SITE}"/flash_linear_attention*.dist-info "${SITE}"/flash-linear-attention*.dist-info
@@ -235,7 +234,6 @@ jobs:
           fi
           uv pip install -v -r requirements-test.txt
           if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
-            uv pip install -r requirements-test-maca.txt
             SITE="old/lib/python${{ matrix.python-version }}/site-packages"
             uv pip uninstall -y flash-linear-attention flash_linear_attention 2>/dev/null || true
             rm -rf "${SITE}/fla" "${SITE}"/flash_linear_attention*.dist-info "${SITE}"/flash-linear-attention*.dist-info
@@ -256,7 +254,6 @@ jobs:
           fi
           uv pip install -v -r requirements-test.txt
           if [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
-            uv pip install -r requirements-test-maca.txt
             SITE="test_regression/lib/python${{ matrix.python-version }}/site-packages"
             uv pip uninstall -y flash-linear-attention flash_linear_attention 2>/dev/null || true
             rm -rf "${SITE}/fla" "${SITE}"/flash_linear_attention*.dist-info "${SITE}"/flash-linear-attention*.dist-info
