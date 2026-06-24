@@ -26,7 +26,7 @@ def test_access_ptr_cp_async_codegen():
             # Keep the shared buffer live so the pointers remain in generated code.
             B[0] = S[8]
 
-    kernel = tilelang.compile(main, out_idx=[1], target="maca")
+    kernel = tilelang.compile(main, out_idx=[1], target="auto")
     src = kernel.get_kernel_source()
     print("=== access_ptr memcpy_async codegen ===")
     print(src)
@@ -50,7 +50,7 @@ def test_vectorized_cp_async_num_elems_codegen():
             T.maca_barrier_arrive_and_wait(bar)
             B[0] = S[0]
 
-    kernel = tilelang.compile(main, out_idx=[1], target="maca")
+    kernel = tilelang.compile(main, out_idx=[1], target="auto")
     src = kernel.get_kernel_source()
     print("=== vectorized memcpy_async codegen ===")
     print(src)
@@ -75,7 +75,7 @@ def test_vectorized_int4_cp_async_num_elems_codegen():
             T.maca_barrier_arrive_and_wait(bar)
             B[0] = S[0]
 
-    kernel = tilelang.compile(main, out_idx=[1], target="maca")
+    kernel = tilelang.compile(main, out_idx=[1], target="auto")
     src = kernel.get_kernel_source()
     print("=== vectorized int4 memcpy_async codegen ===")
     print(src)
@@ -98,7 +98,7 @@ def test_async_copy_tileop_lowers_to_cp_async():
             T.maca_barrier_arrive_and_wait(bar)
             T.copy(S, B[0:4])
 
-    kernel = tilelang.compile(main, out_idx=[1], target="maca")
+    kernel = tilelang.compile(main, out_idx=[1], target="auto")
     src = kernel.get_kernel_source()
     print("=== maca_async_copy -> memcpy_async codegen ===")
     print(src)
@@ -133,7 +133,7 @@ def test_async_copy_tileop_rejects_invalid_cp_async_scope():
         tvm.error.InternalError,
         match=r"T\.maca_async_copy only supports global->shared/shared\.dyn copies",
     ):
-        tilelang.compile(main, out_idx=[1], target="maca")
+        tilelang.compile(main, out_idx=[1], target="auto")
 
 
 @tilelang.testing.requires_cuda
@@ -154,7 +154,7 @@ def test_parallel_simt_copy_respects_enable_async_copy_config():
     kernel = tilelang.compile(
         main,
         out_idx=[1],
-        target="maca",
+        target="auto",
         pass_configs={tilelang.PassConfigKey.TL_ENABLE_ASYNC_COPY: False},
     )
     src = kernel.get_kernel_source()
@@ -184,7 +184,7 @@ def test_async_copy_oob_lowers_to_predicated_cp_async_without_wait():
             # Don't read S here (no wait). Keep B live so kernel has an output.
             B[0, 0] = A[0, 0]
 
-    kernel = tilelang.compile(main, out_idx=[1], target="maca")
+    kernel = tilelang.compile(main, out_idx=[1], target="auto")
     src = kernel.get_kernel_source()
     print("=== OOB maca_async_copy -> conditional codegen ===")
     print(src)
