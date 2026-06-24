@@ -67,6 +67,7 @@ def _collect_external_cuda_kernel_names(source: str) -> list[str]:
     return kernel_names
 
 
+@tvm_ffi.register_global_func("tilelang_callback_maca_validate", override=True)
 @tvm_ffi.register_global_func("tilelang_callback_cuda_validate", override=True)
 def tilelang_callback_cuda_validate(device_mod):
     for _, base_func in device_mod.functions.items():
@@ -293,6 +294,8 @@ def device_codegen(device_mod: tvm.IRModule, target: Target) -> tvm.IRModule:
         device_mod = tvm.ffi.get_global_func("target.build.tilelang_maca")(device_mod, target)
     elif target.kind.name == "metal":
         device_mod = tvm.ffi.get_global_func("target.build.tilelang_metal")(device_mod, target)
+    elif target.kind.name == "llvm":
+        device_mod = tvm.ffi.get_global_func("target.build.llvm")(device_mod, target)
     else:
         raise ValueError(f"Target {target.kind.name} is not supported")
 

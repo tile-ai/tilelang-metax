@@ -384,7 +384,6 @@ def test_tvm_ffi_im2col_tma_desc():
     )
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_tvm_ffi_l2_persistent_map():
     """Test L2 persistent cache annotation with elementwise add."""
@@ -424,11 +423,11 @@ def test_tvm_ffi_l2_persistent_map():
     kernel = elementwise_add_with_l2_cache(M, N)
 
     source = kernel.get_host_source()
-    assert "__tvm_cuda_stream_set_access_policy_window_packed" in source, (
-        "Expected __tvm_cuda_stream_set_access_policy_window_packed in the kernel source"
+    assert "__tvm_maca_stream_set_access_policy_window_packed" in source, (
+        "Expected __tvm_maca_stream_set_access_policy_window_packed in the kernel source"
     )
-    assert "__tvm_cuda_stream_reset_access_policy_window_packed" in source, (
-        "Expected __tvm_cuda_stream_reset_access_policy_window_packed in the kernel source"
+    assert "__tvm_maca_stream_reset_access_policy_window_packed" in source, (
+        "Expected __tvm_maca_stream_reset_access_policy_window_packed in the kernel source"
     )
 
     # Create test tensors

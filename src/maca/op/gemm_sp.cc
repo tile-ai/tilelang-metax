@@ -5,7 +5,7 @@
 #include "op/gemm_sp.h"
 #include "support/check.h"
 
-#include "backend/common/target_utils.h"
+#include "maca/target_utils.h"
 
 #include <tvm/tirx/builtin.h>
 #include <tvm/tirx/op.h>
@@ -108,7 +108,7 @@ struct GemmSP {
   static std::pair<int, int>
   ComputeWarpPartition(const GemmSPWarpPolicyNode &policy, int M, int N,
                        int block_size, Target target, String gemm_inst) {
-    int num_warps = block_size / TargetGetWarpSize(target);
+    int num_warps = block_size / TargetMacaGetWarpSize(target);
     int k_n_per_warp = 16;
     return ComputeDefaultWarpPartition(policy, M, N, num_warps, k_n_per_warp);
   }
@@ -140,7 +140,6 @@ bool RegisterMacaGemmSP() {
       maca::GemmSP::SelectInst,
       maca::GemmSP::ComputeWarpPartition,
       maca::GemmSP::ReuseExistingSharedLayout,
-      maca::GemmSP::InstructionKind,
   });
   return true;
 }

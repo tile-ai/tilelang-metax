@@ -279,7 +279,6 @@ def test_mathops_generate_no_fastmath(name, func):
     print(f"✓ {name} test passed")
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_round_ties_away_from_zero_uses_roundf():
     run_single_arg_mathop_test(

@@ -20,8 +20,6 @@ import tilelang.testing
 import pytest
 import torch
 
-SM100_TARGET = {"kind": "cuda", "arch": "sm_100"}
-SM80_TARGET = {"kind": "cuda", "arch": "sm_80"}
 DEFAULT_TARGET = tilelang.backend.target.determine_target(return_object=True)
 
 M = 128  # number of threads / element-pairs
@@ -158,7 +156,10 @@ _BINARY_OPS = [
 _DTYPES = ["float32", "bfloat16", "float16"]
 
 # Native cast types expected in codegen for 16-bit packed types
-_NATIVE_CAST_TYPE = {"bfloat16": "__nv_bfloat162", "float16": "__half2"}
+if DEFAULT_TARGET.kind.name == "maca":
+    _NATIVE_CAST_TYPE = {"bfloat16": "maca_bfloat162", "float16": "half2"}
+else:
+    _NATIVE_CAST_TYPE = {"bfloat16": "__nv_bfloat162", "float16": "__half2"}
 
 # Torch reference functions
 _TORCH_REFS = {
@@ -177,7 +178,6 @@ _TORCH_REFS = {
 # ===================================================================
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize("dtype_name", _DTYPES)
 @pytest.mark.parametrize("op_name,op_func", _BINARY_OPS, ids=[n for n, _ in _BINARY_OPS])
@@ -193,7 +193,6 @@ def test_codegen_binary(op_name, op_func, dtype_name):
         assert _NATIVE_CAST_TYPE[dtype_name] in src, f"Expected {_NATIVE_CAST_TYPE[dtype_name]} cast in CUDA source for {dtype_name}"
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize("dtype_name", _DTYPES)
 def test_codegen_fma2(dtype_name):
@@ -206,7 +205,6 @@ def test_codegen_fma2(dtype_name):
         assert _NATIVE_CAST_TYPE[dtype_name] in src, f"Expected {_NATIVE_CAST_TYPE[dtype_name]} cast in CUDA source for {dtype_name}"
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize("dtype_name", _DTYPES)
 def test_codegen_abs2(dtype_name):
@@ -227,13 +225,12 @@ _AUTO_VEC_OP_NAMES = list(_AUTO_VEC_OPS.keys())  # ["add", "sub", "mul"]
 
 
 # float32: auto-vectorization should emit tl::<op>2 on SM100+
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize("op_key", _AUTO_VEC_OP_NAMES)
 def test_codegen_auto_vec_f32(op_key):
     py_op, tl_func = _AUTO_VEC_OPS[op_key]
     func = _make_auto_vec_binary_kernel(py_op, T.float32)
-    src = _lower_to_cuda_source(func, target=SM100_TARGET)
+    src = _lower_to_cuda_source(func)
     assert f"tl::{tl_func}" in src, f"Expected tl::{tl_func} in SM100 auto-vectorised CUDA source for float32 {op_key}"
 
 
@@ -243,7 +240,7 @@ def test_codegen_auto_vec_f32(op_key):
 def test_codegen_auto_vec_f32_width8(op_key):
     py_op, tl_func = _AUTO_VEC_OPS[op_key]
     func = _make_auto_vec_binary_kernel(py_op, T.float32, width=8)
-    src = _lower_to_cuda_source(func, target=SM100_TARGET)
+    src = _lower_to_cuda_source(func)
     assert "\x00" not in src, "Generated CUDA source should not contain embedded NUL bytes"
     for field in "xyzw":
         assert f".{field})) = tl::{tl_func}(" in src, (
@@ -252,6 +249,7 @@ def test_codegen_auto_vec_f32_width8(op_key):
 
 
 # float32: auto-vectorization should NOT emit tl::<op>2 before SM100
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize("op_key", _AUTO_VEC_OP_NAMES)
 def test_codegen_auto_vec_f32_no_sm80(op_key):
@@ -261,15 +259,13 @@ def test_codegen_auto_vec_f32_no_sm80(op_key):
     assert f"tl::{tl_func}" not in src, f"tl::{tl_func} should NOT appear in SM80 auto-vectorised CUDA source for float32 {op_key}"
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_codegen_auto_vec_fma_f32():
     func = _make_auto_vec_fma_kernel(T.float32)
-    src = _lower_to_cuda_source(func, target=SM100_TARGET)
+    src = _lower_to_cuda_source(func)
     assert "tl::fma2" in src, "Expected tl::fma2 in SM100 auto-vectorised CUDA source for float32 mul+add"
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize("dtype_name", ["bfloat16", "float16"])
 def test_codegen_auto_vec_fma_half_types(dtype_name):
@@ -282,7 +278,6 @@ def test_codegen_auto_vec_fma_half_types(dtype_name):
 
 # bfloat16 / float16: auto-vectorization should emit tl::<op>2 on any target
 # (the C++ helpers have compile-time arch fallbacks).
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize("dtype_name", ["bfloat16", "float16"])
 @pytest.mark.parametrize("op_key", _AUTO_VEC_OP_NAMES)

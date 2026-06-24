@@ -18,6 +18,7 @@ from tilelang.contrib.mxcc import have_pdl
 
 def MACAPassPipelineBodyPrologue(mod: IRModule, target: Target) -> IRModule:
     mod = tirx.transform.BindTarget(target)(mod)
+    mod = tilelang.transform.MaterializeKernelLaunch()(mod)
     if should_force_let_inline():
         # Force-let inline whenever the pass config requests it.
         mod = tilelang.transform.LetInline()(mod)
@@ -52,6 +53,8 @@ def MACAPassPipelineBodyPrologue(mod: IRModule, target: Target) -> IRModule:
     # Lower high-level tile operations to low-level operations
     mod = tilelang.transform.LowerTileOp()(mod)
 
+    # Lower l2 persistent map
+    mod = tilelang.cuda.transform.LowerL2Persistent()(mod)
     # Decouple type cast vectorization constraints before vectorization
     mod = tilelang.transform.DecoupleTypeCast()(mod)
     # Legalize vectorized loops to ensure they are valid
@@ -117,7 +120,8 @@ def MACAPassPipelineBody(mod: IRModule, target: Target) -> IRModule:
     mod = tilelang.transform.LowerThreadAllreduce()(mod)
 
     mod = tilelang.cuda.transform.LowerLDGSTG()(mod)
-
+    mod = tilelang.cuda.transform.LowerHopperIntrin()(mod)
+    mod = tilelang.maca.transform.LowerMACAIntrin()(mod)
     mod = tilelang.transform.AnnotateDeviceRegions()(mod)
     mod = tilelang.transform.SplitHostDevice()(mod)
 
