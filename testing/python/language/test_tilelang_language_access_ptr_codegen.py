@@ -137,7 +137,6 @@ def test_async_copy_tileop_rejects_invalid_cp_async_scope():
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(8, 0)
 def test_parallel_simt_copy_respects_enable_async_copy_config():
     """Check `tl.enable_async_copy=False` disables auto cp.async rewriting."""
 
@@ -165,7 +164,6 @@ def test_parallel_simt_copy_respects_enable_async_copy_config():
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(8, 0)
 def test_async_copy_oob_lowers_to_predicated_cp_async_without_wait():
     """Check T.async_copy supports OOB via predicated cp.async and does not auto-wait."""
     M = 130
