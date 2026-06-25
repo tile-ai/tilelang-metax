@@ -238,8 +238,7 @@ def get_mxfp_intrin_group(
             return {"func_name": func_name, "c_source": decode_f4_to_bf16_simple_hip}
         else:
             raise AssertionError(
-                f"Maca MXFP dequant only supports source_bit=4 and out_dtype=bfloat16, "
-                f"got source_bit={source_bit}, out_dtype={out_dtype}"
+                f"Maca MXFP dequant only supports source_bit=4 and out_dtype=bfloat16, got source_bit={source_bit}, out_dtype={out_dtype}"
             )
 
     # CUDA / default path: use PTX inline assembly implementations.
