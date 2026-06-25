@@ -406,7 +406,7 @@ private:
   }
 
   Optional<Stmt> TryLowerVectorizedMacaAsyncCopy(const ForNode *op) {
-    if (!TargetIsMaca(target_) || !TargetHasAsyncCopy(target_) ||
+    if (!TargetIsMaca(target_) || !TargetMacaHasAsyncCopy(target_) ||
         op->kind != ForKind::kVectorized) {
       return Optional<Stmt>();
     }
