@@ -261,7 +261,6 @@ def _benchmark_kernel_ms(kernel, args, tensors_to_clear, warmup, repeats):
     return samples
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_pdl_trigger():
     """Verify CUDA codegen emits the PDL trigger intrinsic."""
@@ -269,21 +268,37 @@ def test_pdl_trigger():
     N = 64
     program = kernels_with_pdl_trigger(N)
 
-    pdl_kernel = tilelang.compile(program, target={"kind": "cuda", "arch": "sm_90"})
+    is_maca = tilelang.testing._check_is_maca()
+    if is_maca:
+        target = {"kind": "maca"}
+    else:
+        target = {"kind": "cuda", "arch": "sm_90"}
+
+    pdl_kernel = tilelang.compile(program, target=target)
     code = pdl_kernel.get_kernel_source()
-    assert "cudaTriggerProgrammaticLaunchCompletion" in code
+    if is_maca:
+        assert "mcTriggerProgrammaticLaunchCompletion" in code
+    else:
+        assert "cudaTriggerProgrammaticLaunchCompletion" in code
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_pdl_sync():
     """Verify CUDA codegen emits the PDL sync intrinsic without restrict qualifiers."""
 
     N = 64
     program = kernels_with_pdl_sync(N)
-    pdl_kernel = tilelang.compile(program, target={"kind": "cuda", "arch": "sm_90"})
+    is_maca = tilelang.testing._check_is_maca()
+    if is_maca:
+        target = {"kind": "maca"}
+    else:
+        target = {"kind": "cuda", "arch": "sm_90"}
+    pdl_kernel = tilelang.compile(program, target=target)
     code = pdl_kernel.get_kernel_source()
-    assert "cudaGridDependencySynchronize" in code
+    if is_maca:
+        assert "mcGridDependencySynchronize" in code
+    else:
+        assert "cudaGridDependencySynchronize" in code
     assert "__restrict__" not in code
 
 

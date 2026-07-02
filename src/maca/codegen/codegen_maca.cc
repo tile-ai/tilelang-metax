@@ -2460,6 +2460,14 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
       this->PrintExpr(op->args[1], os);
     }
     os << ")";
+  } else if (op->op.same_as(tl::pdl_trigger())) {
+    // MACA does not support PDL intrinsics, emit as comment code.
+    this->PrintIndent();
+    this->stream << "// mcTriggerProgrammaticLaunchCompletion();\n";
+  } else if (op->op.same_as(tl::pdl_sync())) {
+    // MACA does not support PDL intrinsics, emit as comment code.
+    this->PrintIndent();
+    this->stream << "// mcGridDependencySynchronize();\n";
   } else {
     CodeGenC::VisitExpr_(op, os);
   }

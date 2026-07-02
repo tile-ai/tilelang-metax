@@ -298,7 +298,6 @@ def test_mathops_generate_no_fastmath(name, func):
     print(f"✓ {name} test passed")
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     ("rounding_mode", "func", "cuda_mathop_name"),

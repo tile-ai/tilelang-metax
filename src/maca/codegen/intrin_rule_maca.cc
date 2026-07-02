@@ -119,6 +119,26 @@ struct MACAPopcount {
   }
 };
 
+struct MACARound {
+  std::string operator()(DataType t, std::string name) const {
+    if (t.is_float()) {
+      switch (t.bits()) {
+      case 64:
+        return "nearbyint";
+      case 32:
+        return "nearbyintf";
+      case 16:
+        return "hrint";
+      default:
+        return "";
+      }
+    } else if (t.is_bfloat16()) {
+      return "hrint";
+    }
+    return "";
+  }
+};
+
 struct MACAWarpIntrinsic {
   const Op operator()(DataType t, const Op &orig_op) const {
     if (orig_op.same_as(builtin::tvm_warp_shuffle())) {
