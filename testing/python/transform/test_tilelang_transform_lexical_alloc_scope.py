@@ -155,11 +155,10 @@ def test_lower_opaque_block_skips_empty_alloc():
 # ---------------------------------------------------------------------------
 # Test 4: GEMM descriptor allocs inside loop should get the marker
 # ---------------------------------------------------------------------------
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_lower_opaque_block_inserts_scope_for_gemm_descriptor_alloc():
     """Lowered WGMMA descriptor buffers inside a loop should trigger lexical_alloc_scope."""
-    target = tl.utils.determine_target(return_object=True)
+    target = tl.backend.target.determine_target(return_object=True)
 
     @T.prim_func
     def func(
@@ -274,11 +273,10 @@ def test_lower_opaque_block_skips_fragment_alloc():
 # ---------------------------------------------------------------------------
 # Test 8: disable-ws pipelined GEMM should not wrap the fragment root block
 # ---------------------------------------------------------------------------
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_lower_opaque_block_skips_fragment_root_in_disable_ws_pipeline():
     """A fragment root block should not force lexical_alloc_scope in disable-ws pipeline."""
-    target = tl.utils.determine_target(return_object=True)
+    target = tl.backend.target.determine_target(return_object=True)
     pass_configs = {tl.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED.value: True}
 
     @T.prim_func
@@ -348,7 +346,6 @@ def test_storage_rewrite_preserves_scope():
 # ---------------------------------------------------------------------------
 # Test 10: CUDA codegen emits { } for the scope
 # ---------------------------------------------------------------------------
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_codegen_emits_braces():
     """The generated CUDA source should contain scoped { } blocks for explicitly marked allocs."""
@@ -376,7 +373,6 @@ def test_codegen_emits_braces():
     assert len(standalone_open_braces) >= 1, f"Expected at least 1 standalone '{{' for lexical scope, found {len(standalone_open_braces)}"
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_codegen_skips_redundant_top_level_braces():
     """The outermost top-level lexical scope should not emit a redundant brace block."""

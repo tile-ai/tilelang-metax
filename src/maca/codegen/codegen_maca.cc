@@ -2466,7 +2466,16 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
 }
 
 void CodeGenTileLangMACA::VisitStmt_(const AttrStmtNode *op) {
-  if (op->attr_key == s_tir::attr::fragment_shape) {
+  if (op->attr_key == tl::attr::kLexicalAllocScope) {
+    PrintIndent();
+    stream << "{\n";
+    int scope = BeginScope();
+    PrintStmt(op->body);
+    EndScope(scope);
+    PrintIndent();
+    stream << "}\n";
+    return;
+  } else if (op->attr_key == s_tir::attr::fragment_shape) {
     const VarNode *buffer = op->node.as<VarNode>();
     const StringImmNode *shape_str = op->value.as<StringImmNode>();
     fragment_shapes[buffer] = shape_str->value;
