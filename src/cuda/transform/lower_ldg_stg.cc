@@ -498,7 +498,7 @@ tvm::transform::Pass LowerLDGSTG() {
       return f;
     }
     Target target = target_opt.value();
-    if (target->kind->name != "cuda") {
+    if (target->kind->name != "cuda" && target->kind->name != "maca") {
       // Not a CUDA target, skip
       return f;
     }

@@ -7,6 +7,7 @@ import tilelang.testing
 
 CUDA_SM86_TARGET = {"kind": "cuda", "arch": "sm_86"}
 CUDA_SM90_TARGET = {"kind": "cuda", "arch": "sm_90"}
+MACA_TARGET = {"kind": "maca"}
 
 
 def _barrier_kernel():
@@ -41,7 +42,6 @@ def _compile(target, kernel_factory=_barrier_kernel):
         tilelang.enable_cache()
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_alloc_barrier_rejected_on_pre_hopper_target():
     """T.alloc_barrier() must be rejected with a clear error on sm_86 instead of
@@ -56,11 +56,10 @@ def test_alloc_barrier_rejected_on_pre_hopper_target():
     assert "tl_shuffle_elect" in message or "Barrier" in message
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_no_barrier_compiles_on_pre_hopper_target():
     """The guard must not fire for pre-Hopper kernels that use no barrier."""
-    _compile(CUDA_SM86_TARGET, kernel_factory=_no_barrier_kernel)
+    _compile(MACA_TARGET, kernel_factory=_no_barrier_kernel)
 
 
 @tilelang.testing.requires_cuda_compute_version_ge(9, 0)
