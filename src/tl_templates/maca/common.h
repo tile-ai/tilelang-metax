@@ -157,44 +157,42 @@ template <> struct numeric_limits<maca_bfloat16> {
   static int const digits = 7;
 
   /// Least positive value
-  __device__ static mctlass::bfloat16_t min() {
-    return mctlass::bfloat16_t::bitcast(0x01);
+  __device__ static maca_bfloat16 min() {
+    return maca_bfloat16(__maca_bfloat16_raw{0x01});
   }
 
   /// Minimum finite value
-  __device__ static mctlass::bfloat16_t lowest() {
-    return mctlass::bfloat16_t::bitcast(0xff7f);
+  __device__ static maca_bfloat16 lowest() {
+    return maca_bfloat16(__maca_bfloat16_raw{0xff7f});
   }
 
   /// Maximum finite value
-  __device__ static mctlass::bfloat16_t max() {
-    return mctlass::bfloat16_t::bitcast(0x7f7f);
+  __device__ static maca_bfloat16 max() {
+    return maca_bfloat16(__maca_bfloat16_raw{0x7f7f});
   }
 
   /// Returns smallest finite value
-  __device__ static mctlass::bfloat16_t epsilon() {
-    return mctlass::bfloat16_t::bitcast(0x1000);
+  __device__ static maca_bfloat16 epsilon() {
+    return maca_bfloat16(__maca_bfloat16_raw{0x1000});
   }
 
   /// Returns maximum rounding error
-  __device__ static mctlass::bfloat16_t round_error() {
-    return mctlass::bfloat16_t(0.5f);
-  }
+  __device__ static maca_bfloat16 round_error() { return maca_bfloat16(0.5f); }
   /// Returns positive infinity value
-  __device__ static mctlass::bfloat16_t infinity() {
-    return mctlass::bfloat16_t::bitcast(0x7f80);
+  __device__ static maca_bfloat16 infinity() {
+    return maca_bfloat16(__maca_bfloat16_raw{0x7f80});
   }
   /// Returns quiet NaN value
-  __device__ static mctlass::bfloat16_t quiet_NaN() {
-    return mctlass::bfloat16_t::bitcast(0x7fff);
+  __device__ static maca_bfloat16 quiet_NaN() {
+    return maca_bfloat16(__maca_bfloat16_raw{0x7fff});
   }
   /// Returns signaling NaN value
-  __device__ static mctlass::bfloat16_t signaling_NaN() {
-    return mctlass::bfloat16_t::bitcast(0x7fff);
+  __device__ static maca_bfloat16 signaling_NaN() {
+    return maca_bfloat16(__maca_bfloat16_raw{0x7fff});
   }
   /// Returns smallest positive subnormal value
-  __device__ static mctlass::bfloat16_t denorm_min() {
-    return mctlass::bfloat16_t::bitcast(0x1);
+  __device__ static maca_bfloat16 denorm_min() {
+    return maca_bfloat16(__maca_bfloat16_raw{0x1});
   }
 };
 } // namespace platform
@@ -313,11 +311,19 @@ template <typename T> TL_DEVICE void AtomicAdd(_Float16 *address, T val) {
 }
 
 TL_DEVICE half_t max(const half_t a, const half_t b) {
-  return mctlass::fast_max(a, b);
+  return half_t(__hmax(a, b));
 }
 
 TL_DEVICE half_t min(const half_t a, const half_t b) {
-  return mctlass::fast_min(a, b);
+  return half_t(__hmin(a, b));
+}
+
+TL_DEVICE bfloat16_t max(const bfloat16_t a, const bfloat16_t b) {
+  return __hmax(a, b);
+}
+
+TL_DEVICE bfloat16_t min(const bfloat16_t a, const bfloat16_t b) {
+  return __hmin(a, b);
 }
 
 // DP4A
@@ -432,6 +438,22 @@ template <typename T> TL_DEVICE ::uint1 to_uint1(T v) {
 //   2. maca_bfloat162  (BF16x2, MACA SDK __h*2 intrinsics)
 //   3. half2           (FP16x2, MACA SDK __h*2 intrinsics)
 // =========================================================================
+// Pack two half_t into a uint1
+TL_DEVICE uint1 pack_half2(const half_t a, const half_t b) {
+  return __pack_half2(static_cast<__half>(a), static_cast<__half>(b));
+}
+
+// Helper to extract half_t from float16x2 (which uses _Float16)
+TL_DEVICE half_t extract_half_from_float16x2(float16x2 v, int lane) {
+  // float16x2 is a vector of _Float16, convert to half_t via float
+  return half_t(static_cast<float>(v[lane]));
+}
+
+// Helper to extract bfloat16_t from bfloat16x2
+TL_DEVICE float16x2 extract_bfloat16_from_bfloat162(maca_bfloat162 v,
+                                                    int lane) {
+  return v.data[lane];
+}
 
 // --- add2 ----------------------------------------------------------------
 

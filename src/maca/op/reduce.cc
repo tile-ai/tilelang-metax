@@ -21,7 +21,12 @@ struct Reduce : backend::ReduceLowerer<Reduce> {
     return TargetIsMaca(target);
   }
 
-  static int GetPreferedVectorizedSize(DataType dt, Target target) { return 1; }
+  static int GetPreferedVectorizedSize(DataType dt, Target target) {
+    if (!TargetIsMaca(target)) {
+      return 1;
+    }
+    return backend::reduce::GetPreferedVectorizedSize(dt);
+  }
 
   static std::string MakeBatchAllReduce(std::string reducer,
                                         int reducing_threads, int scale,

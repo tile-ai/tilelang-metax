@@ -373,9 +373,7 @@ def _make_nan_reduce_kernel(reduce_fn, M, N, dtype, threads, *, nan_propagate):
     return kernel
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(8, 9)
 def test_reduce_packed_fp8_to_float16_absmax_runtime():
     if not hasattr(torch, "float8_e4m3fn"):
         pytest.skip("torch.float8_e4m3fn is not available")
@@ -404,7 +402,6 @@ def test_reduce_packed_fp8_to_float16_absmax_runtime():
     torch.testing.assert_close(B, ref, atol=0, rtol=0)
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_reduce_packed_max_nan_propagate_uses_nan_intrinsics():
     k = _compile(_make_nan_reduce_kernel(T.reduce_max, 128, 128, T.float16, threads=256, nan_propagate=True))
@@ -413,7 +410,6 @@ def test_reduce_packed_max_nan_propagate_uses_nan_intrinsics():
     assert "tl::MaxOpNan" in src
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_reduce_packed_min_nan_propagate_uses_nan_intrinsics():
     k = _compile(_make_nan_reduce_kernel(T.reduce_min, 128, 128, T.bfloat16, threads=256, nan_propagate=True))
@@ -422,7 +418,6 @@ def test_reduce_packed_min_nan_propagate_uses_nan_intrinsics():
     assert "tl::MinOpNan" in src
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_reduce_packed_absmax_nan_propagate_uses_nan_intrinsics():
     k = _compile(_make_nan_reduce_kernel(T.reduce_absmax, 128, 128, T.float16, threads=256, nan_propagate=True))
@@ -431,7 +426,6 @@ def test_reduce_packed_absmax_nan_propagate_uses_nan_intrinsics():
     assert "tl::MaxOpNan" in src
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_reduce_packed_max_nan_propagate_runtime():
     import math
@@ -445,7 +439,6 @@ def test_reduce_packed_max_nan_propagate_runtime():
         assert math.isnan(B[0].float().item()), f"{tl_dtype}: NaN row must produce NaN"
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_reduce_packed_min_nan_propagate_runtime():
     import math
@@ -459,7 +452,6 @@ def test_reduce_packed_min_nan_propagate_runtime():
         assert math.isnan(B[1].float().item()), f"{tl_dtype}: NaN row must produce NaN"
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_reduce_packed_max_nan_batch_runtime():
     import math

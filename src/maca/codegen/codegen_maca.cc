@@ -2015,10 +2015,30 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
       os << "_double";
     }
     os << "(&" << this->mcrand_random_generator_state << ")";
+  } else if (op->op.same_as(tl::max_nan()) || op->op.same_as(tl::min_nan())) {
+    ICHECK_EQ(op->args.size(), 2);
+    const bool is_max = op->op.same_as(tl::max_nan());
+    const DataType t = op->dtype;
+    std::string arg0 = PrintExpr(op->args[0]);
+    std::string arg1 = PrintExpr(op->args[1]);
+
+    if ((t.is_bfloat16() || t.is_float16()) && t.is_scalar()) {
+      const char *intrin = is_max ? "_hmax_nan" : "__hmin_nan";
+      os << intrin << "(" << arg0 << ", " << arg1 << ")";
+      return;
+    }
+    // Fallback to the regular max/min for other types
+    if (is_max) {
+      os << "max(" << arg0 << ", " << arg1 << ")";
+    } else {
+      os << "min(" << arg0 << ", " << arg1 << ")";
+    }
+    return;
   } else if (op->op.same_as(tl::add2()) || op->op.same_as(tl::sub2()) ||
              op->op.same_as(tl::mul2()) || op->op.same_as(tl::fma2()) ||
              op->op.same_as(tl::max2()) || op->op.same_as(tl::min2()) ||
-             op->op.same_as(tl::abs2())) {
+             op_ > op.same_as(tl::max2_nan()) ||
+             op->op.same_as(tl::min2_nan()) || op->op.same_as(tl::abs2())) {
     std::string op_name;
     if (op->op.same_as(tl::add2()))
       op_name = "add2";
@@ -2032,6 +2052,10 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
       op_name = "max2";
     else if (op->op.same_as(tl::min2()))
       op_name = "min2";
+    else if (op->op.same_as(tl::max2_nan()))
+      op_name = "max2_nan";
+    else if (op->op.same_as(tl::min2_nan()))
+      op_name = "min2_nan";
     else
       op_name = "abs2";
 
@@ -2780,8 +2804,30 @@ void CodeGenTileLangMACA::VisitExpr_(const ShuffleNode *op,
       enable_fp16_ = true;
       // __pack_half2 returns __half2 which is 32-bit.
       // Reinterpret via aggregate initialisation.
-      os << "uint1{*(unsigned)&(__pack_half2((__half)(" << e0 << "), (__half)("
+      os << "uint1{*(unsigned*)&(__pack_half2((__half)(" << e0 << "), (__half)("
          << e1 << ")))}";
+    }
+    return;
+  }
+  // Handle ExtractElement: extract a scalar lane from a bfloat16x2 / float16x2
+  // vector (produced by packed reduction, etc.). The vector is stored as an
+  // opaque uint1 in the lowered code, but semantically it is a packed pair.
+  DataType vec_t =
+      op->vectors.size() == 1 ? op->vectors[0].dtype() : DataType();
+  bool vec_is_bf16x2 = vec_t.is_bfloat16() && vec_t.lanes() == 2;
+  bool vec_is_fp16x2 = vec_t.is_float16() && vec_t.lanes() == 2;
+  if ((vec_is_bf16x2 || vec_is_fp16x2) && op->vectors.size() == 1 &&
+      op->indices.size() == 1) {
+    int lane = Downcast<IntImm>(op->indices[0])->value;
+    std::string vec = PrintExpr(op->vectors[0]);
+    if (vec_is_bf16x2) {
+      enable_bf16_ = true;
+      os << "bfloat16_t(((maca_bfloat162*)(&(" << vec << ")))->"
+         << (lane == 0 ? "x" : "y") << ")";
+    } else {
+      enable_fp16_ = true;
+      os << "half_t(((half2*)(&(" << vec << ")))->" << (lane == 0 ? "x" : "y")
+         << ")";
     }
     return;
   }
