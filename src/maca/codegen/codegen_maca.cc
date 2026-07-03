@@ -2037,8 +2037,8 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
   } else if (op->op.same_as(tl::add2()) || op->op.same_as(tl::sub2()) ||
              op->op.same_as(tl::mul2()) || op->op.same_as(tl::fma2()) ||
              op->op.same_as(tl::max2()) || op->op.same_as(tl::min2()) ||
-             op_ > op.same_as(tl::max2_nan()) ||
-             op->op.same_as(tl::min2_nan()) || op->op.same_as(tl::abs2())) {
+             op->op.same_as(tl::max2_nan()) || op->op.same_as(tl::min2_nan()) ||
+             op->op.same_as(tl::abs2())) {
     std::string op_name;
     if (op->op.same_as(tl::add2()))
       op_name = "add2";
