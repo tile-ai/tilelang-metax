@@ -126,9 +126,11 @@ def device_assert(condition: tirx.PrimExpr, msg: str = "", no_stack_info=False):
 
     if check_maca_availability():
         from tilelang.maca.debug import device_assert as maca_device_assert
+
         return maca_device_assert(condition, msg, no_stack_info)
     else:
         from tilelang.cuda.debug import device_assert as cuda_device_assert
+
         return cuda_device_assert(condition, msg, no_stack_info)
 
 
