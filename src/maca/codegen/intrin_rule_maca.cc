@@ -193,7 +193,7 @@ TVM_REGISTER_OP("tirx.round")
 
 TVM_REGISTER_OP("tirx.nearbyint")
     .set_attr<FLowerIntrinsic>("maca.FLowerIntrinsic",
-                               DispatchPureExtern<MACAMath>);
+                               DispatchPureExtern<MACARound>);
 
 TVM_REGISTER_OP("tirx.exp")
     .set_attr<FLowerIntrinsic>("maca.FLowerIntrinsic",
