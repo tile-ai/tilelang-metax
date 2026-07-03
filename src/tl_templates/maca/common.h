@@ -398,15 +398,65 @@ TL_DEVICE void __sync_thread_partial() {
 //
 namespace tl {
 
-// Generic passthroughs
+template <int LaneMask> TL_DEVICE uint32_t shfl_xor_u32_imm(uint32_t v) {
+  static_assert(LaneMask == 1 || LaneMask == 2 || LaneMask == 4 ||
+                    LaneMask == 8,
+                "unsupported row-local XOR lane mask");
+  if constexpr (LaneMask == 1) {
+    // Quad permutation: [0, 1, 2, 3] -> [1, 0, 3, 2].
+    return static_cast<uint32_t>(__builtin_mxc_update_shfl(
+        static_cast<int>(v), static_cast<int>(v), 0x0b1, 0xf, 0xf, false));
+  } else if constexpr (LaneMask == 2) {
+    // Quad permutation: [0, 1, 2, 3] -> [2, 3, 0, 1].
+    return static_cast<uint32_t>(__builtin_mxc_update_shfl(
+        static_cast<int>(v), static_cast<int>(v), 0x04e, 0xf, 0xf, false));
+  } else if constexpr (LaneMask == 4) {
+    // XOR 4 within a 16-lane row is two masked row shifts:
+    // banks 0/2 read from +4, banks 1/3 read from -4.
+    uint32_t out = v;
+    out = static_cast<uint32_t>(__builtin_mxc_update_shfl(
+        static_cast<int>(out), static_cast<int>(v), 0x104, 0xf, 0x5, false));
+    out = static_cast<uint32_t>(__builtin_mxc_update_shfl(
+        static_cast<int>(out), static_cast<int>(v), 0x114, 0xf, 0xa, false));
+    return out;
+  } else if constexpr (LaneMask == 8) {
+    // Row rotate right by 8 is equivalent to XOR 8 within a 16-lane row.
+    return static_cast<uint32_t>(__builtin_mxc_update_shfl(
+        static_cast<int>(v), static_cast<int>(v), 0x128, 0xf, 0xf, false));
+  } else {
+    return v;
+  }
+}
+
+template <int LaneMask, typename T> TL_DEVICE T shfl_xor_imm(T val) {
+  if constexpr (sizeof(T) <= sizeof(uint32_t)) {
+    uint32_t bits = 0;
+    __builtin_memcpy(&bits, &val, sizeof(T));
+    bits = shfl_xor_u32_imm<LaneMask>(bits);
+    T out;
+    __builtin_memcpy(&out, &bits, sizeof(T));
+    return out;
+  } else if constexpr (sizeof(T) == 2 * sizeof(uint32_t)) {
+    uint32_t bits[2];
+    __builtin_memcpy(bits, &val, sizeof(T));
+    bits[0] = shfl_xor_u32_imm<LaneMask>(bits[0]);
+    bits[1] = shfl_xor_u32_imm<LaneMask>(bits[1]);
+    T out;
+    __builtin_memcpy(&out, bits, sizeof(T));
+    return out;
+  } else {
+    return val;
+  }
+}
+
 template <typename T>
-TL_DEVICE T shfl_xor_sync(uint64_t mask, T val, int laneMask) {
+TL_DEVICE T shfl_xor_sync_fallback(uint64_t mask, T val, int laneMask) {
   return __shfl_xor_sync(mask, val, laneMask);
 }
 
-// Specializations for mctlass::half_t
 template <>
-TL_DEVICE half_t shfl_xor_sync(uint64_t mask, half_t val, int laneMask) {
+TL_DEVICE half_t shfl_xor_sync_fallback(uint64_t mask, half_t val,
+                                        int laneMask) {
   float f = static_cast<float>(val);
   float r = __shfl_xor_sync(mask, f, laneMask);
   return half_t(r);
@@ -417,6 +467,27 @@ TL_DEVICE uint1 shfl_xor_sync_fallback(uint64_t mask, uint1 val, int laneMask) {
   unsigned long raw = static_cast<unsigned long>(val.x);
   unsigned long result = __shfl_xor_sync(mask, raw, laneMask);
   return uint1(static_cast<unsigned int>(result));
+}
+
+template <typename T>
+TL_DEVICE T shfl_xor_sync(uint64_t mask, T val, int laneMask) {
+  if constexpr (sizeof(T) <= 2 * sizeof(uint32_t)) {
+    if (mask == uint64_t(-1)) {
+      switch (laneMask) {
+      case 1:
+        return shfl_xor_imm<1>(val);
+      case 2:
+        return shfl_xor_imm<2>(val);
+      case 4:
+        return shfl_xor_imm<4>(val);
+      case 8:
+        return shfl_xor_imm<8>(val);
+      default:
+        break;
+      }
+    }
+  }
+  return shfl_xor_sync_fallback(mask, val, laneMask);
 }
 
 } // namespace tl
