@@ -233,6 +233,10 @@ public:
   }
 };
 
+TL_DEVICE unsigned char __tl_cvt_float_to_e8m0(const float src);
+TL_DEVICE unsigned char __tl_cvt_double_to_e8m0(const double src);
+TL_DEVICE unsigned char __tl_cvt_int_to_e8m0(const int src);
+
 struct fp8_e8_t {
   using value_t = unsigned char;
   value_t v;
@@ -241,6 +245,10 @@ struct fp8_e8_t {
 
   // construct from underlying storage
   TL_DEVICE explicit fp8_e8_t(value_t x) : v(x) {}
+
+  TL_DEVICE explicit fp8_e8_t(int x) : v(__tl_cvt_int_to_e8m0(x)) {}
+  TL_DEVICE explicit fp8_e8_t(float x) : v(__tl_cvt_float_to_e8m0(x)) {}
+  TL_DEVICE explicit fp8_e8_t(double x) : v(__tl_cvt_double_to_e8m0(x)) {}
 
   // allow construction from types that can initialize the storage (e.g. int)
   template <class T,
@@ -639,6 +647,15 @@ __tl_cvt_e8m0x2_to_bfloat162(const __maca_fp8x2_storage_t src) {
   float f_lo = __tl_cvt_e8m0_to_float(lo);
   float f_hi = __tl_cvt_e8m0_to_float(hi);
   return __floats2bfloat162_rn(f_lo, f_hi);
+}
+
+// int8 -> e8m0
+TL_DEVICE unsigned char __tl_cvt_int8_to_e8m0(const int8_t src) {
+  if (src == 0) {
+    return 0U;
+  }
+  const float f_val = static_cast<float>(src > 0 ? src : -src);
+  return __tl_cvt_float_to_e8m0(f_val);
 }
 
 // float -> e8m0

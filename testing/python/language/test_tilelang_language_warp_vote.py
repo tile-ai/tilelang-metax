@@ -40,7 +40,6 @@ def kernel_any_sync():
     return main
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_any_sync():
     b = torch.zeros((32,), device="cuda", dtype=torch.int32)
@@ -73,7 +72,6 @@ def kernel_all_sync():
     return main
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_all_sync():
     b = torch.zeros((32,), device="cuda", dtype=torch.int32)
@@ -105,7 +103,6 @@ def kernel_ballot_sync():
     return main
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_ballot_sync():
     b = torch.zeros((32,), device="cuda", dtype=torch.int64)
@@ -140,7 +137,6 @@ def kernel_ballot():
     return main
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_ballot():
     b = torch.zeros((32,), device="cuda", dtype=torch.int64)
@@ -175,7 +171,6 @@ def kernel_ffs_ballot_sync():
     return main
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_ffs_ballot_sync():
     b = torch.zeros((32,), device="cuda", dtype=torch.int32)
@@ -208,7 +203,6 @@ def kernel_activemask():
     return main
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_activemask():
     b = torch.zeros((32,), device="cuda", dtype=torch.int64)
@@ -242,7 +236,6 @@ def kernel_syncthreads_count():
     return main
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_syncthreads_count():
     b = torch.zeros((32,), device="cuda", dtype=torch.int32)
@@ -290,7 +283,6 @@ def kernel_syncthreads_and_false():
     return main
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_syncthreads_and():
     b = torch.zeros((32,), device="cuda", dtype=torch.int32)
@@ -343,7 +335,6 @@ def kernel_syncthreads_or_false():
     return main
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_syncthreads_or():
     b = torch.zeros((32,), device="cuda", dtype=torch.int32)
@@ -383,7 +374,6 @@ def kernel_match_any_sync():
     return main
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_match_any_sync():
     b = torch.zeros((32,), device="cuda", dtype=torch.int32)
@@ -435,7 +425,6 @@ def kernel_match_all_sync_false():
     return main
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_match_all_sync():
     b = torch.zeros((32,), device="cuda", dtype=torch.int32)

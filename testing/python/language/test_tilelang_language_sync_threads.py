@@ -11,7 +11,6 @@ def _compile_cuda(func):
         tilelang.enable_cache()
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_sync_threads_with_variable_barrier_id():
     @T.prim_func
@@ -23,7 +22,7 @@ def test_sync_threads_with_variable_barrier_id():
 
     kernel = _compile_cuda(kernel)
     src = kernel.get_kernel_source()
-    assert "tl::__sync_thread_partial(" in src, src
+    assert "tl::__sync_thread_partial<" in src, src
 
 
 @tilelang.testing.pytest.mark.skip
