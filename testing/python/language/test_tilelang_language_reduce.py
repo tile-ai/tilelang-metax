@@ -96,7 +96,6 @@ REDUCE_CASES = [
 ]
 
 
-@tilelang.testing.pytest.mark.xfail
 @pytest.mark.parametrize(
     ("op", "dtype", "M", "N", "src_scope", "dst_scope", "threads", "batch"),
     REDUCE_CASES,

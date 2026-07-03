@@ -69,43 +69,43 @@ struct MinOpNan {
 
 struct SumOp_bf16x2 {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) const {
-    return tl::to_uint1(
-        tl::add2(tl::from_uint1<bfloat16x2>(x), tl::from_uint1<bfloat16x2>(y)));
+    return tl::to_uint1(tl::add2(tl::from_uint1<maca_bfloat162>(x),
+                                 tl::from_uint1<maca_bfloat162>(y)));
   }
 };
 
 struct MaxOp_bf16x2 {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) const {
-    return tl::to_uint1(
-        tl::max2(tl::from_uint1<bfloat16x2>(x), tl::from_uint1<bfloat16x2>(y)));
+    return tl::to_uint1(tl::max2(tl::from_uint1<maca_bfloat162>(x),
+                                 tl::from_uint1<maca_bfloat162>(y)));
   }
 };
 
 struct MinOp_bf16x2 {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) const {
-    return tl::to_uint1(
-        tl::min2(tl::from_uint1<bfloat16x2>(x), tl::from_uint1<bfloat16x2>(y)));
+    return tl::to_uint1(tl::min2(tl::from_uint1<maca_bfloat162>(x),
+                                 tl::from_uint1<maca_bfloat162>(y)));
   }
 };
 
 struct SumOp_fp16x2 {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) const {
     return tl::to_uint1(
-        tl::add2(tl::from_uint1<float16x2>(x), tl::from_uint1<float16x2>(y)));
+        tl::add2(tl::from_uint1<half2>(x), tl::from_uint1<half2>(y)));
   }
 };
 
 struct MaxOp_fp16x2 {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) const {
     return tl::to_uint1(
-        tl::max2(tl::from_uint1<float16x2>(x), tl::from_uint1<float16x2>(y)));
+        tl::max2(tl::from_uint1<half2>(x), tl::from_uint1<half2>(y)));
   }
 };
 
 struct MinOp_fp16x2 {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) const {
     return tl::to_uint1(
-        tl::min2(tl::from_uint1<float16x2>(x), tl::from_uint1<float16x2>(y)));
+        tl::min2(tl::from_uint1<half2>(x), tl::from_uint1<half2>(y)));
   }
 };
 

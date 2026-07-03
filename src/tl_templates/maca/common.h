@@ -412,6 +412,13 @@ TL_DEVICE half_t shfl_xor_sync(uint64_t mask, half_t val, int laneMask) {
   return half_t(r);
 }
 
+template <>
+TL_DEVICE uint1 shfl_xor_sync_fallback(uint64_t mask, uint1 val, int laneMask) {
+  unsigned long raw = static_cast<unsigned long>(val.x);
+  unsigned long result = __shfl_xor_sync(mask, raw, laneMask);
+  return uint1(static_cast<unsigned int>(result));
+}
+
 } // namespace tl
 
 namespace tl {
