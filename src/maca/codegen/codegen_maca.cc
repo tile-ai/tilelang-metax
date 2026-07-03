@@ -2023,7 +2023,7 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     std::string arg1 = PrintExpr(op->args[1]);
 
     if ((t.is_bfloat16() || t.is_float16()) && t.is_scalar()) {
-      const char *intrin = is_max ? "_hmax_nan" : "__hmin_nan";
+      const char *intrin = is_max ? "__hmax_nan" : "__hmin_nan";
       os << intrin << "(" << arg0 << ", " << arg1 << ")";
       return;
     }
