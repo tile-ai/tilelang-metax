@@ -54,7 +54,6 @@ def run_tilelang_copy_cross_dtype(M=256, N=256, block_M=128, block_N=128, src_dt
     torch.testing.assert_close(b, a.to(getattr(torch, dst_dtype)), rtol=1e-2, atol=1e-2)
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_tilelang_copy_cross_dtype():
     run_tilelang_copy_cross_dtype(src_dtype=T.float16, dst_dtype=T.bfloat16)

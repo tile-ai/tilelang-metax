@@ -17,13 +17,12 @@ def _get_issue_2307_source() -> str:
                 if i < 16:
                     T.device_assert(T.isfinite(score_fragment[i]))
 
-    target = tilelang.backend.target.determine_target(return_object=True)
+    target = tilelang.backend.target.determine_target("auto", return_object=True)
     with target:
         artifact = tilelang.lower(main, target=target)
     return artifact.kernel_source
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_fragment_read_assert_parallel_loop_is_partitioned():
     src = _get_issue_2307_source()

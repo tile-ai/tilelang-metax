@@ -122,9 +122,14 @@ def print_local_buffer_with_condition(condition: tirx.PrimExpr, buffer: tirx.Buf
 
 
 def device_assert(condition: tirx.PrimExpr, msg: str = "", no_stack_info=False):
-    from tilelang.cuda.debug import device_assert as cuda_device_assert
+    from tilelang.maca.target import check_maca_availability
 
-    return cuda_device_assert(condition, msg, no_stack_info)
+    if check_maca_availability():
+        from tilelang.maca.debug import device_assert as maca_device_assert
+        return maca_device_assert(condition, msg, no_stack_info)
+    else:
+        from tilelang.cuda.debug import device_assert as cuda_device_assert
+        return cuda_device_assert(condition, msg, no_stack_info)
 
 
 # NOTE(chaofan): T.print is implemented as a macro, so no return

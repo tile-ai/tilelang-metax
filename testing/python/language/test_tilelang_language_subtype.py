@@ -308,14 +308,13 @@ def test_subtype_complex_expressions_various(m, n):
 # ---------------------------------------------------------------------------
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize("block_size", [8, 16])
 def test_subtype_fp4_dynamic_stride_store(block_size):
     """fp4 store via StridedTensor: dynamic strides must match static strides."""
     num_blocks, n, padding = 10, 64, 4
     fp4_bytes = 64  # 128 fp4 elems packed into 64 bytes
-    jit_kw = dict(out_idx=None, target="cuda", pass_configs={"tl.disable_data_race_check": True})
+    jit_kw = dict(out_idx=None, target="auto", pass_configs={"tl.disable_data_race_check": True})
 
     def make_buf():
         row = fp4_bytes + padding
@@ -367,7 +366,6 @@ def test_subtype_fp4_dynamic_stride_store(block_size):
     )
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize("n", [64, 128])
 def test_subtype_fp4_scalar_store_codegen(n):
