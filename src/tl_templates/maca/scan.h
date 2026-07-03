@@ -42,7 +42,7 @@ static TL_DEVICE void InclusiveScanLine(const T *__restrict__ src,
 
 #pragma unroll
       for (int off = 1; off < SEG; off <<= 1) {
-        T n = tl::shfl_down_sync(MASK, val, off);
+        T n = __shfl_down_sync(MASK, val, off);
         if (lane + off < active)
           val = Reducer()(val, n);
       }
@@ -53,10 +53,10 @@ static TL_DEVICE void InclusiveScanLine(const T *__restrict__ src,
       if (lane < active)
         dst[(base + lane) * stride] = val;
 
-      T seg_result = tl::shfl_sync(MASK, val, 0);
+      T seg_result = __shfl_sync(MASK, val, 0);
       if (lane == 0)
         carry = seg_result;
-      carry = tl::shfl_sync(MASK, carry, 0);
+      carry = __shfl_sync(MASK, carry, 0);
       has_carry = true;
     }
   } else {
@@ -69,7 +69,7 @@ static TL_DEVICE void InclusiveScanLine(const T *__restrict__ src,
 
 #pragma unroll
       for (int off = 1; off < SEG; off <<= 1) {
-        T n = tl::shfl_up_sync(MASK, val, off);
+        T n = __shfl_up_sync(MASK, val, off);
         if (lane >= off && lane < active)
           val = Reducer()(val, n);
       }
@@ -81,10 +81,10 @@ static TL_DEVICE void InclusiveScanLine(const T *__restrict__ src,
         dst[(base + lane) * stride] = val;
 
       const int last_lane = active - 1;
-      T seg_result = tl::shfl_sync(MASK, val, last_lane);
+      T seg_result = __shfl_sync(MASK, val, last_lane);
       if (lane == last_lane)
         carry = seg_result;
-      carry = tl::shfl_sync(MASK, carry, last_lane);
+      carry = __shfl_sync(MASK, carry, last_lane);
       has_carry = true;
     }
   }
