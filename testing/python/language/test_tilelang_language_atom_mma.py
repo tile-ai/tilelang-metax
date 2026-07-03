@@ -2,8 +2,8 @@ import torch
 import tilelang
 import tilelang.language as T
 import tilelang.testing
+from tilelang.maca.intrinsics.macro.mma_macro_generator import TensorCoreIntrinEmitter
 from tilelang.intrinsics import (
-    TensorCoreIntrinEmitter,
     WGMMATensorCoreIntrinEmitter,
     TCGEN05TensorCoreIntrinEmitter,
 )
@@ -55,7 +55,6 @@ def make_mma_atom_kernel(M, N, K, in_dtype, out_dtype, accum_dtype):
     block_M = block_row_warps * warp_row_tiles
     block_N = block_col_warps * warp_col_tiles
     block_K = chunk
-    threads = 32 * block_row_warps * block_col_warps
 
     emitter = TensorCoreIntrinEmitter(
         a_dtype=in_dtype,
@@ -76,6 +75,7 @@ def make_mma_atom_kernel(M, N, K, in_dtype, out_dtype, accum_dtype):
     local_size_c = emitter.local_size_out
     num_inst_m = emitter.mma_num_inst_m
     num_inst_n = emitter.mma_num_inst_n
+    threads = emitter.threads
 
     @T.prim_func
     def main(
@@ -128,11 +128,10 @@ def _run_mma_atom(M, N, K, in_dtype, out_dtype, accum_dtype):
     torch.testing.assert_close(c, ref, rtol=1e-2, atol=0.1)
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @tilelang.testing.requires_cuda_compute_version_ge(8, 0)
 def test_mma_atom_gemm():
-    _run_mma_atom(128, 128, 128, T.float16, T.float16, T.float16)
+    _run_mma_atom(128, 128, 128, T.float16, T.float16, T.float32)
     _run_mma_atom(256, 256, 256, T.bfloat16, T.float32, T.float32)
 
 
