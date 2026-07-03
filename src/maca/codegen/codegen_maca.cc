@@ -356,6 +356,7 @@ std::string CodeGenTileLangMACA::Finish() {
   // TODO: Add implementation for maca target.
   decl_stream << "#include <tl_templates/maca/copy.h>\n";
   decl_stream << "#include <tl_templates/maca/reduce.h>\n";
+  decl_stream << "#include <tl_templates/maca/scan.h>\n";
   decl_stream << "#include <tl_templates/maca/intrin.h>\n";
   decl_stream << "#include <tl_templates/maca/atomic.h>\n";
   decl_stream << "#include <tl_templates/maca/threadblock_swizzle.h>\n";

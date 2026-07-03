@@ -148,7 +148,6 @@ def run_cumsum_1d(N, block_N, reverse=False, dtype=T.float32, scope="smem"):
     torch.testing.assert_close(tilelang_res, ref_res, atol=1e-3, rtol=1e-3)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_cumsum_smem():
     # Test different sizes
     run_cumsum(256, 256, 64, 64)
@@ -459,7 +458,6 @@ def run_cummax_1d(N, block_N, reverse=False, dtype=T.float32, scope="smem", nega
     torch.testing.assert_close(tilelang_res, ref_res, atol=1e-3, rtol=1e-3)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_cummax_smem():
     run_cummax(256, 256, 64, 64)
     run_cummax(256, 256, 64, 64, dim=1)
@@ -468,26 +466,22 @@ def test_cummax_smem():
     run_cummax(192, 160, 64, 32, dim=0, reverse=True)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_cummax_fragment():
     run_cummax(256, 256, 64, 64, scope="fragment")
     run_cummax(256, 256, 64, 64, dim=1, scope="fragment")
     run_cummax(256, 256, 64, 64, dim=1, reverse=True, scope="fragment")
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_cummax_out_of_place():
     run_cummax(128, 128, 64, 64, dim=1, scope="smem_out")
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_cummax_smem_1d():
     run_cummax_1d(512, 64)
     run_cummax_1d(512, 64, reverse=True)
     run_cummax_1d(80, 40, reverse=True, negative_input=True, threads=64)
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_cummax_fragment_1d():
     run_cummax_1d(512, 64, scope="fragment")
     run_cummax_1d(512, 64, reverse=True, scope="fragment")
