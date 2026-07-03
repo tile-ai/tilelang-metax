@@ -658,6 +658,15 @@ TL_DEVICE unsigned char __tl_cvt_int8_to_e8m0(const int8_t src) {
   return __tl_cvt_float_to_e8m0(f_val);
 }
 
+// int -> e8m0
+TL_DEVICE unsigned char __tl_cvt_int_to_e8m0(const int src) {
+  if (src == 0) {
+    return 0U;
+  }
+  const float f_val = static_cast<float>(src > 0 ? src : -src);
+  return __tl_cvt_float_to_e8m0(f_val);
+}
+
 // float -> e8m0
 TL_DEVICE unsigned char __tl_cvt_float_to_e8m0(const float src) {
   unsigned int bits = *reinterpret_cast<const unsigned int *>(&src);
