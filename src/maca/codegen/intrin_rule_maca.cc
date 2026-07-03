@@ -137,6 +137,21 @@ static PrimExpr DispatchMACAWarpActiveMask(const PrimExpr &e) {
   return Call(call->dtype, Op::Get("tirx.maca.__activemask"), call->args);
 }
 
+static PrimExpr DispatchMACAIsFinite(const PrimExpr &e) {
+  const CallNode *call = e.as<CallNode>();
+  ICHECK(call != nullptr);
+  ICHECK_EQ(call->args.size(), 1U);
+
+  DataType arg_dtype = call->args[0].dtype();
+  if (arg_dtype.is_float() &&
+      (arg_dtype.bits() == 32 || arg_dtype.bits() == 64)) {
+    ffi::Array<PrimExpr> new_args = {StringImm("isfinite"), call->args[0]};
+    return Call(call->dtype, builtin::call_pure_extern(), new_args);
+  }
+
+  return e;
+}
+
 template <typename T> static PrimExpr DispatchMACAShuffle(const PrimExpr &e) {
   const CallNode *call = e.as<CallNode>();
   ICHECK(call != nullptr);
@@ -266,6 +281,9 @@ TVM_REGISTER_OP("tirx.fmod")
 TVM_REGISTER_OP("tirx.rsqrt")
     .set_attr<FLowerIntrinsic>("maca.FLowerIntrinsic",
                                DispatchPureExtern<MACAMath>);
+
+TVM_REGISTER_OP("tirx.isfinite")
+    .set_attr<FLowerIntrinsic>("maca.FLowerIntrinsic", DispatchMACAIsFinite);
 
 // Register low-level builtin ops.
 // TODO(tvm-team): consider make MACA its own subfolder and create a file for
