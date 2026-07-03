@@ -36,7 +36,7 @@ struct MinOp {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) {
     return min(x, y);
   }
-}; 
+};
 
 struct MaxOpNan {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) {
@@ -125,15 +125,15 @@ struct MinOpNan_bf16x2 {
 
 struct MaxOpNan_fp16x2 {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) const {
-    return tl::to_uint1(
-        tl::max2_nan(tl::from_uint1<float16x2>(x), tl::from_uint1<float16x2>(y)));
+    return tl::to_uint1(tl::max2_nan(tl::from_uint1<float16x2>(x),
+                                     tl::from_uint1<float16x2>(y)));
   }
 };
 
 struct MinOpNan_fp16x2 {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) const {
-    return tl::to_uint1(
-        tl::min2_nan(tl::from_uint1<float16x2>(x), tl::from_uint1<float16x2>(y)));
+    return tl::to_uint1(tl::min2_nan(tl::from_uint1<float16x2>(x),
+                                     tl::from_uint1<float16x2>(y)));
   }
 };
 

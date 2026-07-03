@@ -450,8 +450,7 @@ TL_DEVICE half_t extract_half_from_float16x2(float16x2 v, int lane) {
 }
 
 // Helper to extract bfloat16_t from bfloat16x2
-TL_DEVICE bfloat16_t extract_bfloat16_from_bfloat16x2(bfloat16x2 v,
-                                                    int lane) {
+TL_DEVICE bfloat16_t extract_bfloat16_from_bfloat16x2(bfloat16x2 v, int lane) {
   return v.data[lane];
 }
 
