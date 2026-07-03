@@ -2230,6 +2230,21 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     os << "__shfl_up_sync(" << PrintExpr(op->args[0]) << ", "
        << PrintExpr(op->args[1]) << ", " << PrintExpr(op->args[2]) << ", "
        << PrintExpr(op->args[3]) << ")";
+  } else if (op->op.same_as(tl::match_any_sync())) {
+    ICHECK_EQ(op->args.size(), 2U)
+        << "tl.match_any_sync expects <mask, value>.";
+    os << "__match_any_sync(" << PrintExpr(op->args[0]) << ", "
+       << PrintExpr(op->args[1]) << ")";
+  } else if (op->op.same_as(tl::match_all_sync())) {
+    ICHECK_EQ(op->args.size(), 2U)
+        << "tl.match_all_sync expects <mask, value>.";
+    // __match_all_sync writes a `pred` flag through its third argument. We
+    // hide the out-parameter behind an immediately-invoked lambda and
+    // discard pred (the returned mask already encodes whether all lanes
+    // agreed: a non-zero result implies pred == 1).
+    os << "([&]() -> unsigned { int _tl_pred = 0; return __match_all_sync("
+       << PrintExpr(op->args[0]) << ", " << PrintExpr(op->args[1])
+       << ", &_tl_pred); }())";
   } else if (op->op.same_as(tl::get_lane_idx())) {
     ICHECK_LE(op->args.size(), 1)
         << "tl.get_lane_idx expects at most one argument <warp_size>.";
@@ -2359,6 +2374,16 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     // Emit __ldg(&buffer_ref)
     auto buffer_ref = this->GetBufferRef(op->dtype, buffer, base);
     os << "__ldg(&(" << buffer_ref << "))";
+  } else if (op->op.same_as(tl::__ffs())) {
+    ICHECK_EQ(op->args.size(), 1U) << "T.__ffs expects one argument.";
+    DataType arg_dtype = op->args[0].dtype();
+    ICHECK(arg_dtype.is_int() || arg_dtype.is_uint())
+        << "T.__ffs expects an integer argument, but got " << arg_dtype;
+    ICHECK(arg_dtype.bits() == 32 || arg_dtype.bits() == 64)
+        << "T.__ffs expects a 32-bit or 64-bit integer argument, but got "
+        << arg_dtype;
+    os << (arg_dtype.bits() == 64 ? "__ffsll(" : "__ffs(")
+       << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::ldg32())) {
     // Explicit 32-bit global memory load: load_global_32(ptr) or
     // load_global_32_conditional(ptr, pred)
