@@ -26,7 +26,7 @@ static TL_DEVICE void InclusiveScanLine(const T *__restrict__ src,
   if (extent <= 0)
     return;
 
-  constexpr unsigned MASK = 0xFFFFFFFFFFFFFFFF;
+  constexpr unsigned long MASK = 0xFFFFFFFFFFFFFFFF;
   const int lane = threadIdx.x % SEG;
   T carry{};
   bool has_carry = false;
