@@ -36,7 +36,7 @@ struct MinOp {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) {
     return min(x, y);
   }
-};
+}; 
 
 struct MaxOpNan {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) {
@@ -47,7 +47,7 @@ struct MaxOpNan {
     return __hmax_nan(x, y);
   }
   TL_DEVICE half_t operator()(half_t const &x, half_t const &y) const {
-    return __hmax_nan(x, y);
+    return half_t(__hmax_nan(x, y));
   }
 };
 
@@ -60,7 +60,7 @@ struct MinOpNan {
     return __hmin_nan(x, y);
   }
   TL_DEVICE half_t operator()(half_t const &x, half_t const &y) const {
-    return __hmin_nan(x, y);
+    return half_t(__hmin_nan(x, y));
   }
 };
 
@@ -91,21 +91,21 @@ struct MinOp_bf16x2 {
 struct SumOp_fp16x2 {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) const {
     return tl::to_uint1(
-        tl::add2(tl::from_uint1<halfx2>(x), tl::from_uint1<halfx2>(y)));
+        tl::add2(tl::from_uint1<float16x2>(x), tl::from_uint1<float16x2>(y)));
   }
 };
 
 struct MaxOp_fp16x2 {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) const {
     return tl::to_uint1(
-        tl::max2(tl::from_uint1<halfx2>(x), tl::from_uint1<halfx2>(y)));
+        tl::max2(tl::from_uint1<float16x2>(x), tl::from_uint1<float16x2>(y)));
   }
 };
 
 struct MinOp_fp16x2 {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) const {
     return tl::to_uint1(
-        tl::min2(tl::from_uint1<halfx2>(x), tl::from_uint1<halfx2>(y)));
+        tl::min2(tl::from_uint1<float16x2>(x), tl::from_uint1<float16x2>(y)));
   }
 };
 
@@ -126,14 +126,14 @@ struct MinOpNan_bf16x2 {
 struct MaxOpNan_fp16x2 {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) const {
     return tl::to_uint1(
-        tl::max2_nan(tl::from_uint1<halfx2>(x), tl::from_uint1<halfx2>(y)));
+        tl::max2_nan(tl::from_uint1<float16x2>(x), tl::from_uint1<float16x2>(y)));
   }
 };
 
 struct MinOpNan_fp16x2 {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) const {
     return tl::to_uint1(
-        tl::min2_nan(tl::from_uint1<halfx2>(x), tl::from_uint1<halfx2>(y)));
+        tl::min2_nan(tl::from_uint1<float16x2>(x), tl::from_uint1<float16x2>(y)));
   }
 };
 

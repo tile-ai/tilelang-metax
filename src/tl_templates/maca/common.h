@@ -439,7 +439,7 @@ template <typename T> TL_DEVICE ::uint1 to_uint1(T v) {
 //   3. half2           (FP16x2, MACA SDK __h*2 intrinsics)
 // =========================================================================
 // Pack two half_t into a uint1
-TL_DEVICE uint1 pack_half2(const half_t a, const half_t b) {
+TL_DEVICE uint1 pack_half2(half_t a, half_t b) {
   return __pack_half2(static_cast<__half>(a), static_cast<__half>(b));
 }
 
@@ -450,7 +450,7 @@ TL_DEVICE half_t extract_half_from_float16x2(float16x2 v, int lane) {
 }
 
 // Helper to extract bfloat16_t from bfloat16x2
-TL_DEVICE float16x2 extract_bfloat16_from_bfloat162(maca_bfloat162 v,
+TL_DEVICE bfloat16_t extract_bfloat16_from_bfloat16x2(bfloat16x2 v,
                                                     int lane) {
   return v.data[lane];
 }
