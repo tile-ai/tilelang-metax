@@ -242,8 +242,8 @@ def main(m=256, n=256, k=256, tune=False):
             num_bits=4,
             block_M=128,
             block_N=128,
-            block_K=128,
-            num_stages=2,
+            block_K=64,
+            num_stages=1,
             threads=256,
             split=1,
         )

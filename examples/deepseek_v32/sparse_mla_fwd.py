@@ -62,14 +62,15 @@ def sparse_mla_fwd(
     NI = tilelang.cdiv(topk, block_I)
     D = dim
     D_tail = tail_dim
+    HEAD_TILE = 32
 
-    if head_kv > 64:
-        assert head_kv % 64 == 0, "head_kv should be a multiple of 64"
-        REPLICATE_H = head_kv // 64
+    if head_kv > HEAD_TILE:
+        assert head_kv % HEAD_TILE == 0, "head_kv should be a multiple of 32"
+        REPLICATE_H = head_kv // HEAD_TILE
     else:
         REPLICATE_H = 1
 
-    H_per_block = padded_H if REPLICATE_H == 1 else 64
+    H_per_block = padded_H if REPLICATE_H == 1 else HEAD_TILE
 
     Q: T.Tensor(q_shape, dtype)  # type: ignore
     KV: T.Tensor(kv_shape, dtype)  # type: ignore
@@ -108,7 +109,7 @@ def sparse_mla_fwd(
         q_i = s_i
         max_kv_i = q_i
 
-        H0 = g_i * padded_H + (0 if REPLICATE_H == 1 else (bx % REPLICATE_H) * 64)
+        H0 = g_i * padded_H + (0 if REPLICATE_H == 1 else (bx % REPLICATE_H) * HEAD_TILE)
         H1 = H0 + H_per_block
 
         T.copy(Q[b_i, s_i, H0:H1, :D], Q_shared)
@@ -168,7 +169,7 @@ def sparse_mla_fwd(
     return Output, Lse
 
 
-def sparse_mla_fwd_interface(q, kv, indices, sm_scale=None, return_p_sum: bool = False, d_v=512, block_I=64, num_stages=2, threads=256):
+def sparse_mla_fwd_interface(q, kv, indices, sm_scale=None, return_p_sum: bool = False, d_v=512, block_I=16, num_stages=1, threads=128):
     is_casual = True
     assert return_p_sum == False, "This kernel file is for fwd only"
     assert q.is_contiguous() and kv.is_contiguous() and indices.is_contiguous()
@@ -238,9 +239,9 @@ def test_sparse_mla_fwd(
     topk=2048,
     dtype=torch.bfloat16,
     check_correctness=True,
-    block_I=64,
-    num_stages=2,
-    threads=256,
+    block_I=16,
+    num_stages=1,
+    threads=128,
 ):
     torch.random.manual_seed(0)
     q = torch.randn((B, S, H, DQK), dtype=dtype, device="cuda").requires_grad_(True)
