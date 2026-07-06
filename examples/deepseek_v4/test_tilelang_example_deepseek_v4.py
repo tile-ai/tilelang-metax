@@ -19,7 +19,6 @@ def test_example_fp8_fp4_gemm_1d1d():
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_eq(9, 0)
 def test_example_sparse_attn_fwd_sm90():
     sparse_attn_fwd_sm90.test_correctness()
 
