@@ -35,7 +35,7 @@
 #include <unordered_set>
 #include <utility>
 
-#include "../target/utils.h"
+#include "../maca/target_utils.h"
 #include "runtime/thread_storage_scope.h"
 #include "tir/transforms/ir_utils.h"
 #include "tir/transforms/update_pointer_storage_scope.h"
