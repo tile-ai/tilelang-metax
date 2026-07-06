@@ -42,11 +42,10 @@ struct MaxOpNan {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) {
     return max(x, y);
   }
-  TL_DEVICE bfloat16_t operator()(bfloat16_t const &x,
-                                  bfloat16_t const &y) const {
+  TL_DEVICE bfloat16_t operator()(bfloat16_t const &x, bfloat16_t const &y) {
     return __hmax_nan(x, y);
   }
-  TL_DEVICE half_t operator()(half_t const &x, half_t const &y) const {
+  TL_DEVICE half_t operator()(half_t const &x, half_t const &y) {
     return half_t(__hmax_nan(x, y));
   }
 };
@@ -55,11 +54,10 @@ struct MinOpNan {
   template <typename T> TL_DEVICE T operator()(T const &x, T const &y) {
     return min(x, y);
   }
-  TL_DEVICE bfloat16_t operator()(bfloat16_t const &x,
-                                  bfloat16_t const &y) const {
+  TL_DEVICE bfloat16_t operator()(bfloat16_t const &x, bfloat16_t const &y) {
     return __hmin_nan(x, y);
   }
-  TL_DEVICE half_t operator()(half_t const &x, half_t const &y) const {
+  TL_DEVICE half_t operator()(half_t const &x, half_t const &y) {
     return half_t(__hmin_nan(x, y));
   }
 };
