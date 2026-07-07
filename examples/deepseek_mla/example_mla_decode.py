@@ -226,8 +226,8 @@ def main(
     qk_flops = 2 * batch * heads * kv_ctx * (dim + pe_dim)
     pv_flops = 2 * batch * heads * kv_ctx * dim
     total_flops = qk_flops + pv_flops
-    BLOCK_N = 64
-    BLOCK_H = min(64, heads // kv_heads)
+    BLOCK_N = 32
+    BLOCK_H = min(16, heads // kv_heads)
     num_split = 1
     softmax_scale = (dim + pe_dim) ** -0.5
 
