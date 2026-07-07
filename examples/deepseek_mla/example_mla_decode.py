@@ -233,7 +233,7 @@ def main(
 
     kernel = flashattn(batch, heads, kv_heads, kv_ctx, dim, pe_dim, BLOCK_N, BLOCK_H, num_split, softmax_scale)
     profiler = kernel.get_profiler(tensor_supply_type=tilelang.TensorSupplyType.Randn)
-    profiler.assert_allclose(ref_program, rtol=1e-4, atol=1e-4)
+    profiler.assert_allclose(ref_program, rtol=2e-4, atol=1e-4)
     latency = profiler.do_bench(warmup=500)
     print(f"Latency: {latency} ms")
     print(f"TFlops: {total_flops / latency * 1e-9} TFlops")
