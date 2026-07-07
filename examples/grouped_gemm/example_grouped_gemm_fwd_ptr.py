@@ -134,7 +134,7 @@ def run_tilelang_grouped_gemm_ptr(
     # execution path; CuTeDSL does not support these handle tensors.
     kernel = tl.compile(
         program,
-        target="cuda",
+        target="maca",
         execution_backend="auto",
         pass_configs={"tl.disable_warp_specialized": True},
     )
