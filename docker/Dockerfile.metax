@@ -1,14 +1,11 @@
-FROM sw-harbor-lt.mxcr.io/cimaster/maca-pytorch:20260227-616-torch2.6-py310-ubuntu24.04-amd64
+FROM cr.metax-tech.com/public-library/maca-pytorch:3.8.0.11-torch2.10-py312-ubuntu24.04-amd64
 
 WORKDIR /root
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    git \
-    cmake
+RUN apt-get update && apt-get install -y git cmake ccache
 
-ENV USE_MACA=ON
+ENV USE_MACA=ON PATH="/opt/conda/bin:${PATH}"
 
 CMD bash

@@ -84,11 +84,6 @@ jobs:
     strategy:
       matrix:
         runner:
-          # - tags: [self-hosted, nvidia]
-          #   name: self-hosted-nvidia
-          #   # Format: [Nightly-]CUDA-<major>.<minor>[.<patch>]. E.g., "CUDA-12.8" or "Nightly-CUDA-13.0".
-          #   # Use "Nightly-" prefix to use torch nightly builds.
-          #   toolkit: CUDA-12.8
           # ROCm CI is temporarily disabled.
           # - tags: [self-hosted, amd, gpu]
           #   name: self-hosted-amd
@@ -98,7 +93,7 @@ jobs:
           - tags: tilelang-metax-runner
             name: self-hosted-metax
             # Format: MACA-<major>.<minor>[.<patch>]. E.g., "MACA-3.0".
-            toolkit: MACA-3.7
+            toolkit: MACA-3.8
           - tags: [macos-latest]
             name: macos-latest
             toolkit: Metal # or Nightly-Metal
@@ -108,13 +103,6 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: Install dependencies for runner (MetaX)
-        if: contains(matrix.runner.toolkit, 'MACA')
-        run: |
-          sudo apt-get update && sudo apt-get install -y git ccache
-          export PATH="/opt/conda/bin:${PATH}"
-          echo "PATH=${PATH}" | tee -a "${GITHUB_ENV}"
-
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
@@ -252,7 +240,6 @@ jobs:
           export UV_INDEX="http://mirrors.aliyun.com/pypi/simple"
           export CLANG_TIDY_CMAKE_OPTIONS="${CLANG_TIDY_CMAKE_OPTIONS} -DUSE_MACA=ON"
 
-          echo "USE_MACA=ON" | tee -a "${GITHUB_ENV}"
           echo "UV_INDEX=${UV_INDEX}" | tee -a "${GITHUB_ENV}"
           echo "CLANG_TIDY_CMAKE_OPTIONS=${CLANG_TIDY_CMAKE_OPTIONS}" | tee -a "${GITHUB_ENV}"
 
@@ -315,7 +302,6 @@ jobs:
             uv pip install -v -r requirements-test-rocm.txt
           elif [[ "${{ matrix.runner.toolkit }}" == *"MACA"* ]]; then
             uv pip install -r requirements-test-maca.txt
-            uv pip install --no-deps --python-version 3.10.0 flash_linear_attention==0.4.0 -i https://repos.metax-tech.com/r/maca-pypi/simple --trusted-host repos.metax-tech.com
           elif [[ "${{ matrix.runner.toolkit }}" == *"Metal"* ]]; then
             uv pip install -v -r requirements-test-metal.txt
           else
@@ -391,7 +377,7 @@ jobs:
             uv run --no-project -m --
             pytest --verbose --color=yes --durations=0 --showlocals --cache-clear
           )
-          "${PYTEST[@]}" --maxfail=3 \
+          "${PYTEST[@]}" --maxfail=3 --numprocesses=4 \
             ../examples
 
       # NVIDIA CUDA tests
@@ -432,7 +418,7 @@ jobs:
             uv run --no-project -m --
             pytest --verbose --color=yes --durations=0 --showlocals --cache-clear
           )
-          "${PYTEST[@]}" --maxfail=3 --numprocesses=2 \
+          "${PYTEST[@]}" --maxfail=3 --numprocesses=4 \
             --ignore=./python/metal \
             --ignore=./python/issue/test_tilelang_issue_sm120_tma_smem_alignment.py \
             --ignore=./python/jit/test_tilelang_jit_cutedsl_host_codegen.py \
