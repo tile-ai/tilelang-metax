@@ -418,7 +418,7 @@ jobs:
             uv run --no-project -m --
             pytest --verbose --color=yes --durations=0 --showlocals --cache-clear
           )
-          "${PYTEST[@]}" --maxfail=3 --numprocesses=4 \
+          "${PYTEST[@]}" --maxfail=3 --numprocesses=2 \
             --ignore=./python/metal \
             --ignore=./python/issue/test_tilelang_issue_sm120_tma_smem_alignment.py \
             --ignore=./python/jit/test_tilelang_jit_cutedsl_host_codegen.py \
