@@ -359,13 +359,11 @@ def test_atomic_add():
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(9, 0)
 def test_atomic_add_auto_vectorized():
     run_atomic_add_auto_vectorized(8, 128, 128, 32, 32, dtype=T.float32)
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(9, 0)
 def test_atomic_add_auto_vectorized_unit_test():
     run_atomic_add_auto_vectorized_unit_test(2, dtype=T.float32)
     run_atomic_add_auto_vectorized_unit_test(4, dtype=T.float32)
@@ -373,7 +371,6 @@ def test_atomic_add_auto_vectorized_unit_test():
     run_atomic_add_auto_vectorized_unit_test(2, dtype=T.bfloat16)
 
 
-@tilelang.testing.requires_cuda_compute_version_ge(9, 0)
 def test_atomic_add_complicated_parallel():
     run_atomic_add_complicated_parallel(8, 128, 128, 32, 32, dtype=T.float32)
 

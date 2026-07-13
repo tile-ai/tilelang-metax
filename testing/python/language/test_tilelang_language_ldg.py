@@ -93,7 +93,6 @@ def test_ldg128_codegen():
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(10, 0)
 def test_ldg256_codegen():
     """Test that ldg256 generates tl::load_global_256 in CUDA source."""
 
@@ -230,7 +229,6 @@ def test_ldg128_predicated_codegen():
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(10, 0)
 def test_ldg256_predicated_codegen():
     """Test that ldg256 with predicate generates tl::load_global_256_conditional(ptr, pred) in CUDA source."""
 

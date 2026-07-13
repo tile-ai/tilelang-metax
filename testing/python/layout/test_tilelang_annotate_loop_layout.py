@@ -87,7 +87,6 @@ def replicate_loop_layout_kernel(A, B, loop_layout):
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version(9, 0)
 def test_annotate_replicate_loop_layout_vec4():
     M, N = 128, 32
 

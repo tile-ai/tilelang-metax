@@ -111,7 +111,6 @@ def fp4_to_uint8_view_test(rows_per_cta=16, mask_k=256):
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(10, 0)
 def test_view_shared_fp4_to_uint8_compile():
     program = fp4_to_uint8_view_test()
     kernel = tl.compile(program, out_idx=-1)

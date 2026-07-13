@@ -1,9 +1,8 @@
 from tilelang import language as T
 import tilelang.testing
 import tilelang
-from tilelang.engine.callback import register_cuda_postproc_callback, register_hip_postproc_callback
+from tilelang.engine.callback import register_cuda_postproc_callback, register_hip_postproc_callback, register_maca_postproc_callback
 import torch
-import pytest
 
 
 def matmul(
@@ -95,6 +94,11 @@ def run_gemm(
         code = f"// {stramp}\n" + code
         return code
 
+    @register_maca_postproc_callback
+    def tilelang_callback_maca_postproc(code, _):
+        code = f"// {stramp}\n" + code
+        return code
+
     tilelang.disable_cache()
     matmul_kernel = tilelang.compile(program, out_idx=-1)
     tilelang.enable_cache()
@@ -104,7 +108,6 @@ def run_gemm(
     assert stramp in kernel_source, f"Expected {stramp} in the kernel source"
 
 
-@pytest.mark.skip(reason="Skipping callback test")
 def test_cuda_postproc_callback():
     run_gemm(
         512,

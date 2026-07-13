@@ -49,7 +49,7 @@ def _check_is_cdna() -> bool:
 def _check_is_cuda_or_cdna() -> bool:
     try:
         target = determine_target("auto", return_object=True)
-        return target_is_cuda(target) or target_is_cdna(target)
+        return target_is_cuda(target) or target_is_cdna(target) or target_is_maca(target)
     except (ValueError, RuntimeError):
         return False
 
@@ -98,12 +98,12 @@ def requires_cdna(func):
 
 
 def requires_cuda_or_cdna(func):
-    """Skip the test unless the device is CUDA or CDNA ROCm."""
+    """Skip the test unless the device is CUDA or CDNA ROCm or MACA."""
     is_cuda_or_cdna = _check_is_cuda_or_cdna()
     marks = [
         pytest.mark.skipif(
             not is_cuda_or_cdna,
-            reason="Requires CUDA or CDNA ROCm target",
+            reason="Requires CUDA or CDNA ROCm or MACA target",
         ),
     ]
     return _compose([func], marks)

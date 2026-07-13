@@ -241,7 +241,7 @@ def test_sync_shared():
     tvm.ir.assert_structural_equal(mod["main"], expected)
 
 
-@tvm.testing.requires_cuda
+@tilelang.testing.requires_cuda
 def test_sync_let_stmt():
     @T.prim_func(private=True)
     def func(A: T.Buffer((16 * 512), "float32")):

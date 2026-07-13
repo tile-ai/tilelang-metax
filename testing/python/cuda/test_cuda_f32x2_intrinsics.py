@@ -235,14 +235,14 @@ def test_codegen_auto_vec_f32(op_key):
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version(10)
 @pytest.mark.parametrize("op_key", _AUTO_VEC_OP_NAMES)
 def test_codegen_auto_vec_f32_width8(op_key):
     py_op, tl_func = _AUTO_VEC_OPS[op_key]
     func = _make_auto_vec_binary_kernel(py_op, T.float32, width=8)
     src = _lower_to_cuda_source(func)
+    fields = "xz" if DEFAULT_TARGET.kind.name == "maca" else "xyzw"
     assert "\x00" not in src, "Generated CUDA source should not contain embedded NUL bytes"
-    for field in "xyzw":
+    for field in fields:
         assert f".{field})) = tl::{tl_func}(" in src, (
             f"Expected {field}-field packed tl::{tl_func} emission in width-8 float32 auto-vectorised source"
         )

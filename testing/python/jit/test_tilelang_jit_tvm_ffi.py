@@ -445,7 +445,6 @@ def test_tvm_ffi_l2_persistent_map():
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version(9, 0)
 def test_tvm_ffi_pdl():
     """Test pdl."""
 

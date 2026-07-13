@@ -395,7 +395,6 @@ def test_e2e_bf16_global_shared_frag():
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(9)
 def test_e2e_fp8_global_to_frag():
     """fp8 global -> float32 frag -> fp8 global: roundtrip should be lossless.
 
@@ -436,7 +435,6 @@ def test_e2e_fp8_global_to_frag():
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(9)
 def test_e2e_fp8_manual_decouple():
     """fp8 with manually decoupled copy stages: same result as auto-decoupled.
 
@@ -480,7 +478,6 @@ def test_e2e_fp8_manual_decouple():
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(9)
 def test_e2e_scalar_load_no_cast_buffer():
     """Test that scalar memory load (b[0]) is not decoupled into a cast buffer.
 

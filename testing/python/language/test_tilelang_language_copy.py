@@ -196,7 +196,6 @@ def run_tilelang_copy_fp8_e8m0(M=1024, N=1024, block_M=128, block_N=128, src_dty
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(10, 0)
 def test_tilelang_copy_fp8_e8m0():
     run_tilelang_copy_fp8_e8m0(src_dtype=T.float8_e8m0fnu, dst_dtype=T.float8_e8m0fnu)
 
@@ -218,7 +217,6 @@ def run_tilelang_copy_fp4(M=1024, N=1024, block_M=128, block_N=128, src_dtype=T.
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(10, 0)
 def test_tilelang_copy_fp4():
     run_tilelang_copy_fp4(src_dtype=T.float4_e2m1fn, dst_dtype=T.float4_e2m1fn)
     run_tilelang_copy_fp4(src_dtype=T.float4_e2m1fn, dst_dtype=T.float16)
