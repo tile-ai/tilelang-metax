@@ -97,10 +97,10 @@ def run_gemm(
             A = (A.view(torch.int32) - 0x1000).view(torch.float32)
             B = (B.view(torch.int32) - 0x1000).view(torch.float32)
         if in_dtype == T.int8:
-            torch.backend.cuda.matmul.allow_tf32 = False
+            torch.backends.cuda.matmul.allow_tf32 = False
         C = torch.matmul(A.to(torch.float), B.to(torch.float))
         if in_dtype == T.int8:
-            torch.backend.cuda.matmul.allow_tf32 = True
+            torch.backends.cuda.matmul.allow_tf32 = True
         C = C.to(torch.__getattribute__(out_dtype))
         return C
 
