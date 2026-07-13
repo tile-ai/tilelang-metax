@@ -97,6 +97,39 @@ def register_cuda_postproc_callback(func: Callable | bool = None, override: bool
     raise TypeError("Invalid decorator usage")
 
 
+def register_maca_postproc_callback(func: Callable | bool = None, override: bool = True):
+    """Decorator for registering MACA post-processing callback function.
+
+    Can be used with or without parentheses:
+        @register_maca_postproc_callback
+        def func(code, target): ...
+
+        @register_maca_postproc_callback()
+        def func(code, target): ...
+
+        @register_maca_postproc_callback(override=False)
+        def func(code, target): ...
+
+    Args:
+        func: The function to be decorated or a boolean override flag
+        override: Whether to override existing registered function. Defaults to True.
+    """
+    if callable(func):
+        register_maca_postproc(func, override)
+        return func
+
+    if func is None or isinstance(func, bool):
+        _override = func if isinstance(func, bool) else override
+
+        def _register(fn: Callable[[str, Target], str]):
+            register_maca_postproc(fn, _override)
+            return fn
+
+        return _register
+
+    raise TypeError("Invalid decorator usage")
+
+
 def register_hip_postproc_callback(func: Callable | bool = None, override: bool = True):
     """Decorator for registering HIP post-processing callback function.
 
