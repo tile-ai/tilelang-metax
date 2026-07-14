@@ -35,6 +35,26 @@ from tilelang.maca.intrinsics.layout.mma_layout import (
 lift = convert
 
 
+def _reject_narrow_float_accum(normalized: str) -> None:
+    """Reject an accumulator the MACA matrix core cannot hold.
+
+    codegen synthesises the builtin as ``"__builtin_mxc_mma_" + prefix`` and casts the C
+    operand to ``dtype_map[accum_dtype + "x4"]`` (src/maca/codegen/codegen_maca.cc, the
+    tl::mma lowering). The float matrix-core builtins take and return a float32x4, so any
+    float accumulator narrower than 32 bits hands them the wrong vector type and mxcc
+    rejects the call. Integer shapes accumulate in int32 and stay valid. Left unchecked
+    the mismatch only surfaces as an opaque compiler error several stages later.
+    """
+    if not normalized.startswith(("float", "bfloat")):
+        return
+    if DataType(normalized).bits >= 32:
+        return
+    raise ValueError(
+        f"MACA MMA does not support {normalized} accumulation; the float matrix-core "
+        f"builtins accumulate in float32. Use accum_dtype='float32'."
+    )
+
+
 class TensorCoreIntrinEmitter:
     """
     To eliminate Python syntax within TIR Macro.
@@ -70,7 +90,7 @@ class TensorCoreIntrinEmitter:
         self,
         a_dtype: str = "float16",
         b_dtype: str = "float16",
-        accum_dtype: str = "float16",
+        accum_dtype: str = "float32",
         a_transposed: bool = False,
         b_transposed: bool = False,
         block_row_warps: int = 2,
@@ -151,15 +171,21 @@ class TensorCoreIntrinEmitter:
         self.local_size_b = (n_dim * k_dim) // warp_size
         self.local_size_out = (m_dim * n_dim) // warp_size
 
-    def _dtype_abbrv_lookup(self, dtype):
+    @staticmethod
+    def _normalize_dtype(dtype) -> str:
         s = str(dtype)
         if s.startswith("dtype('") and s.endswith("')"):
             s = s[7:-2]
+        return s
+
+    def _dtype_abbrv_lookup(self, dtype):
+        s = self._normalize_dtype(dtype)
         if s not in self.dtype_abbrv:
             raise KeyError(f"Unsupported dtype for MACA MMA: {dtype!r}")
         return self.dtype_abbrv[s]
 
     def _initialize_abbrev(self, a_dtype, b_dtype, accum_dtype):
+        _reject_narrow_float_accum(self._normalize_dtype(accum_dtype))
         self.a_dtype_abbrv = self._dtype_abbrv_lookup(a_dtype)
         self.b_dtype_abbrv = self._dtype_abbrv_lookup(b_dtype)
         self.accum_dtype_abbrv = self._dtype_abbrv_lookup(accum_dtype)
@@ -168,9 +194,7 @@ class TensorCoreIntrinEmitter:
         in_dtype = self.a_dtype
         M_DIM, N_DIM = self.M_DIM, self.N_DIM
 
-        in_dtype_key = str(in_dtype)
-        if in_dtype_key.startswith("dtype('") and in_dtype_key.endswith("')"):
-            in_dtype_key = in_dtype_key[7:-2]
+        in_dtype_key = self._normalize_dtype(in_dtype)
         in_dtype_map = {
             "bfloat16": "bf16",
             "float16": "f16",
@@ -776,7 +800,7 @@ class TensorCorePreshuffleIntrinEmitter(TensorCoreIntrinEmitter):
         self,
         a_dtype: str = "float16",
         b_dtype: str = "float16",
-        accum_dtype: str = "float16",
+        accum_dtype: str = "float32",
         a_transposed: bool = False,
         b_transposed: bool = False,
         block_row_warps: int = 2,
