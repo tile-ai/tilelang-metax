@@ -35,7 +35,6 @@ def _find_if_with_set_max_nreg(func, then_call, else_call):
     return matches[0]
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_inject_set_max_nreg():
     """Test the InjectSetMaxNReg pass"""
 
@@ -95,7 +94,6 @@ def test_inject_set_max_nreg():
     _find_if_with_set_max_nreg(mod["main"], (24, 0), (240, 1))
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_raw_set_max_nreg_keeps_legacy_behavior_with_simt_copy():
     """Raw T.set_max_nreg should stay in place instead of being treated as annotation."""
 
@@ -128,7 +126,6 @@ def test_raw_set_max_nreg_keeps_legacy_behavior_with_simt_copy():
     assert len(calls) == 2
 
 
-@tilelang.testing.pytest.mark.xfail
 def test_inject_set_max_nreg_no_set_max_nreg():
     """Test the InjectSetMaxNReg pass with no_set_max_nreg"""
 

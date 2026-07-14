@@ -31,7 +31,6 @@ def _get_isfinite_expr(code: str) -> str:
     raise AssertionError("Failed to find CUDA isfinite call in generated source")
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_isfinite_codegen_uses_cuda_intrinsic():
     """Check T.isfinite lowers to CUDA's isfinite for float32."""

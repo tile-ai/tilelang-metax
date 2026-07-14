@@ -323,14 +323,12 @@ def test_atomic_addx2_float():
     run_atomic_addx2(32, 64, 8, 16, dtype=T.float32)
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_atomic_add_mixed_dtype_fp16():
     run_atomic_add_mixed_dtype(8, T.float32, T.float16)
     run_atomic_addx2_mixed_dtype(32, 64, 8, 16, T.float32, T.float16)
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @tilelang.testing.requires_cuda_compute_version_ge(8, 0)
 def test_atomic_add_mixed_dtype_bf16():

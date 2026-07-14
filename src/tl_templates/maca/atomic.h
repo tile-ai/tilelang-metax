@@ -243,11 +243,12 @@ template <typename T> TL_DEVICE half2 ToHalf2(T val) {
 
 TL_DEVICE half2 ToHalf2(half2 val) { return val; }
 
-TL_DEVICE half2 ToHalf2(float2 val) {
-  half2 ret;
-  ret.x = static_cast<half_t>(val.x);
-  ret.y = static_cast<half_t>(val.y);
-  return ret;
+TL_DEVICE half2 ToHalf2(float2 val) { return __floats2half2_rn(val.x, val.y); }
+TL_DEVICE half2 ToHalf2(const float *val) {
+  return __floats2half2_rn(val[0], val[1]);
+}
+TL_DEVICE half2 ToHalf2(float *val) {
+  return ToHalf2(static_cast<const float *>(val));
 }
 
 // Here ValType can be either value or value* (pointer)
@@ -269,6 +270,16 @@ template <typename T> TL_DEVICE maca_bfloat162 ToBfloat162(T val) {
 }
 
 TL_DEVICE maca_bfloat162 ToBfloat162(maca_bfloat162 val) { return val; }
+
+TL_DEVICE maca_bfloat162 ToBfloat162(float2 val) {
+  return __floats2bfloat162_rn(val.x, val.y);
+}
+TL_DEVICE maca_bfloat162 ToBfloat162(const float *val) {
+  return __floats2bfloat162_rn(val[0], val[1]);
+}
+TL_DEVICE maca_bfloat162 ToBfloat162(float *val) {
+  return ToBfloat162(static_cast<const float *>(val));
+}
 
 template <typename ValType>
 TL_DEVICE void AtomicAddx2(bfloat16_t *ref, ValType val,
