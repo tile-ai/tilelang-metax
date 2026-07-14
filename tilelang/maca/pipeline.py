@@ -143,6 +143,8 @@ def MACAPassPipelineBody(mod: IRModule, target: Target) -> IRModule:
     mod = tilelang.transform.Simplify()(mod)
     mod = tilelang.transform.LowerDeviceKernelLaunch()(mod)
 
+    mod = tilelang.cuda.transform.PersistThreadblock()(mod)
+
     return mod
 
 

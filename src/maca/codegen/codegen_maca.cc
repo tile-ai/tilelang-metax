@@ -359,7 +359,6 @@ std::string CodeGenTileLangMACA::Finish() {
   decl_stream << "#include <tl_templates/maca/scan.h>\n";
   decl_stream << "#include <tl_templates/maca/intrin.h>\n";
   decl_stream << "#include <tl_templates/maca/atomic.h>\n";
-  decl_stream << "#include <tl_templates/maca/ldsm.h>\n";
   decl_stream << "#include <tl_templates/maca/threadblock_swizzle.h>\n";
   decl_stream << "#include <tl_templates/maca/debug.h>\n";
   //  decl_stream << "#ifdef ENABLE_BF16\n";
