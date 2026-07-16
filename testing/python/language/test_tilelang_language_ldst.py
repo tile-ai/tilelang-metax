@@ -182,7 +182,6 @@ def test_lds_sts128_codegen():
 
 
 @tilelang.testing.requires_cuda
-@tilelang.testing.requires_cuda_compute_version_ge(10, 0)
 def test_stg256_codegen():
     """Test that stg256 generates tl::store_global_256 in CUDA source."""
 
