@@ -227,10 +227,16 @@ using float32x16 = __attribute__((__vector_size__(16 * sizeof(float)))) float;
 using float64x4 = __attribute__((__vector_size__(4 * sizeof(double)))) double;
 using int8x4 = __attribute__((__vector_size__(4 * sizeof(int8_t)))) int8_t;
 
-// Pack four char values.
+// Pack four char values. Build the 32-bit pattern from unsigned bytes: a
+// negative signed char would otherwise signed-extend and flood the other lanes
+// through the OR.
 TL_DEVICE int make_int(signed char x0, signed char x1, signed char x2,
                        signed char x3) {
-  return (x3 << 24) | (x2 << 16) | (x1 << 8) | x0;
+  const unsigned char b0 = static_cast<unsigned char>(x0);
+  const unsigned char b1 = static_cast<unsigned char>(x1);
+  const unsigned char b2 = static_cast<unsigned char>(x2);
+  const unsigned char b3 = static_cast<unsigned char>(x3);
+  return static_cast<int>((b3 << 24) | (b2 << 16) | (b1 << 8) | b0);
 }
 
 // Pack eight char values.

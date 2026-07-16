@@ -81,7 +81,6 @@ def test_shared_fill_cast_zero_uses_st_bulk():
     assert torch.allclose(out, torch.zeros_like(out))
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_fill_int8_negative():
     M, N = 8, 128
