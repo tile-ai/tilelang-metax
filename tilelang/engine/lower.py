@@ -235,6 +235,17 @@ def tilelang_callback_maca_compile(code, target, pass_config=None):
     if "--use_fast_math" in options:
         options.remove("--use_fast_math")
 
+    # Filter out NVCC-specific flags that mxcc does not support
+    _CUDA_ONLY_FLAGS = {
+        "--expt-relaxed-constexpr",
+        "--expt-extended-lambda",
+        "-U__CUDA_NO_HALF_OPERATORS__",
+        "-U__CUDA_NO_HALF_CONVERSIONS__",
+        "-U__CUDA_NO_HALF2_OPERATORS__",
+        "-U__CUDA_NO_BFLOAT16_CONVERSIONS__",
+    }
+    options = [o for o in options if o not in _CUDA_ONLY_FLAGS]
+
     fatbin = mxcc.compile_maca(
         code,
         compile_format,
