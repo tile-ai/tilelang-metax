@@ -51,6 +51,31 @@ TL_DEVICE ulonglong4 load_global_256_conditional(const void *ptr, bool pred) {
   zero.w = 0;
   return zero;
 }
+
+TL_DEVICE uint32_t load_shared_32(const void *ptr) {
+  return *reinterpret_cast<const uint32_t *>(ptr);
+}
+
+TL_DEVICE uint2 load_shared_64(const void *ptr) {
+  return *reinterpret_cast<const uint2 *>(ptr);
+}
+
+TL_DEVICE uint4 load_shared_128(const void *ptr) {
+  return *reinterpret_cast<const uint4 *>(ptr);
+}
+
+TL_DEVICE void store_shared_32(void *ptr, uint32_t value) {
+  *reinterpret_cast<uint32_t *>(ptr) = value;
+}
+
+TL_DEVICE void store_shared_64(void *ptr, uint2 value) {
+  *reinterpret_cast<uint2 *>(ptr) = value;
+}
+
+TL_DEVICE void store_shared_128(void *ptr, uint4 value) {
+  *reinterpret_cast<uint4 *>(ptr) = value;
+}
+
 // Global memory store intrinsics with explicit vector widths
 // store_global_32: Store 32 bits
 TL_DEVICE void store_global_32(void *ptr, uint32_t value) {

@@ -299,6 +299,10 @@ TL_DEVICE unsigned __pack_maca_bfloat162(const bfloat16_t x,
   return (v1 << 16) | v0;
 }
 
+namespace tl {
+TL_DEVICE float fast_rcp(float x) { return __fdividef(1.0f, x); }
+} // namespace tl
+
 template <typename T1, typename T2>
 TL_DEVICE void AtomicAdd(T1 *address, T2 val, int memory_order = 0) {
   using NT1 = typename normalize_atomic_type<T1>::type;

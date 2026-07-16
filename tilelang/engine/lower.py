@@ -159,6 +159,7 @@ def tilelang_callback_cuda_compile(code, target, pass_config=None):
         target_arch=target_arch,
         target_code=target_code_list,
         compile_format=compile_format,
+        options=options,
     )
     cached_binary = CUDABinaryCache.load(cache_key, compile_format)
     if cached_binary is not None:
@@ -372,6 +373,21 @@ def lower(
     if enable_host_codegen:
         host_mod = host_codegen(host_mod, target_host, target=target)
         host_mod.import_module(codegen_mod)
-        return CompiledArtifact(host_mod, device_mod, params, kernel_source, rt_mod=host_mod)
+        return CompiledArtifact(
+            host_mod,
+            device_mod,
+            params,
+            kernel_source,
+            rt_mod=host_mod,
+            target=target,
+            target_host=target_host,
+        )
 
-    return CompiledArtifact(host_mod, device_mod, params, kernel_source)
+    return CompiledArtifact(
+        host_mod,
+        device_mod,
+        params,
+        kernel_source,
+        target=target,
+        target_host=target_host,
+    )

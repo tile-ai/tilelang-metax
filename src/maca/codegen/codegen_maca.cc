@@ -354,7 +354,9 @@ std::string CodeGenTileLangMACA::Finish() {
     decl_stream << "#include <tl_templates/maca/gemm_sp.h>\n";
   }
   // TODO: Add implementation for maca target.
-  decl_stream << "#include <tl_templates/maca/copy.h>\n";
+  if (need_copy_h_) {
+    decl_stream << "#include <tl_templates/maca/copy.h>\n";
+  }
   decl_stream << "#include <tl_templates/maca/reduce.h>\n";
   decl_stream << "#include <tl_templates/maca/scan.h>\n";
   decl_stream << "#include <tl_templates/maca/intrin.h>\n";
@@ -1171,6 +1173,71 @@ void CodeGenTileLangMACA::VisitExpr_(const CastNode *op, std::ostream &os) {
   DataType target_ty = op->dtype;
   ICHECK_EQ(target_ty.lanes(), from_ty.lanes());
 
+  // Decode the optional rounding/saturation/rbits hints stashed in
+  // `op->annotations` (see CastNode docstring for the convention).
+  auto get_str_anno = [&](const char *key) -> std::string {
+    auto it = op->annotations.find(key);
+    if (it == op->annotations.end())
+      return "";
+    return Downcast<StringImm>((*it).second)->value;
+  };
+  auto get_bool_anno = [&](const char *key, bool dflt) -> bool {
+    auto it = op->annotations.find(key);
+    if (it == op->annotations.end())
+      return dflt;
+    return Downcast<IntImm>((*it).second)->value != 0;
+  };
+  auto get_expr_anno = [&](const char *key) -> Optional<PrimExpr> {
+    auto it = op->annotations.find(key);
+    if (it == op->annotations.end())
+      return std::nullopt;
+    return Downcast<PrimExpr>((*it).second);
+  };
+  std::string cast_round = get_str_anno("round");
+  bool cast_sat = get_bool_anno("sat", true);
+  Optional<PrimExpr> cast_rbits = get_expr_anno("rbits");
+
+  // Scalar fp8 <-> half via the __tl_cvt helpers; the default cast detours
+  // through fp32.
+  if (from_ty.is_scalar() && cast_round.empty() && target_ty.is_float16() &&
+      tl::IsMacaVectorizableFP8(from_ty)) {
+    bool is_e4m3 = from_ty.is_float8_e4m3() || from_ty.is_float8_e4m3fn();
+    std::string interp = is_e4m3 ? "__MACA_E4M3" : "__MACA_E5M2";
+    os << "half_t(__tl_cvt_fp8_to_half((" << PrintExpr(op->value) << "), "
+       << interp << "))";
+    return;
+  }
+
+  if (from_ty.is_scalar() && cast_round.empty() && from_ty.is_float16() &&
+      tl::IsMacaVectorizableFP8(target_ty)) {
+    bool is_e4m3 = target_ty.is_float8_e4m3() || target_ty.is_float8_e4m3fn();
+    std::string interp = is_e4m3 ? "__MACA_E4M3" : "__MACA_E5M2";
+    this->PrintType(target_ty, os);
+    os << "::bitcast(__tl_cvt_half_to_fp8((" << PrintExpr(op->value)
+       << ").to_half(), " << interp << "))";
+    return;
+  }
+
+  // Scalar fp8 <-> bfloat16: same idea, via the native/PTX helpers.
+  if (from_ty.is_scalar() && cast_round.empty() && target_ty.is_bfloat16() &&
+      tl::IsMacaVectorizableFP8(from_ty)) {
+    bool is_e4m3 = from_ty.is_float8_e4m3() || from_ty.is_float8_e4m3fn();
+    std::string interp = is_e4m3 ? "__MACA_E4M3" : "__MACA_E5M2";
+    os << "bfloat16_t(__tl_cvt_fp8_to_bfloat16((" << PrintExpr(op->value)
+       << "), " << interp << "))";
+    return;
+  }
+
+  if (from_ty.is_scalar() && cast_round.empty() && from_ty.is_bfloat16() &&
+      tl::IsMacaVectorizableFP8(target_ty)) {
+    bool is_e4m3 = target_ty.is_float8_e4m3() || target_ty.is_float8_e4m3fn();
+    std::string interp = is_e4m3 ? "__MACA_E4M3" : "__MACA_E5M2";
+    this->PrintType(target_ty, os);
+    os << "::bitcast(__tl_cvt_bfloat16_to_fp8((" << PrintExpr(op->value)
+       << ").to_maca_bfloat16(), " << interp << "))";
+    return;
+  }
+
   // Emit simple C-style type conversion.
   if (from_ty.is_scalar())
     return CodeGenC::VisitExpr_(op, os);
@@ -1253,7 +1320,7 @@ void CodeGenTileLangMACA::VisitExpr_(const CastNode *op, std::ostream &os) {
 
   // Handle conversion from float32 to float8 (E4M3/E5M2)
   if (from_ty.is_float() && from_ty.bits() == 32 &&
-      tl::IsCudaVectorizableFP8(target_ty)) {
+      tl::IsMacaVectorizableFP8(target_ty)) {
     bool target_type_is_e4m3 =
         target_ty.is_float8_e4m3() || target_ty.is_float8_e4m3fn();
     std::string type_suffix =
@@ -1269,8 +1336,39 @@ void CodeGenTileLangMACA::VisitExpr_(const CastNode *op, std::ostream &os) {
     }
   }
 
+  // Handle conversion from float16 to float8 (E4M3/E5M2)
+  if (from_ty.is_float16() && tl::IsMacaVectorizableFP8(target_ty)) {
+    bool target_type_is_e4m3 =
+        target_ty.is_float8_e4m3() || target_ty.is_float8_e4m3fn();
+    std::string type_suffix =
+        target_type_is_e4m3 ? "__MACA_E4M3" : "__MACA_E5M2";
+    // Use __tl_cvt_half2_to_fp8x2 for vectorized conversion (half2 -> fp8x2)
+    if (lanes == 2 || lanes == 4 || lanes == 8) {
+      PrintVectorizedCast("__tl_cvt_half2_to_fp8x2", "half2",
+                          "__maca_fp8x2_storage_t", ", " + type_suffix, false,
+                          true);
+      return;
+    }
+  }
+
+  // Handle conversion from bfloat16 to float8 (E4M3/E5M2)
+  if (from_ty.is_bfloat16() && tl::IsMacaVectorizableFP8(target_ty)) {
+    bool target_type_is_e4m3 =
+        target_ty.is_float8_e4m3() || target_ty.is_float8_e4m3fn();
+    std::string type_suffix =
+        target_type_is_e4m3 ? "__MACA_E4M3" : "__MACA_E5M2";
+    // Use __tl_cvt_bfloat162_to_fp8x2 for vectorized conversion (bfloat162 ->
+    // fp8x2)
+    if (lanes == 2 || lanes == 4 || lanes == 8) {
+      PrintVectorizedCast("__tl_cvt_bfloat162_to_fp8x2", "__maca_bfloat162",
+                          "__maca_fp8x2_storage_t", ", " + type_suffix, true,
+                          true);
+      return;
+    }
+  }
+
   // Handle conversion from float8 (E4M3/E5M2) to float32
-  if (tl::IsCudaVectorizableFP8(from_ty) && target_ty.is_float() &&
+  if (tl::IsMacaVectorizableFP8(from_ty) && target_ty.is_float() &&
       target_ty.bits() == 32) {
     bool from_type_is_e4m3 =
         from_ty.is_float8_e4m3() || from_ty.is_float8_e4m3fn();
@@ -1280,6 +1378,33 @@ void CodeGenTileLangMACA::VisitExpr_(const CastNode *op, std::ostream &os) {
     if (lanes == 2 || lanes == 4 || lanes == 8) {
       PrintVectorizedCast("__tl_cvt_fp8x2_to_float2", "__maca_fp8x2_storage_t",
                           "float2", ", " + type_suffix, true, false);
+      return;
+    }
+  }
+
+  // Handle conversion from float8 (E4M3/E5M2) to float16
+  if (tl::IsMacaVectorizableFP8(from_ty) && target_ty.is_float16()) {
+    bool from_type_is_e4m3 =
+        from_ty.is_float8_e4m3() || from_ty.is_float8_e4m3fn();
+    std::string type_suffix = from_type_is_e4m3 ? "__MACA_E4M3" : "__MACA_E5M2";
+    // Use __tl_cvt_fp8x2_to_half2 for vectorized conversion (fp8x2 -> half2)
+    if (lanes == 2 || lanes == 4 || lanes == 8) {
+      PrintVectorizedCast("__tl_cvt_fp8x2_to_half2", "__maca_fp8x2_storage_t",
+                          "half2", ", " + type_suffix, true, false);
+      return;
+    }
+  }
+
+  // Handle conversion from float8 (E4M3/E5M2) to bfloat16
+  if (tl::IsMacaVectorizableFP8(from_ty) && target_ty.is_bfloat16()) {
+    bool from_type_is_e4m3 =
+        from_ty.is_float8_e4m3() || from_ty.is_float8_e4m3fn();
+    // PTX cvt encodes the fp8 type in the mnemonic, so pick the helper by name.
+    std::string cast_func = from_type_is_e4m3 ? "__tl_cvt_e4m3x2_to_bfloat162"
+                                              : "__tl_cvt_e5m2x2_to_bfloat162";
+    if (lanes == 2 || lanes == 4 || lanes == 8) {
+      PrintVectorizedCast(cast_func, "__maca_fp8x2_storage_t",
+                          "__maca_bfloat162", "", true, false);
       return;
     }
   }
@@ -1993,8 +2118,10 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     os << replacer.rewrite(call_mfma_code);
   } else if (op->op.same_as(tl::rng_init())) {
     this->need_mcrand_kernel_h_ = true;
-    this->mcrand_random_generator_state =
-        name_supply_->FreshName("__random_generator_state");
+    auto it = rng_state_name_map_.find(op);
+    ICHECK(it != rng_state_name_map_.end())
+        << "tl.rng_init call was not registered by the AddFunction pre-scan";
+    this->mcrand_random_generator_state = it->second;
     this->mcrand_random_generator_state_type =
         op->args[3].as<StringImmNode>()->value;
     if (this->mcrand_random_generator_state_type ==
@@ -2007,9 +2134,6 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
                "curandStateXORWOW_t") {
       this->mcrand_random_generator_state_type = "mcrandStateXORWOW_t";
     }
-    this->PrintIndent();
-    this->stream << this->mcrand_random_generator_state_type << " "
-                 << this->mcrand_random_generator_state << ";\n";
     this->PrintIndent();
     this->stream << "mcrand_init(" << PrintExpr(op->args[0]) << ", "
                  << PrintExpr(op->args[1]) << ", " << PrintExpr(op->args[2])
@@ -2158,6 +2282,17 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     this->PrintIndent();
     this->stream << "AtomicStore(" << dst_ptr << ", " << value << ", "
                  << memory_order << ");\n";
+  } else if (op->op.same_as(tl::atomic_or_elem_op())) {
+    need_atomic_h_ = true;
+    // atomic_or_elem_op(dst_ptr, src_value[, memory_order])
+    std::string dst_ptr = PrintExpr(op->args[0]);
+    std::string src_value = PrintExpr(op->args[1]);
+    this->PrintIndent();
+    this->stream << "AtomicOr(" << dst_ptr << ", " << src_value;
+    if (op->args.size() > 2) {
+      this->stream << ", " << PrintExpr(op->args[2]);
+    }
+    this->stream << ");\n";
   } else if (op->op.same_as(tl::atomic_max_elem_op())) {
     // atomic_max_elem_op(dst_ptr, src_value[, memory_order])
     std::string dst_ptr = PrintExpr(op->args[0]);
@@ -2200,15 +2335,6 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     os << ")";
   } else if (op->op.same_as(builtin::thread_return())) {
     os << "return";
-  } else if (op->op.same_as(tl::tl_gemm_sp())) {
-    ICHECK(op->args.size() == 5)
-        << "tl_gemm_sp expects 5 arguments <op_instance, A_ptr, B_ptr, C_ptr, "
-           "E_ptr>, but got "
-        << op->args.size();
-    auto op_instance = Downcast<StringImm>(op->args[0]);
-    enable_sparse_gemm_ = true;
-    this->PrintCallExtern(GetType(tvm::ffi::GetRef<PrimExpr>(op)),
-                          op_instance->value, op->args, true, os);
   } else if (op->op.same_as(tl::any_sync())) {
     ICHECK_EQ(op->args.size(), 2U) << "tl.any_sync expects <mask, predicate>.";
     os << "__any_sync(" << PrintExpr(op->args[0]) << ", "
@@ -2392,6 +2518,12 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     std::string func_name = math_func(op->dtype, "fdiv", rounding_mode);
     os << func_name << "(" << PrintExpr(op->args[0]) << ", "
        << PrintExpr(op->args[1]) << ")";
+  } else if (op->op.same_as(tl::fast_rcp())) {
+    need_math_h_ = true;
+    ICHECK(op->dtype.is_float() && op->dtype.bits() == 32 &&
+           op->dtype.lanes() == 1)
+        << "tl.fast_rcp currently supports scalar float32 only";
+    os << "tl::fast_rcp(" << PrintExpr(op->args[0]) << ")";
   } else if (op->op.same_as(tl::__ldg())) {
     // Explicit read-only cached load. Preferred form: __ldg(BufferLoad(...)).
     const BufferLoadNode *bl = nullptr;
@@ -2418,7 +2550,19 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
         << arg_dtype;
     os << (arg_dtype.bits() == 64 ? "__ffsll(" : "__ffs(")
        << PrintExpr(op->args[0]) << ")";
+  } else if (op->op.same_as(tl::__fns())) {
+    ICHECK_EQ(op->args.size(), 3U)
+        << "T.__fns expects three arguments: mask, base, offset.";
+    DataType mask_dtype = op->args[0].dtype();
+    ICHECK(mask_dtype.is_int() || mask_dtype.is_uint())
+        << "T.__fns expects an integer mask argument, but got " << mask_dtype;
+    ICHECK(mask_dtype.bits() == 32)
+        << "T.__fns expects a 32-bit integer mask argument, but got "
+        << mask_dtype;
+    os << "__fns64(" << PrintExpr(op->args[0]) << ", " << PrintExpr(op->args[1])
+       << ", " << PrintExpr(op->args[2]) << ")";
   } else if (op->op.same_as(tl::ldg32())) {
+    need_copy_h_ = true;
     // Explicit 32-bit global memory load: load_global_32(ptr) or
     // load_global_32_conditional(ptr, pred)
     ICHECK(!op->args.empty()) << "T.ldg32 expects a pointer argument.";
@@ -2433,6 +2577,7 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     }
     os << ")";
   } else if (op->op.same_as(tl::ldg64())) {
+    need_copy_h_ = true;
     // Explicit 64-bit global memory load: load_global_64(ptr) or
     // load_global_64_conditional(ptr, pred)
     ICHECK(!op->args.empty()) << "T.ldg64 expects a pointer argument.";
@@ -2447,6 +2592,7 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     }
     os << ")";
   } else if (op->op.same_as(tl::ldg128())) {
+    need_copy_h_ = true;
     // Explicit 128-bit global memory load: load_global_128(ptr) or
     // load_global_128_conditional(ptr, pred)
     ICHECK(!op->args.empty()) << "T.ldg128 expects a pointer argument.";
@@ -2460,7 +2606,26 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
       this->PrintExpr(op->args[0], os);
     }
     os << ")";
+  } else if (op->op.same_as(tl::lds32())) {
+    need_copy_h_ = true;
+    ICHECK_EQ(op->args.size(), 1U) << "T.lds32 expects a pointer argument.";
+    os << "tl::load_shared_32(";
+    this->PrintExpr(op->args[0], os);
+    os << ")";
+  } else if (op->op.same_as(tl::lds64())) {
+    need_copy_h_ = true;
+    ICHECK_EQ(op->args.size(), 1U) << "T.lds64 expects a pointer argument.";
+    os << "tl::load_shared_64(";
+    this->PrintExpr(op->args[0], os);
+    os << ")";
+  } else if (op->op.same_as(tl::lds128())) {
+    need_copy_h_ = true;
+    ICHECK_EQ(op->args.size(), 1U) << "T.lds128 expects a pointer argument.";
+    os << "tl::load_shared_128(";
+    this->PrintExpr(op->args[0], os);
+    os << ")";
   } else if (op->op.same_as(tl::ldg256())) {
+    need_copy_h_ = true;
     // Explicit 256-bit global memory load: load_global_256(ptr) or
     // load_global_256_conditional(ptr, pred)
     ICHECK(!op->args.empty()) << "T.ldg256 expects a pointer argument.";
@@ -2475,6 +2640,7 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     }
     os << ")";
   } else if (op->op.same_as(tl::stg32())) {
+    need_copy_h_ = true;
     // Explicit 32-bit global memory store: store_global_32(ptr, value) or
     // store_global_32_conditional(ptr, value, pred)
     ICHECK(op->args.size() >= 2)
@@ -2494,6 +2660,7 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     }
     os << ")";
   } else if (op->op.same_as(tl::stg64())) {
+    need_copy_h_ = true;
     // Explicit 64-bit global memory store: store_global_64(ptr, value) or
     // store_global_64_conditional(ptr, value, pred)
     ICHECK(op->args.size() >= 2)
@@ -2513,6 +2680,7 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     }
     os << ")";
   } else if (op->op.same_as(tl::stg128())) {
+    need_copy_h_ = true;
     // Explicit 128-bit global memory store: store_global_128(ptr, value) or
     // store_global_128_conditional(ptr, value, pred)
     ICHECK(op->args.size() >= 2)
@@ -2531,7 +2699,35 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
       this->PrintExpr(op->args[1], os);
     }
     os << ")";
+  } else if (op->op.same_as(tl::sts32())) {
+    need_copy_h_ = true;
+    ICHECK_EQ(op->args.size(), 2U)
+        << "T.sts32 expects pointer and value arguments.";
+    os << "tl::store_shared_32(";
+    this->PrintExpr(op->args[0], os);
+    os << ", ";
+    this->PrintExpr(op->args[1], os);
+    os << ")";
+  } else if (op->op.same_as(tl::sts64())) {
+    need_copy_h_ = true;
+    ICHECK_EQ(op->args.size(), 2U)
+        << "T.sts64 expects pointer and value arguments.";
+    os << "tl::store_shared_64(";
+    this->PrintExpr(op->args[0], os);
+    os << ", ";
+    this->PrintExpr(op->args[1], os);
+    os << ")";
+  } else if (op->op.same_as(tl::sts128())) {
+    need_copy_h_ = true;
+    ICHECK_EQ(op->args.size(), 2U)
+        << "T.sts128 expects pointer and value arguments.";
+    os << "tl::store_shared_128(";
+    this->PrintExpr(op->args[0], os);
+    os << ", ";
+    this->PrintExpr(op->args[1], os);
+    os << ")";
   } else if (op->op.same_as(tl::stg256())) {
+    need_copy_h_ = true;
     // Explicit 256-bit global memory store: store_global_256(ptr, value) or
     // store_global_256_conditional(ptr, value, pred)
     ICHECK(op->args.size() >= 2)
@@ -3504,6 +3700,32 @@ void CodeGenTileLangMACA::AddFunction(const GlobalVar &gvar,
     stream << ' ' << vid;
   }
   stream << ") {\n";
+  // Declare curand states for all tl.rng_init calls at function scope.
+  // Sync-insertion passes may split the block containing rng_init across
+  // __syncthreads(), so a declaration emitted at the call site can go out
+  // of scope before later rng_rand / rng_rand_float uses.
+  rng_state_name_map_.clear();
+  tirx::PostOrderVisit(f->body, [this](const ObjectRef &n) {
+    const auto *call = n.as<CallNode>();
+    if (call == nullptr || !call->op.same_as(tl::rng_init())) {
+      return;
+    }
+    this->need_mcrand_kernel_h_ = true;
+    std::string name = name_supply_->FreshName("__random_generator_state");
+    std::string mcrand_random_generator_state_type =
+        call->args[3].as<StringImmNode>()->value;
+    if (mcrand_random_generator_state_type == "curandStatePhilox4_32_10_t") {
+      mcrand_random_generator_state_type = "mcrandStatePhilox4_32_10_t";
+    } else if (mcrand_random_generator_state_type == "curandStateMRG32k3a_t") {
+      mcrand_random_generator_state_type = "mcrandStateMRG32k3a_t";
+    } else if (mcrand_random_generator_state_type == "curandStateXORWOW_t") {
+      mcrand_random_generator_state_type = "mcrandStateXORWOW_t";
+    }
+    this->PrintIndent();
+    this->stream << "  " << mcrand_random_generator_state_type << " " << name
+                 << ";\n";
+    rng_state_name_map_.emplace(call, std::move(name));
+  });
   this->PreFunctionBody(f);
   int func_scope = this->BeginScope();
   this->PrintStmt(f->body);

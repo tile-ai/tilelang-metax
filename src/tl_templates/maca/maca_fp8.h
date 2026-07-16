@@ -624,6 +624,79 @@ __tl_cvt_fp8x2_to_float2(const __maca_fp8x2_storage_t x,
   return result;
 }
 
+// e4m3x2 -> half2
+TL_DEVICE half2
+__tl_cvt_fp8x2_to_half2(const __maca_fp8x2_storage_t x,
+                        const __maca_fp8_interpretation_t fp8_interpretation) {
+  __half2_raw raw = __maca_cvt_fp8x2_to_halfraw2(x, fp8_interpretation);
+  return *reinterpret_cast<half2 *>(&raw);
+}
+
+// half2 -> e4m3x2
+TL_DEVICE __maca_fp8x2_storage_t __tl_cvt_half2_to_fp8x2(
+    const half2 src, const __maca_fp8_interpretation_t fp8_interpretation) {
+  __half2_raw raw = *reinterpret_cast<const __half2_raw *>(&src);
+  return __maca_cvt_halfraw2_to_fp8x2(raw, __MACA_SATFINITE,
+                                      fp8_interpretation);
+}
+
+// Scalar fp8 -> half (native MACA intrinsic; single cvt on supported HW).
+TL_DEVICE half
+__tl_cvt_fp8_to_half(const __maca_fp8_storage_t x,
+                     const __maca_fp8_interpretation_t fp8_interpretation) {
+  __half_raw raw = __maca_cvt_fp8_to_halfraw(x, fp8_interpretation);
+  return *reinterpret_cast<half *>(&raw);
+}
+
+// Scalar half -> fp8 (native MACA intrinsic; single cvt on supported HW).
+TL_DEVICE __maca_fp8_storage_t __tl_cvt_half_to_fp8(
+    const half src, const __maca_fp8_interpretation_t fp8_interpretation) {
+  __half_raw raw = *reinterpret_cast<const __half_raw *>(&src);
+  return __maca_cvt_halfraw_to_fp8(raw, __MACA_SATFINITE, fp8_interpretation);
+}
+
+// Scalar bfloat16 -> fp8 (native MACA intrinsic; single cvt on supported HW).
+TL_DEVICE __maca_fp8_storage_t
+__tl_cvt_bfloat16_to_fp8(const __maca_bfloat16 src,
+                         const __maca_fp8_interpretation_t fp8_interpretation) {
+  __maca_bfloat16_raw raw =
+      *reinterpret_cast<const __maca_bfloat16_raw *>(&src);
+  return __maca_cvt_bfloat16raw_to_fp8(raw, __MACA_SATFINITE,
+                                       fp8_interpretation);
+}
+
+// Scalar fp8 -> bfloat16.
+TL_DEVICE __maca_bfloat16
+__tl_cvt_fp8_to_bfloat16(const __maca_fp8_storage_t x,
+                         const __maca_fp8_interpretation_t fp8_interpretation) {
+  __half_raw hr = __maca_cvt_fp8_to_halfraw(x, fp8_interpretation);
+  return __float2bfloat16(__half2float(*reinterpret_cast<half *>(&hr)));
+}
+
+// e4m3x2 -> bfloat162
+TL_DEVICE __maca_bfloat162
+__tl_cvt_e4m3x2_to_bfloat162(const __maca_fp8x2_storage_t x) {
+  half2 tmp = __maca_cvt_fp8x2_to_halfraw2(x, __MACA_E4M3);
+  return __float22bfloat162_rn(make_float2((float)tmp.x, (float)tmp.y));
+}
+
+// e5m2x2 -> bfloat162
+TL_DEVICE __maca_bfloat162
+__tl_cvt_e5m2x2_to_bfloat162(const __maca_fp8x2_storage_t x) {
+  half2 tmp = __maca_cvt_fp8x2_to_halfraw2(x, __MACA_E5M2);
+  return __float22bfloat162_rn(make_float2((float)tmp.x, (float)tmp.y));
+}
+
+// bfloat162 -> e4m3x2
+TL_DEVICE __maca_fp8x2_storage_t __tl_cvt_bfloat162_to_fp8x2(
+    const __maca_bfloat162 src,
+    const __maca_fp8_interpretation_t fp8_interpretation) {
+  __maca_bfloat162_raw raw =
+      *reinterpret_cast<const __maca_bfloat162_raw *>(&src);
+  return __maca_cvt_bfloat16raw2_to_fp8x2(raw, __MACA_SATFINITE,
+                                          fp8_interpretation);
+}
+
 // ==========================================================================
 // FP8 E8M0 Related Conversions
 // ==========================================================================

@@ -331,6 +331,19 @@ TL_DEVICE void AtomicAddx4(dst_dtype *ref, ValType val, int memory_order = 0) {
   atomicAdd(ref + 3, add_val.w);
 }
 
+template <typename SrcType>
+TL_DEVICE void AtomicAddx4(half_t *ref, SrcType *val, int memory_order = 0) {
+  AtomicAddx2(ref, val, memory_order);
+  AtomicAddx2(ref + 2, val + 2, memory_order);
+}
+
+template <typename SrcType>
+TL_DEVICE void AtomicAddx4(bfloat16_t *ref, SrcType *val,
+                           int memory_order = 0) {
+  AtomicAddx2(ref, val, memory_order);
+  AtomicAddx2(ref + 2, val + 2, memory_order);
+}
+
 template <typename dst_dtype, typename ValType>
 TL_DEVICE float4 AtomicAddx4Ret(dst_dtype *ref, ValType val,
                                 int memory_order = 0) {
@@ -356,4 +369,21 @@ TL_DEVICE void AtomicStore(T1 *ref, T2 value, int memory_order) {
   (void)memory_order;
   volatile T1 *vref = reinterpret_cast<volatile T1 *>(ref);
   *vref = static_cast<T1>(value);
+}
+
+// Add an extra unused input to accommodate the additional 'memory_order'
+// argument during lowering.
+template <typename T1, typename T2>
+__forceinline__ __device__ void AtomicOr(T1 *address, T2 val,
+                                         int memory_order = 0) {
+  atomicOr(reinterpret_cast<T1 *>(address), static_cast<T1>(val));
+}
+
+// Add an extra unused input to accommodate the additional 'memory_order'
+// argument during lowering.
+// Overload for when the first argument is a value instead of a pointer.
+template <typename T1, typename T2>
+__forceinline__ __device__ void AtomicOr(T1 &address, T2 val,
+                                         int memory_order = 0) {
+  atomicOr(reinterpret_cast<T1 *>(&address), static_cast<T1>(val));
 }
