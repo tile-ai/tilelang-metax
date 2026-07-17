@@ -2086,6 +2086,7 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
         {"bfloat16x4", "bfloat16x4_vec"},
         {"bfloat16x8", "bfloat16x8_vec"},
         {"custom[tfloat32]x2", "float32x2"},
+        {"float32x2", "float32x2"},
         {"float32x4", "float32x4"},
         {"float8_e4m3fnuzx4", "int32x2"},
         {"float8_e4m3fnx4", "int32x2"},
