@@ -112,7 +112,15 @@ class TensorCoreIntrinEmitter:
         self.num_elems_per_byte = num_elems_per_byte
         self.thread_var = thread_var
 
+    def get_target_serial(self):
+        target = determine_target(return_object=True)
+        xcore = target.attrs.get("mcpu")
+        non_digits_part = xcore.rstrip("0123456789")
+        xcore_num = int(xcore[len(non_digits_part) :])
+        return xcore_num
+
     def _initialize_k_dim(self, a_dtype=T.float16):
+        serial = self.get_target_serial()
         if isinstance(a_dtype, str):
             if a_dtype in ["float8_e4m3fn", "float8_e4m3fnuz", "float8_e5m2", "float8_e5m2fnuz"]:
                 self.k_dim = 32
@@ -120,20 +128,21 @@ class TensorCoreIntrinEmitter:
             a_dtype = DataType(a_dtype)
 
         if a_dtype.bits == 32:
-            self.k_dim = 8
+            if a_dtype in {T.tfloat32, T.float32}:
+                self.k_dim = 8
+            else:
+                self.k_dim = 4
         elif a_dtype.bits == 64:
             self.k_dim = 4
         elif a_dtype.bits == 16:
             self.k_dim = 16
         elif a_dtype.bits == 8:
-            target = determine_target(return_object=True)
-            mcpu = int(target.attrs["mcpu"][5:])
-            if mcpu >= 1500 and mcpu <= 1600:
+            if serial >= 1500 and serial <= 1600:
                 self.k_dim = 32
-            elif mcpu >= 1000 and mcpu < 1500:
+            elif serial >= 1000 and serial < 1500:
                 self.k_dim = 16
             else:
-                raise ValueError(f"Unsupported mcpu = {mcpu}")
+                raise ValueError("Unsupported MetaXGPU Card")
         else:
             raise ValueError(f"Unsupported a_dtype = {a_dtype}")
 

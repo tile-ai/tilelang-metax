@@ -56,6 +56,22 @@
 #define hpow __ocml_pown_f16
 #define hsqrt __ocml_sqrt_f16
 
+struct bfloat16x2 {
+  bfloat16_t data[2];
+};
+
+struct bfloat16x4 {
+  bfloat16_t data[4];
+};
+
+struct bfloat16x8 {
+  bfloat16_t data[8];
+};
+
+struct bfloat16x16 {
+  bfloat16_t data[16];
+};
+
 using int4_t = int4;
 
 using float16_t = _Float16;
@@ -69,6 +85,21 @@ using float16x16 =
     __attribute__((__vector_size__(16 * sizeof(float16_t)))) float16_t;
 
 using float32x2 = __attribute__((__vector_size__(2 * sizeof(float)))) float;
+
+using half_t = __half;
+
+using bfloat16_t = maca_bfloat16;
+
+typedef
+    __attribute__((__vector_size__(4 * sizeof(short)))) short bfloat16x4_vec;
+
+using int32x2 = __attribute__((__vector_size__(2 * sizeof(int)))) int;
+using int32x4 = __attribute__((__vector_size__(4 * sizeof(int)))) int;
+using float32x4 = __attribute__((__vector_size__(4 * sizeof(float)))) float;
+using float32x16 = __attribute__((__vector_size__(16 * sizeof(float)))) float;
+using float64x4 = __attribute__((__vector_size__(4 * sizeof(double)))) double;
+using int8x4 = __attribute__((__vector_size__(4 * sizeof(int8_t)))) int8_t;
+
 namespace platform {
 
 /// Numeric limits
@@ -196,36 +227,6 @@ template <> struct numeric_limits<maca_bfloat16> {
   }
 };
 } // namespace platform
-
-using half_t = __half;
-
-using bfloat16_t = maca_bfloat16;
-
-struct bfloat16x2 {
-  bfloat16_t data[2];
-};
-
-struct bfloat16x4 {
-  bfloat16_t data[4];
-};
-
-struct bfloat16x8 {
-  bfloat16_t data[8];
-};
-
-struct bfloat16x16 {
-  bfloat16_t data[16];
-};
-
-typedef
-    __attribute__((__vector_size__(4 * sizeof(short)))) short bfloat16x4_vec;
-
-using int32x2 = __attribute__((__vector_size__(2 * sizeof(int)))) int;
-using int32x4 = __attribute__((__vector_size__(4 * sizeof(int)))) int;
-using float32x4 = __attribute__((__vector_size__(4 * sizeof(float)))) float;
-using float32x16 = __attribute__((__vector_size__(16 * sizeof(float)))) float;
-using float64x4 = __attribute__((__vector_size__(4 * sizeof(double)))) double;
-using int8x4 = __attribute__((__vector_size__(4 * sizeof(int8_t)))) int8_t;
 
 // Pack four char values. Build the 32-bit pattern from unsigned bytes: a
 // negative signed char would otherwise signed-extend and flood the other lanes
