@@ -548,5 +548,24 @@ def test_gemm_f16f16f16_rs():
     )
 
 
+# MACA: plain float32 (not tfloat32) must lower TF32 MMA with float32x2 casts.
+# Existing test_gemm_f32f32f32_* use T.tfloat32 and miss this path.
+@tilelang.testing.requires_cuda
+def test_gemm_plain_float32_nt():
+    run_gemm(
+        64,
+        64,
+        64,
+        False,
+        True,
+        T.float32,
+        T.float32,
+        T.float32,
+        64,
+        64,
+        32,
+    )
+
+
 if __name__ == "__main__":
     tilelang.testing.main()
