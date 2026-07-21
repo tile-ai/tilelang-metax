@@ -2746,6 +2746,28 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
       this->PrintExpr(op->args[1], os);
     }
     os << ")";
+  } else if (op->op.same_as(builtin::reinterpret())) {
+    DataType tgt_dtype = op->dtype;
+    DataType src_dtype = op->args[0]->dtype;
+    TVM_FFI_ICHECK_EQ(tgt_dtype.lanes() * tgt_dtype.bits(),
+                      src_dtype.lanes() * src_dtype.bits())
+        << "reinterpret expects source and target to have the same number of "
+           "bits";
+
+    std::string src_val = PrintExpr(op->args[0]);
+    std::string rhs = SSAGetID(src_val, src_dtype);
+    // Constants registered by MarkConst are returned unchanged, but their
+    // rvalues must be materialized before the pointer-based reinterpret.
+    if (rhs == src_val) {
+      rhs = name_supply_->FreshName("_reinterpret_tmp");
+      PrintIndent();
+      PrintType(src_dtype, stream);
+      stream << " " << rhs << " = " << src_val << ";\n";
+    }
+
+    os << "(*(";
+    PrintType(tgt_dtype, os);
+    os << " *)(&(" << rhs << ")))";
   } else if (op->op.same_as(tl::pdl_trigger())) {
     // MACA does not support PDL intrinsics, emit as comment code.
     this->PrintIndent();
