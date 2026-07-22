@@ -2749,25 +2749,115 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
   } else if (op->op.same_as(builtin::reinterpret())) {
     DataType tgt_dtype = op->dtype;
     DataType src_dtype = op->args[0]->dtype;
-    TVM_FFI_ICHECK_EQ(tgt_dtype.lanes() * tgt_dtype.bits(),
-                      src_dtype.lanes() * src_dtype.bits())
-        << "reinterpret expects source and target to have the same number of "
-           "bits";
+    PrimExpr value = op->args[0];
 
-    std::string src_val = PrintExpr(op->args[0]);
-    std::string rhs = SSAGetID(src_val, src_dtype);
-    // Constants registered by MarkConst are returned unchanged, but their
-    // rvalues must be materialized before the pointer-based reinterpret.
-    if (rhs == src_val) {
-      rhs = name_supply_->FreshName("_reinterpret_tmp");
-      PrintIndent();
-      PrintType(src_dtype, stream);
-      stream << " " << rhs << " = " << src_val << ";\n";
+    // Packed FP4 uses one byte per scalar register value, so byte-compatible
+    // reinterpretations may have different logical bit counts.
+    if (!src_dtype.is_float4_e2m1fn() && !tgt_dtype.is_float4_e2m1fn()) {
+      TVM_FFI_ICHECK_EQ(tgt_dtype.lanes() * tgt_dtype.bits(),
+                        src_dtype.lanes() * src_dtype.bits())
+          << "reinterpret expects source and target to have the same number of "
+             "bits";
+
+      std::string src_val = PrintExpr(value);
+      std::string rhs = SSAGetID(src_val, src_dtype);
+      // Constants registered by MarkConst are returned unchanged, but their
+      // rvalues must be materialized before the pointer-based reinterpret.
+      if (rhs == src_val) {
+        rhs = name_supply_->FreshName("_reinterpret_tmp");
+        PrintIndent();
+        PrintType(src_dtype, stream);
+        stream << " " << rhs << " = " << src_val << ";\n";
+      }
+
+      os << "(*(";
+      PrintType(tgt_dtype, os);
+      os << " *)(&(" << rhs << ")))";
+      return;
     }
 
-    os << "(*(";
-    PrintType(tgt_dtype, os);
-    os << " *)(&(" << rhs << ")))";
+    if (src_dtype == tgt_dtype || tgt_dtype.lanes() * tgt_dtype.bits() ==
+                                      src_dtype.lanes() * src_dtype.bits()) {
+      return CodeGenC::VisitExpr_(op, os);
+    }
+    TVM_FFI_ICHECK_EQ(tgt_dtype.lanes(), src_dtype.lanes())
+        << "E2M1 float4 reinterpret expects source and target to have the same "
+           "number of lanes. Source dtype: "
+        << src_dtype << ", Target dtype: " << tgt_dtype;
+    TVM_FFI_ICHECK_EQ(tgt_dtype.bytes(), src_dtype.bytes())
+        << "E2M1 float4 reinterpret expects source and target to have the same "
+           "number of bytes. Source dtype: "
+        << src_dtype << ", Target dtype: " << tgt_dtype;
+
+    int lanes = tgt_dtype.lanes();
+    int ssa_scope = BeginScope();
+    if (lanes == 1) {
+      std::string src_val = PrintExpr(value);
+      std::string rhs = SSAGetID(src_val, src_dtype);
+      if (rhs == src_val) {
+        rhs = name_supply_->FreshName("_reinterpret_tmp");
+        PrintIndent();
+        PrintType(src_dtype, stream);
+        stream << " " << rhs << " = " << src_val << ";\n";
+      }
+      os << "(*(";
+      PrintType(tgt_dtype, os);
+      os << " *)(&(" << rhs << ")))";
+    } else if (lanes == 2) {
+      if (tgt_dtype.is_float4_e2m1fn()) {
+        value = tirx::Call(DataType::UInt(16), tirx::builtin::reinterpret(),
+                           {value});
+        tirx::Var temp_var("temp_var", DataType::UInt(16));
+        value =
+            tirx::Let(temp_var, value,
+                      tirx::Cast(DataType::UInt(8),
+                                 (temp_var & IntImm(DataType::UInt(16), 0xF)) |
+                                     ((temp_var >> 4) &
+                                      IntImm(DataType::UInt(16), 0xF0))));
+      } else {
+        value = tirx::Cast(DataType::UInt(16),
+                           tirx::Call(DataType::UInt(8),
+                                      tirx::builtin::reinterpret(), {value}));
+        tirx::Var temp_var("temp_var", DataType::UInt(16));
+        value =
+            tirx::Let(temp_var, value,
+                      (temp_var & IntImm(DataType::UInt(16), 0xF)) |
+                          ((temp_var & IntImm(DataType::UInt(16), 0xF0)) << 4));
+      }
+      os << PrintExpr(
+          tirx::Call(tgt_dtype, tirx::builtin::reinterpret(), {value}));
+    } else if (lanes == 4) {
+      if (tgt_dtype.is_float4_e2m1fn()) {
+        value = tirx::Call(DataType::UInt(32), tirx::builtin::reinterpret(),
+                           {value});
+        tirx::Var temp_var("temp_var", DataType::UInt(32));
+        value = tirx::Let(
+            temp_var, value,
+            tirx::Cast(
+                DataType::UInt(16),
+                (temp_var & IntImm(DataType::UInt(32), 0xF)) |
+                    ((temp_var >> 4) & IntImm(DataType::UInt(32), 0xF0)) |
+                    ((temp_var >> 8) & IntImm(DataType::UInt(32), 0xF00)) |
+                    ((temp_var >> 12) & IntImm(DataType::UInt(32), 0xF000))));
+      } else {
+        value = tirx::Cast(DataType::UInt(32),
+                           tirx::Call(DataType::UInt(16),
+                                      tirx::builtin::reinterpret(), {value}));
+        tirx::Var temp_var("temp_var", DataType::UInt(32));
+        value = tirx::Let(
+            temp_var, value,
+            (temp_var & IntImm(DataType::UInt(32), 0xF)) |
+                ((temp_var & IntImm(DataType::UInt(32), 0xF0)) << 4) |
+                ((temp_var & IntImm(DataType::UInt(32), 0xF00)) << 8) |
+                ((temp_var & IntImm(DataType::UInt(32), 0xF000)) << 12));
+      }
+      os << PrintExpr(
+          tirx::Call(tgt_dtype, tirx::builtin::reinterpret(), {value}));
+    } else {
+      LOG(FATAL) << "Invalid number of lanes for float4_e2m1fn reinterpret: "
+                 << lanes;
+    }
+    EndScope(ssa_scope);
   } else if (op->op.same_as(tl::pdl_trigger())) {
     // MACA does not support PDL intrinsics, emit as comment code.
     this->PrintIndent();
