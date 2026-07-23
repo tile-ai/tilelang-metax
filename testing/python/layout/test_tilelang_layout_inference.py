@@ -133,5 +133,67 @@ def test_copy_readback_from_fully_replicated_fragment_uses_rep_guard():
     _assert_single_thread_replicated_readback(src)
 
 
+# [MACA] Regression for Parallel subregion stores into an MMA fragment under
+# multi-warp Square (warp=64, threads=128 → often (2,1)): projected
+# forward_thread for the lower-M half has min>0; without thread>=min guards in
+# ParallelOp, non-owner threads corrupt the fragment before gemm.
+@tilelang.jit(out_idx=[-1])
+def _quadrant_parallel_fragment_write_gemm():
+    """4x Parallel(32,32) writes into one 64x64 fragment then T.gemm.
+
+    Reproduces the SSD microtile failure mode: non-common-index Parallel
+    writes must project the full MMA fragment layout (thread + local index).
+    """
+    tile = 64
+    half = 32
+
+    @T.prim_func
+    def main(
+        A_in: T.Tensor((tile, tile), T.float16),
+        B_in: T.Tensor((tile, tile), T.float16),
+        C_out: T.Tensor((tile, tile), T.float32),
+    ):
+        with T.Kernel(1, threads=128):
+            A_frag = T.alloc_fragment((tile, tile), T.float16)
+            B_shared = T.alloc_shared((tile, tile), T.float16)
+            C_frag = T.alloc_fragment((tile, tile), T.float32)
+            T.annotate_layout({B_shared: tilelang.layout.make_swizzled_layout(B_shared)})
+            T.clear(C_frag)
+
+            for i, j in T.Parallel(tile, tile):
+                B_shared[i, j] = B_in[i, j]
+
+            # Four quadrant writes with non-common indices on A_frag.
+            for i, j in T.Parallel(half, half):
+                A_frag[i, j] = A_in[i, j]
+            for i, j in T.Parallel(half, half):
+                A_frag[i, half + j] = A_in[i, half + j]
+            for i, j in T.Parallel(half, half):
+                A_frag[half + i, j] = A_in[half + i, j]
+            for i, j in T.Parallel(half, half):
+                A_frag[half + i, half + j] = A_in[half + i, half + j]
+
+            T.gemm(A_frag, B_shared, C_frag)
+
+            for i, j in T.Parallel(tile, tile):
+                C_out[i, j] = C_frag[i, j]
+
+    return main
+
+
+@tilelang.testing.requires_cuda
+def test_quadrant_parallel_fragment_write_gemm_numeric():
+    """[MACA] Numeric check for the Parallel fragment-owner lower-bound fix."""
+    import torch
+
+    kernel = _quadrant_parallel_fragment_write_gemm()
+    tile = 64
+    a = torch.randn(tile, tile, dtype=torch.float16, device="cuda")
+    b = torch.randn(tile, tile, dtype=torch.float16, device="cuda")
+    c = kernel(a, b)
+    ref = torch.matmul(a.float(), b.float())
+    torch.testing.assert_close(c, ref, atol=1e-2, rtol=1e-2)
+
+
 if __name__ == "__main__":
     tilelang.testing.main()

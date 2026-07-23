@@ -556,6 +556,26 @@ LayoutMap ParallelOpNode::InferLayout(const LayoutInferArgs &layout_args,
                     loop_thread_extent + layout_args.thread_bounds->min));
   }
 
+  // [MACA] Subregion Parallel writes into an MMA fragment keep absolute
+  // forward_thread. With warp=64 multi-warp Square (e.g. (2,1)), a lower-M
+  // tile can land on tid [64,128) while ThreadExtent==block_size, so the
+  // upper-bound predicate above does not fire. Without thread>=min, non-owner
+  // threads still enter PartitionLoop and corrupt the fragment. Emit the
+  // lower bound when const_int_bound(forward_thread).min > 0.
+  if (!loop_layout_->IsCompletedReplicated()) {
+    arith::Analyzer thr_a;
+    for (size_t i = 0; i < loop_layout_->InputDim(); ++i) {
+      thr_a.Bind(InputPlaceholder(i),
+                 Range::FromMinExtent(0, loop_layout_->InputShape()[i]));
+    }
+    thr_a.Bind(ReplicationPlaceholder(),
+               Range::FromMinExtent(0, loop_layout_->ReplicateExtent()));
+    auto b = thr_a.const_int_bound(loop_layout_->GetForwardThread());
+    if (b->min_value != arith::ConstIntBound::kNegInf && b->min_value > 0) {
+      AddPredicate(GE(InputPlaceholder(0), Integer(b->min_value)));
+    }
+  }
+
   // Step 2: Check that the loop's partition can correctly align with all source
   // fragment, and infer layout only when it's not yet layout-ed.
   ValidateCandidateAgainstFragments(
