@@ -1960,6 +1960,9 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     std::string func_name =
         is_inc ? "tl::warpgroup_reg_alloc" : "tl::warpgroup_reg_dealloc";
     this->stream << func_name << "<" << std::to_string(nreg) << ">();\n";
+  } else if (op->op.same_as(tl::annotate_producer_reg_dealloc()) ||
+             op->op.same_as(tl::annotate_consumer_reg_alloc())) {
+    return;
   } else if (op->op.same_as(tl::wait_wgmma())) {
     this->PrintIndent();
     int num_mma = Downcast<IntImm>(op->args[0])->value;
@@ -1967,6 +1970,14 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
   } else if (op->op.same_as(tl::pack_b16())) {
     os << "__pack_half2(" << this->PrintExpr(op->args[0]) << ", "
        << this->PrintExpr(op->args[1]) << ")";
+  } else if (op->op.same_as(tl::pack_b8x4())) {
+    os << "tl::pack_b8x4(";
+    for (size_t i = 0; i < op->args.size(); ++i) {
+      if (i != 0)
+        os << ", ";
+      this->PrintExpr(op->args[i], os);
+    }
+    os << ")";
   } else if (op->op.same_as(tl::sync_grid())) {
     this->need_cooperative_groups_ = true;
     this->PrintIndent();
@@ -2040,6 +2051,14 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
       this->PrintExpr(op->args[i * 2 + 1], os);
       os << "]" << ((i < 3) ? ", " : ")");
     }
+  } else if (op->op.same_as(builtin::mma_fill())) {
+    std::string num_elem = this->PrintExpr(op->args[0]);
+    std::string dst = this->PrintExpr(op->args[1]);
+    std::string dst_offset = this->PrintExpr(op->args[2]);
+
+    os << "for (int i = 0; i < " << num_elem << "; ++i) {\n";
+    os << dst << "[" << dst_offset << " + i] = 0.0;";
+    os << "}\n";
   } else if (op->op.same_as(tl::tvm_mfma())) {
     // arg 0: prefix: {otype}_{intrM}x{intrN}x{intrK}_{itype}
     // arg 1: A layout: row/col
