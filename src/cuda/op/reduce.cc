@@ -45,6 +45,22 @@ struct Reduce : backend::ReduceLowerer<Reduce> {
     return ss.str();
   }
 
+  static std::string
+  MakeBatchAllReduceOffset(std::string reducer, int reducing_threads, int scale,
+                           PrimExpr thread_offset, PrimExpr all_threads,
+                           int batch, int workspace_stride, Target target) {
+    std::stringstream ss;
+    ss << "tl::AllReduce<" << reducer << ", " << reducing_threads << ", "
+       << scale << ", " << thread_offset;
+    if (TargetHasSMVersionGE(target, 90)) {
+      ss << ", tl::NamedBarrier<" << all_threads << ">";
+    } else {
+      ss << ", tl::SyncThreadsBarrier";
+    }
+    ss << ", " << batch << ", " << workspace_stride << ">::run_batch_offset";
+    return ss.str();
+  }
+
   static std::string MakeScalarAllReduce(std::string reducer,
                                          int reducing_threads, int scale,
                                          PrimExpr thread_offset,

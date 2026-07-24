@@ -1560,6 +1560,99 @@ def ptx_cp_async(dst_access_ptr, src_access_ptr, num_elems, predicate=None):
         return tirx.call_intrin("", tirx.op.Op.get("tl.ptx_cp_async"), dst_access_ptr, src_access_ptr, num_elems, predicate)
 
 
+def _maca_call_intrin(op_name, *args):
+    from tvm import tirx
+
+    return tirx.call_intrin("handle", tirx.op.Op.get(op_name), *args)
+
+
+def maca_ldg_b128_bsm_predicator(
+    dst_addr,
+    src_addr,
+    offset=0,
+    cache_global=True,
+    cache_shared=True,
+    evict=False,
+    wait=True,
+    cmp_lhs=1,
+    cmp_rhs=1,
+    cmp_type="MACA_ICMP_EQ",
+):
+    """MACA BSM 128-bit global-to-shared load with hardware predication.
+
+    This is a low-level MetaX/MACA primitive for hand-scheduled kernels. The
+    destination/source arguments should be raw addresses such as
+    ``T.address_of(S[0])`` or ``T.access_ptr(...)``. ``cmp_type`` is emitted as
+    a MACA enum token such as ``MACA_ICMP_EQ`` or ``MACA_ICMP_SLT``.
+    """
+    return _maca_call_intrin(
+        "tl.maca_ldg_b128_bsm_predicator",
+        dst_addr,
+        src_addr,
+        offset,
+        cache_global,
+        cache_shared,
+        evict,
+        wait,
+        cmp_lhs,
+        cmp_rhs,
+        cmp_type,
+    )
+
+
+def maca_ldg_b64_bsm_predicator(
+    dst_addr,
+    src_addr,
+    offset=0,
+    cache_global=True,
+    cache_shared=True,
+    evict=False,
+    wait=True,
+    cmp_lhs=1,
+    cmp_rhs=1,
+    cmp_type="MACA_ICMP_EQ",
+):
+    """MACA BSM 64-bit global-to-shared load with hardware predication."""
+    return _maca_call_intrin(
+        "tl.maca_ldg_b64_bsm_predicator",
+        dst_addr,
+        src_addr,
+        offset,
+        cache_global,
+        cache_shared,
+        evict,
+        wait,
+        cmp_lhs,
+        cmp_rhs,
+        cmp_type,
+    )
+
+
+def maca_ldg_b128_bsm(dst_addr, src_addr, offset=0):
+    """Convenience wrapper for an unconditional MACA BSM 128-bit load."""
+    return maca_ldg_b128_bsm_predicator(dst_addr, src_addr, offset)
+
+
+def maca_ldg_b64_bsm(dst_addr, src_addr, offset=0):
+    """Convenience wrapper for an unconditional MACA BSM 64-bit load."""
+    return maca_ldg_b64_bsm_predicator(dst_addr, src_addr, offset)
+
+
+def maca_arrive_gvmcnt(num):
+    """Wait for MACA global-memory operations using ``__builtin_mxc_arrive_gvmcnt``."""
+    return _maca_call_intrin("tl.maca_arrive_gvmcnt", num)
+
+
+def maca_arrive_bsmcnt(num):
+    """Wait for MACA BSM operations using ``__builtin_mxc_arrive_bsmcnt``."""
+    return _maca_call_intrin("tl.maca_arrive_bsmcnt", num)
+
+
+def maca_barrier_inst():
+    """Emit MACA ``__builtin_mxc_barrier_inst``."""
+    return _maca_call_intrin("tl.maca_barrier_inst")
+
+
 def ptx_cp_async_bulk(dtype, shared_ptr, shared_offset, global_ptr, global_offset, bytes, barrier_id):
     """TVM intrinsic for ptx async copy from global to shared memory using cp.async.bulk
     https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#data-movement-and-conversion-instructions-cp-async-bulk

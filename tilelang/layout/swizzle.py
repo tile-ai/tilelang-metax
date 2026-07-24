@@ -140,6 +140,22 @@ def make_linear_layout(buffer_or_load_or_region: BufferLikeType):
     return _ffi_api.make_linear_layout(list(shape))
 
 
+def make_maca_gemm_ab_layout(buffer: BufferLikeType, kfactor: int):
+    """
+    Create the MACA GEMM shared-memory layout used by the compiler-path
+    template backend.
+    """
+    buf, _, _ = _get_buffer_info(buffer)
+    return _ffi_api.make_maca_gemm_ab_layout(buf, kfactor)
+
+
+def make_maca_gemm_fragment_c(block_m: int, block_n: int, warp_m: int, warp_n: int, element_size: int):
+    """
+    Create the MACA GEMM accumulator fragment layout.
+    """
+    return _ffi_api.make_maca_gemm_fragment_c(block_m, block_n, warp_m, warp_n, element_size)
+
+
 def make_gemm_fragment_8x8():
     """
     Create a standard 8x8 GEMM fragment layout for ldmatrix/stmatrix.

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import re
 import os
+import shlex
 import subprocess
 from tilelang.env import MACA_HOME, TILELANG_TEMPLATE_PATH
 import tvm_ffi
@@ -35,6 +36,12 @@ def compile_maca(code, target_format="mcbin", arch=None, options=None, path_targ
 
     path_target : str, optional
         Output file.
+
+    Environment Variables
+    ---------------------
+    TILELANG_MXCC_FLAGS : str, optional
+        Extra MXCC command-line flags parsed with shell-like syntax. These
+        flags are appended after explicit options and before output specs.
 
     Return
     ------
@@ -87,6 +94,13 @@ def compile_maca(code, target_format="mcbin", arch=None, options=None, path_targ
             cmd += options
         else:
             raise ValueError("options must be str or list of str")
+
+    extra_env_flags = os.environ.get("TILELANG_MXCC_FLAGS")
+    if extra_env_flags:
+        try:
+            cmd += shlex.split(extra_env_flags)
+        except ValueError as exc:
+            raise ValueError(f"malformed TILELANG_MXCC_FLAGS={extra_env_flags!r}: {exc}") from exc
 
     cmd += ["-D__FAST_HALF_CVT__"]
     cmd += ["-o", file_target]

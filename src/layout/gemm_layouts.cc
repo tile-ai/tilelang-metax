@@ -214,10 +214,12 @@ Fragment makeGemmFragmentCMACA(const int block_m, const int block_n,
   PrimExpr forward_thread = 16 * FloorDiv(j->var, 4) + i;
   PrimExpr index = FloorMod(j->var, 4);
   auto base_layout = Fragment({i, j}, {index}, forward_thread, rep);
-  auto warp_layout =
+  // Match CUTE partition_shape_C accumulator storage: the thread-group
+  // repeat must be applied before the per-thread 16x16 tile repeats.
+  auto thread_layout =
       base_layout->Repeat({block_m / warp_m, block_n / warp_n}, true, false);
   auto block_layout =
-      warp_layout->Repeat({warp_m / 16, warp_n / 16}, false, false);
+      thread_layout->Repeat({warp_m / 16, warp_n / 16}, false, false);
   return block_layout;
 }
 
@@ -1033,6 +1035,31 @@ Layout makeGemmABLayoutMACA(int mat_stride, int mat_continuous, int continuity,
     ICHECK(0);
     return MakeGemmABLayoutPadded(mat_stride, mat_continuous, element_size);
   }
+}
+
+Layout makeMacaGemmABLayout(const Buffer &buffer, int kfactor) {
+  auto info = GetSwizzleShapeInfoChecked(buffer);
+  auto mat_stride = static_cast<int>(info.stride);
+  auto mat_continuous = static_cast<int>(info.continuous);
+  Layout base;
+  if (info.element_size == 16 && kfactor == 1 && mat_continuous % 64 == 0 &&
+      mat_stride % 64 != 32) {
+    Var i = InputPlaceholder(0);
+    Var j = InputPlaceholder(1);
+    constexpr int vector_size = 4;
+    PrimExpr ts = FloorDiv(i, 64);
+    PrimExpr s = FloorMod(FloorDiv(i, vector_size), 16);
+    PrimExpr tc = FloorDiv(j, 16);
+    PrimExpr c = FloorMod(j, 16);
+    PrimExpr vec = FloorMod(i, vector_size);
+    PrimExpr s_swizzle = xor16x16(s, c);
+    PrimExpr index = vec + (s_swizzle + c * 16) * vector_size;
+    base = Layout(Array<PrimExpr>{mat_stride, mat_continuous}, {tc, ts, index});
+  } else {
+    base = makeGemmABLayoutMACA(mat_stride, mat_continuous, mat_continuous,
+                                info.element_size, kfactor);
+  }
+  return ExpandLayout2D(base, buffer);
 }
 
 Layout MakeSwizzledLayout(const Buffer &buffer, bool k_inner, bool allow_pad) {

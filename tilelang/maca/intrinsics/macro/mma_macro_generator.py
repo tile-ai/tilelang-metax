@@ -263,7 +263,7 @@ class TensorCoreIntrinEmitter:
                     thread_id_shared_access_64x8_to_16x32_layout_A if transposed else thread_id_shared_access_64x8_to_16x32_layout_B
                 )
         else:
-            raise ValueError(f"k_dim must be 16 currently but got {k_dim}")
+            raise ValueError(f"k_dim must be 4, 8, 16, or 32 but got {k_dim}")
 
         return index_map, reverse_index_map
 

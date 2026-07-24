@@ -600,10 +600,16 @@ template <typename Impl> struct ReduceLowerer {
           std::string reducer =
               reduce::MakeCodegenReducer(op, can_batch_pack ? vsize : 1)
                   .value();
-          std::string allreduce = Impl::MakeBatchAllReduce(
-              reducer, reducing_threads, *scale, thread_offset,
-              lower_args.thread_bounds->extent, eff_batch, reducing_threads,
-              lower_args.target);
+          std::string allreduce =
+              can_batch_pack
+                  ? Impl::MakeBatchAllReduce(
+                        reducer, reducing_threads, *scale, thread_offset,
+                        lower_args.thread_bounds->extent, eff_batch,
+                        reducing_threads, lower_args.target)
+                  : Impl::MakeBatchAllReduceOffset(
+                        reducer, reducing_threads, *scale, thread_offset,
+                        lower_args.thread_bounds->extent, batch,
+                        reducing_threads, lower_args.target);
 
           DataType ws_dtype = can_batch_pack
                                   ? clear_buffer->dtype.with_lanes(vsize)
@@ -706,16 +712,8 @@ template <typename Impl> struct ReduceLowerer {
           } else {
             for (int chunk = 0; chunk < num_chunks; chunk++) {
               int64_t flat_offset = static_cast<int64_t>(chunk) * batch;
-              Array<PrimExpr> chunk_indices;
-              for (int d = 0; d < buf_ndim; d++) {
-                int64_t idx =
-                    (flat_offset / buf_strides[d]) % buf_shape_vals[d];
-                chunk_indices.push_back(Integer(idx));
-              }
-              PrimExpr ptr = Call(DataType::Handle(), builtin::address_of(),
-                                  {BufferLoad(clear_buffer, chunk_indices)});
-
-              Array<PrimExpr> args = {StringImm(allreduce), ptr};
+              Array<PrimExpr> args = {StringImm(allreduce), clear_buffer->data,
+                                      Integer(flat_offset)};
               if (need_workspace) {
                 args.push_back(workspace);
               }

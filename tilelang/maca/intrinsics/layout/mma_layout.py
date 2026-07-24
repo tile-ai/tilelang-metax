@@ -199,8 +199,8 @@ def thread_id_shared_access_64x16_to_16x64_layout_B(thread_id, local_id):
 
 
 def shared_16x64_to_local_64x16_layout_B(i, j):
-    thread_id = i + 16 * (j // 16)
-    local = j % 16
+    thread_id = j + (i // 16) * 16
+    local = i % 16
     return thread_id, local
 
 

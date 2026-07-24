@@ -432,9 +432,9 @@ private:
   }
 
   int CheckAndGetBufferRowSize(const Buffer &buffer) {
-    ICHECK(buffer->shape.size() >= 2)
+    ICHECK(buffer->shape.size() >= 1)
         << "The dimension of Buffer \"" << buffer->name << "\" with shape "
-        << buffer->shape << " should be at least 2";
+        << buffer->shape << " should be at least 1";
 
     auto dim = buffer->shape.size();
     auto buffer_row_size = buffer->shape[dim - 1].as<IntImmNode>()->value;
@@ -445,6 +445,59 @@ private:
     PrimExpr expr;
     bool rewritten{false};
   };
+
+  PrimExpr FlattenPhysicalIndices(const Array<PrimExpr> &indices,
+                                  const Array<PrimExpr> &shape) {
+    ICHECK_EQ(indices.size(), shape.size())
+        << "Indices size and shape size must match for physical buffer access "
+        << "but got indices size: " << indices.size()
+        << " and shape size: " << shape.size();
+
+    PrimExpr offset = 0;
+    PrimExpr stride = 1;
+    for (int i = static_cast<int>(shape.size()) - 1; i >= 0; --i) {
+      offset += indices[i] * stride;
+      stride *= shape[i];
+    }
+    return analyzer_->Simplify(offset);
+  }
+
+  Array<PrimExpr> LinearOffsetToIndices(const PrimExpr &offset,
+                                        const Array<PrimExpr> &shape) {
+    Array<PrimExpr> indices;
+    PrimExpr remaining = offset;
+    for (int i = static_cast<int>(shape.size()) - 1; i >= 0; --i) {
+      indices.insert(indices.begin(), floormod(remaining, shape[i]));
+      remaining = floordiv(remaining, shape[i]);
+    }
+    return indices;
+  }
+
+  Array<PrimExpr> BuildPhysicalIndices(const Array<PrimExpr> &forward_indices,
+                                       const Array<PrimExpr> &target_shape,
+                                       const PrimExpr &linear_offset) {
+    if (target_shape.size() == forward_indices.size() + 1) {
+      PrimExpr layout_extent = 1;
+      for (size_t i = 1; i < target_shape.size(); ++i) {
+        layout_extent *= target_shape[i];
+      }
+
+      Array<PrimExpr> indices;
+      indices.push_back(
+          analyzer_->Simplify(floordiv(linear_offset, layout_extent)));
+      for (const auto &forward_index : forward_indices) {
+        indices.push_back(forward_index);
+      }
+      return indices;
+    }
+
+    ICHECK_EQ(target_shape.size(), forward_indices.size())
+        << "Remapped access pointer rank mismatch: forward indices size "
+        << forward_indices.size() << ", target shape size "
+        << target_shape.size();
+    PrimExpr new_offset = FlattenPhysicalIndices(forward_indices, target_shape);
+    return LinearOffsetToIndices(new_offset, target_shape);
+  }
 
   AccessPtrResult
   HandleAccessPtrAndOffset(const PrimExpr &access_ptr,
@@ -521,20 +574,14 @@ private:
       }
       // Apply layout transformation
       auto forward_indices = layout->Forward(multi_dim_indices);
-      PrimExpr new_offset = 0;
-      PrimExpr stride_offset = 1;
-      for (int i = static_cast<int>(new_shape.size()) - 1; i >= 0; --i) {
-        new_offset += forward_indices[i] * stride_offset;
-        stride_offset *= new_shape[i];
-      }
-      new_offset = analyzer_->Simplify(new_offset);
-      Array<PrimExpr> new_indices;
+      Array<PrimExpr> new_indices =
+          BuildPhysicalIndices(forward_indices, new_shape, elem_offset);
       layout_remap_.Set(new_buffer, layout);
 
       // Build new tvm_access_ptr call with new buffer and offset
       Array<PrimExpr> new_args = access_ptr_call->args;
       new_args.Set(1, new_buffer->data); // Replace data var
-      new_args.Set(2, new_offset);       // Replace offset
+      new_args.Set(2, FlattenPhysicalIndices(new_indices, new_shape));
       result.rewritten = true;
       result.expr = Call(access_ptr_call->dtype, access_ptr_call->op, new_args,
                          access_ptr_call->annotations, access_ptr_call->span);
@@ -613,20 +660,8 @@ private:
       }
 
       auto forward_indices = layout.value()->Forward(multi_dim_indices);
-      PrimExpr new_offset = 0;
-      PrimExpr stride_offset = 1;
-      for (int i = static_cast<int>(new_shape.size()) - 1; i >= 0; --i) {
-        new_offset += forward_indices[i] * stride_offset;
-        stride_offset *= new_shape[i];
-      }
-      new_offset = analyzer_->Simplify(new_offset);
-
-      Array<PrimExpr> new_indices;
-      for (int i = static_cast<int>(new_shape.size()) - 1; i >= 0; --i) {
-        new_indices.insert(new_indices.begin(),
-                           floormod(new_offset, new_shape[i]));
-        new_offset = floordiv(new_offset, new_shape[i]);
-      }
+      Array<PrimExpr> new_indices =
+          BuildPhysicalIndices(forward_indices, new_shape, smem_offset);
 
       Array<PrimExpr> new_args = {BufferLoad(new_buffer, new_indices)};
       if (buffer_remap_.count(remap_key)) {
@@ -716,20 +751,8 @@ private:
       }
 
       auto forward_indices = layout.value()->Forward(multi_dim_indices);
-      PrimExpr new_offset = 0;
-      PrimExpr stride_offset = 1;
-      for (int i = static_cast<int>(new_shape.size()) - 1; i >= 0; --i) {
-        new_offset += forward_indices[i] * stride_offset;
-        stride_offset *= new_shape[i];
-      }
-      new_offset = analyzer_->Simplify(new_offset);
-
-      Array<PrimExpr> new_indices;
-      for (int i = static_cast<int>(new_shape.size()) - 1; i >= 0; --i) {
-        new_indices.insert(new_indices.begin(),
-                           floormod(new_offset, new_shape[i]));
-        new_offset = floordiv(new_offset, new_shape[i]);
-      }
+      Array<PrimExpr> new_indices =
+          BuildPhysicalIndices(forward_indices, new_shape, smem_offset);
 
       Array<PrimExpr> new_args = {BufferLoad(new_buffer, new_indices), extent,
                                   rw_mask};
@@ -1010,6 +1033,24 @@ private:
         return new_access_ptr.expr;
       }
       return call;
+    }
+
+    if (op->op.same_as(builtin::address_of()) ||
+        op->op.same_as(tl::access_ptr())) {
+      Optional<PrimExpr> resolved = ResolveBufferLoad(op->args[0]);
+      if (resolved.defined()) {
+        if (const auto *load = resolved.value().as<BufferLoadNode>()) {
+          if (IsGlobalBuffer(load->buffer)) {
+            return Downcast<Call>(IRMutatorWithAnalyzer::VisitExpr_(op));
+          }
+        }
+      }
+      auto access_ptr = tvm::ffi::GetRef<PrimExpr>(op);
+      auto new_access_ptr =
+          HandleAccessPtrAndOffset(access_ptr, std::nullopt, op->dtype);
+      if (new_access_ptr.rewritten) {
+        return new_access_ptr.expr;
+      }
     }
 
     // Default: visit normally

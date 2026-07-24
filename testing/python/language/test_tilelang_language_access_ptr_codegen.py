@@ -3,6 +3,10 @@ import tilelang.language as T
 import tilelang.testing
 import pytest
 from tilelang import tvm
+from tilelang.maca.target import check_maca_availability
+
+
+requires_maca = pytest.mark.skipif(not check_maca_availability(), reason="Requires MACA")
 
 
 @tilelang.testing.skip_on_maca
@@ -198,6 +202,130 @@ def test_async_copy_oob_lowers_to_predicated_cp_async_without_wait():
     assert "cp_async_gs_conditional<" in src, "Expected predicated cp.async (zero-fill) in generated CUDA source"
     assert "tl::cp_async_commit" in src, "Expected async_copy lowering to emit commit"
     assert "tl::cp_async_wait<0>" not in src, "Did not expect async_copy lowering to auto-emit wait"
+
+
+@requires_maca
+def test_maca_global_atomic_add_preserves_logical_layout_indices_codegen():
+    def make_dq_layout(dQ):
+        return T.Layout(
+            dQ.shape,
+            lambda b, h, l, d: [
+                b,
+                h,
+                l // 8,
+                d // 8,
+                (d % 2),
+                4 * (l % 8) + (d % 8) // 2,
+            ],
+        )
+
+    @T.prim_func
+    def main(
+        A: T.Tensor((64, 32), T.float16),
+        B: T.Tensor((64, 128), T.float16),
+        dQ: T.Tensor((1, 32, 512, 128), T.float32),
+    ):
+        with T.Kernel(32, 1, 1, threads=256) as (bx, by, bz):
+            A_shared = T.alloc_shared((64, 32), T.float16)
+            B_shared = T.alloc_shared((64, 128), T.float16)
+            dq = T.alloc_fragment((32, 128), T.float32)
+            T.annotate_layout({dQ: make_dq_layout(dQ)})
+            T.copy(A, A_shared)
+            T.copy(B, B_shared)
+            T.clear(dq)
+            for k in range(16):
+                T.gemm(A_shared, B_shared, dq, transpose_A=True)
+                T.atomic_add(dQ[bz, bx, k * 32 : (k + 1) * 32, :], dq)
+
+    kernel = tilelang.compile(main, out_idx=None, target="maca")
+    src = kernel.get_kernel_source()
+
+    assert "AtomicAdd" in src
+    assert "(k >> 4) + ((int)blockIdx.x)" not in src
+    assert "((k & 15) * 4096)" not in src
+    assert "((int)blockIdx.x) * 65536" in src
+    assert "(k * 4096)" in src
+
+
+@requires_maca
+def test_maca_bsm_intrinsics_codegen():
+    """Smoke-test codegen for the MACA BSM builtin wrappers."""
+
+    @T.prim_func
+    def main(
+        A: T.Tensor((64,), T.uint8),
+        B: T.Tensor((64,), T.uint8),
+    ):
+        with T.Kernel(1, threads=32):
+            S = T.alloc_shared((64,), T.uint8)
+            T.maca_ldg_b128_bsm_predicator(
+                T.address_of(S[0]),
+                T.address_of(A[0]),
+                0,
+                True,
+                True,
+                False,
+                True,
+                1,
+                1,
+                "MACA_ICMP_EQ",
+            )
+            T.maca_arrive_gvmcnt(4)
+            T.maca_arrive_bsmcnt(2)
+            T.maca_barrier_inst()
+            B[0] = S[0]
+
+    kernel = tilelang.compile(main, out_idx=[1], target="maca")
+    src = kernel.get_kernel_source()
+    print("=== MACA BSM builtin codegen ===")
+    print(src)
+    assert "__builtin_mxc_ldg_b128_bsm_predicator" in src
+    assert "__builtin_mxc_arrive_gvmcnt(4)" in src
+    assert "__builtin_mxc_arrive_bsmcnt(2)" in src
+    assert "__builtin_mxc_barrier_inst();" in src
+    assert '"MACA_ICMP_EQ"' not in src
+
+
+@requires_maca
+def test_maca_bsm_byte_view_feeds_gemm_codegen():
+    """BSM byte staging can alias a half view consumed by MACA GEMM lowering."""
+
+    @T.prim_func
+    def main(
+        A: T.Tensor((128, 64), T.float16),
+        B: T.Tensor((128, 64), T.float16),
+        C: T.Tensor((128, 128), T.float16),
+    ):
+        with T.Kernel(1, 1, threads=256):
+            A_shared = T.alloc_shared((128, 64), T.float16)
+            B_storage = T.alloc_shared((128, 128), T.uint8)
+            B_shared = T.view(B_storage, (128, 64), dtype=T.float16)
+            C_local = T.alloc_fragment((128, 128), T.float32)
+            T.copy(A, A_shared)
+            T.clear(C_local)
+            T.maca_ldg_b128_bsm_predicator(
+                T.address_of(B_storage[0, 0]),
+                T.address_of(B[0, 0]),
+                0,
+                True,
+                True,
+                False,
+                True,
+                1,
+                1,
+                "MACA_ICMP_EQ",
+            )
+            T.maca_arrive_gvmcnt(0)
+            T.maca_barrier_inst()
+            T.gemm(A_shared, B_shared, C_local, False, True)
+            T.copy(C_local, C)
+
+    kernel = tilelang.compile(main, out_idx=[2], target="maca")
+    src = kernel.get_kernel_source()
+    assert "__builtin_mxc_ldg_b128_bsm_predicator" in src
+    assert "__builtin_mxc_arrive_gvmcnt(0)" in src
+    assert "__builtin_mxc_barrier_inst();" in src
+    assert "__builtin_mxc_mma_16x16x16f16" in src
 
 
 if __name__ == "__main__":

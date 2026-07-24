@@ -1,8 +1,30 @@
 // Copyright (c) 2025 MetaX Integrated Circuits (Shanghai) Co., Ltd. All rights
 // reserved.
 #pragma once
+#include "barrier.h"
 #include "common.h"
+#include <mctlass/arch/maca_memory.h>
 namespace tl {
+TL_DEVICE void cp_async_commit() { asm volatile("" ::: "memory"); }
+
+template <int N = 0> TL_DEVICE void cp_async_wait() {
+  mctlass::arch::maca_cp_async_wait<N>();
+  __syncthreadshared();
+}
+
+template <int N>
+TL_DEVICE void cp_async_gs(void *lds_base_ptr, void const *global_base_ptr) {
+  static_assert(N == 16 || N == 8 || N == 4);
+  mctlass::arch::maca_cp_async_zfill<N>(lds_base_ptr, global_base_ptr);
+}
+
+template <int N>
+TL_DEVICE void cp_async_gs_conditional(void *lds_base_ptr,
+                                       void const *global_base_ptr, bool cond) {
+  static_assert(N == 16 || N == 8 || N == 4);
+  mctlass::arch::maca_cp_async_zfill<N>(lds_base_ptr, global_base_ptr, cond);
+}
+
 // Global memory load intrinsics with explicit vector widths
 // MACA-compatible implementation using standard pointer casts
 // load_global_32: Load 32 bits, return uint32_t

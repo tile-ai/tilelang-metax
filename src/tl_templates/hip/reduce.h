@@ -144,6 +144,12 @@ struct AllReduce {
                 workspace_stride>::run_batch(x, red_buf);
     }
   }
+
+  template <typename T>
+  static __device__ void run_batch_offset(T *x, int base_offset,
+                                          T *red_buf = nullptr) {
+    run_batch(x + base_offset, red_buf);
+  }
 };
 
 template <typename T, typename ReduceOp>

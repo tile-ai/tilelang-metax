@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "barrier.h"
 #include "common.h"
 #include <cute/tensor.hpp>
 #include <type_traits>
@@ -13,6 +14,10 @@ template <typename A_type, typename B_type, typename C_type>
 struct DispatchInstruction;
 
 template <> struct DispatchInstruction<half_t, half_t, float> {
+  using MMA = MMA_Atom<MMA_Traits<MACA_16x16x16_F32F16F16F32>>;
+};
+
+template <> struct DispatchInstruction<__half, __half, float> {
   using MMA = MMA_Atom<MMA_Traits<MACA_16x16x16_F32F16F16F32>>;
 };
 
@@ -73,14 +78,31 @@ public:
   using OperandBTraits =
       OperandTraits<sizeof_bits<B_type>::value, N, K, trans_B, num_warp_n>;
 
-  using SmemLayoutA = typename OperandATraits::Layout;
-  using SmemLayoutB = typename OperandBTraits::Layout;
+  using LinearSmemLayoutA = Layout<Shape<Int<M>, Int<K>>, Stride<Int<K>, _1>>;
+  using LinearSmemLayoutB = Layout<Shape<Int<N>, Int<K>>, Stride<_1, Int<N>>>;
+  using SmemLayoutA =
+      typename std::conditional<trans_B, typename OperandATraits::Layout,
+                                LinearSmemLayoutA>::type;
+  using SmemLayoutB =
+      typename std::conditional<trans_B, typename OperandBTraits::Layout,
+                                LinearSmemLayoutB>::type;
   using SmemCopyA = Copy_Atom<typename OperandATraits::Copy, A_type>;
   using SmemCopyB = Copy_Atom<typename OperandBTraits::Copy, B_type>;
 
   using TileMma = TiledMMA<typename Instruction::MMA,
                            Layout<Shape<Int<num_warp_m>, Int<num_warp_n>, _1>>,
                            Layout<Shape<_1, _1, _1>>>;
+
+  template <class... Args>
+  static CUTE_DEVICE auto remove_swizzle(Layout<Args...> const &layout) {
+    return layout;
+  }
+
+  template <class... Args>
+  static CUTE_DEVICE auto
+  remove_swizzle(ComposedLayout<Args...> const &layout) {
+    return layout.layout_fn();
+  }
 
   CUTE_DEVICE static void body(A_type_raw *pA, B_type_raw *pB, C_type_raw *pC) {
     const int tid = threadIdx.x;
@@ -107,15 +129,20 @@ public:
     Tensor acc =
         make_tensor(make_rmem_ptr(reinterpret_cast<C_type *>(pC)),
                     partition_shape_C(tiled_mma, Shape<Int<M>, Int<N>>{}));
+    auto tCrB_view = make_tensor(tCrB.data(), remove_swizzle(tCrB.layout()));
 
     if constexpr (clear_accum) {
       clear(acc);
     }
 
+    copy(tiled_copy_B, tCsB(_, _, 0), tCrB_copy_view(_, _, 0));
+    CUTE_UNROLL
     for (int k = 0; k < size<2>(tCrA); ++k) {
       copy(tiled_copy_A, tCsA(_, _, k), tCrA_copy_view(_, _, k));
-      copy(tiled_copy_B, tCsB(_, _, k), tCrB_copy_view(_, _, k));
-      gemm(tiled_mma, tCrA(_, _, k), tCrB(_, _, k), acc);
+      if (k < size<2>(tCrA) - 1) {
+        copy(tiled_copy_B, tCsB(_, _, k + 1), tCrB_copy_view(_, _, k + 1));
+      }
+      gemm(tiled_mma, tCrA(_, _, k), tCrB_view(_, _, k), acc);
     }
   }
 
@@ -138,6 +165,7 @@ public:
     Tensor acc =
         make_tensor(make_rmem_ptr(reinterpret_cast<C_type *>(pC)),
                     partition_shape_C(tiled_mma, Shape<Int<M>, Int<N>>{}));
+    auto tCrB_view = make_tensor(tCrB.data(), remove_swizzle(tCrB.layout()));
     Tensor tCrA =
         make_tensor(make_rmem_ptr(reinterpret_cast<A_type *>(pA)),
                     partition_shape_A(tiled_mma, Shape<Int<M>, Int<K>>{}));
@@ -146,9 +174,13 @@ public:
       clear(acc);
     }
 
+    copy(tiled_copy_B, tCsB(_, _, 0), tCrB_copy_view(_, _, 0));
+    CUTE_UNROLL
     for (int k = 0; k < size<2>(tCrA); ++k) {
-      copy(tiled_copy_B, tCsB(_, _, k), tCrB_copy_view(_, _, k));
-      gemm(tiled_mma, tCrA(_, _, k), tCrB(_, _, k), acc);
+      if (k < size<2>(tCrA) - 1) {
+        copy(tiled_copy_B, tCsB(_, _, k + 1), tCrB_copy_view(_, _, k + 1));
+      }
+      gemm(tiled_mma, tCrA(_, _, k), tCrB_view(_, _, k), acc);
     }
   }
 };
@@ -175,3 +207,5 @@ TL_DEVICE void gemm_rs(A_type *pA, B_type *pB, C_type *accum) {
   MMA::body_rs(pA, pB, accum);
 }
 } // namespace tl
+
+#include "gemm_wsm.h"

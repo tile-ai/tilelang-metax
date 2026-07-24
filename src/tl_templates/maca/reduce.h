@@ -210,6 +210,12 @@ struct AllReduce {
     }
   }
 
+  template <typename T>
+  static TL_DEVICE void run_batch_offset(T *x, int offset,
+                                         T *red_buf = nullptr) {
+    run_batch(x + offset, red_buf);
+  }
+
 private:
   using Next = AllReduce<Reducer, threads / 2, scale, thread_offset, Barrier,
                          batch_size, workspace_stride>;

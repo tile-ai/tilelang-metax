@@ -156,6 +156,7 @@ def gemm(
     clear_accum: bool = False,
     k_pack: int = 1,
     mbar: BarrierType | None = None,
+    annotations: dict | None = None,
 ) -> tirx.PrimExpr:
     """TileLang GEMM operator.
 
@@ -179,6 +180,8 @@ def gemm(
         k_pack (int): Numbers of packed matrix cores, for ROCm only. Defaults to 1.
         mbar (BarrierType, i.e. Buffer | BufferLoad, or Var, optional): Mbarrier in Blackwell.
             Required when this GEMM lowers to TCGEN5MMA. Defaults to None.
+        annotations (dict, optional): Backend-specific metadata consumed by target lowering.
+            Defaults to None.
 
     Returns:
         tirx.Call: A handle to the GEMM operation.
@@ -195,6 +198,7 @@ def gemm(
         k_pack,
         0,
         mbar,
+        annotations=annotations,
     )
 
 
