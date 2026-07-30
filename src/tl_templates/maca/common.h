@@ -294,6 +294,21 @@ TL_DEVICE uint2 make_uint2(unsigned char x0, unsigned char x1, unsigned char x2,
   return result;
 }
 
+// Pack sixteen char values.
+TL_DEVICE uint4 make_uint4(unsigned char x0, unsigned char x1, unsigned char x2,
+                           unsigned char x3, unsigned char y0, unsigned char y1,
+                           unsigned char y2, unsigned char y3, unsigned char z0,
+                           unsigned char z1, unsigned char z2, unsigned char z3,
+                           unsigned char w0, unsigned char w1, unsigned char w2,
+                           unsigned char w3) {
+  uint4 result;
+  result.x = make_uint(x0, x1, x2, x3);
+  result.y = make_uint(y0, y1, y2, y3);
+  result.z = make_uint(z0, z1, z2, z3);
+  result.w = make_uint(w0, w1, w2, w3);
+  return result;
+}
+
 // Pack two half_t values.
 TL_DEVICE unsigned __pack_half2(const half_t x, const half_t y) {
   unsigned v0 = *((unsigned short *)&x);
