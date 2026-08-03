@@ -50,7 +50,7 @@ def producer_bind_kernel(A: T.Tensor((64,), T.float16), B: T.Tensor((64,), T.flo
                 B[k * 32 + i] = A_shared[i]
 
 
-@tilelang.testing.pytest.mark.xfail
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 def test_producer_bind_kernel():
     kernel_source = producer_bind_kernel.get_kernel_source()

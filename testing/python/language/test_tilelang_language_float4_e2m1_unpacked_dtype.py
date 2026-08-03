@@ -75,7 +75,7 @@ def _decode_tcgen05_formats(desc: int) -> tuple[int, int]:
     return (desc >> 7) & 0x7, (desc >> 10) & 0x7
 
 
-@tilelang.testing.pytest.mark.xfail
+@tilelang.testing.skip_on_maca
 def test_tcgen05_instr_desc_fp4_unpacked_x_fp8():
     fp4 = DataType("custom[float4_e2m1_unpacked]8")
     fp8 = DataType("float8_e4m3fn")
@@ -86,7 +86,7 @@ def test_tcgen05_instr_desc_fp4_unpacked_x_fp8():
     assert b_format == 0
 
 
-@tilelang.testing.pytest.mark.xfail
+@tilelang.testing.skip_on_maca
 def test_tcgen05_blockscaled_instr_desc_mxfp4_unpacked_x_mxfp8():
     fp4 = DataType("custom[float4_e2m1_unpacked]8")
     fp8 = DataType("float8_e4m3fn")

@@ -54,7 +54,7 @@ def run_elementwise_add(M, N):
         assert "tma_load" in code and "CUtensorMap" in code
 
 
-@tilelang.testing.pytest.mark.xfail
+@tilelang.testing.skip_on_maca
 def test_tilelang_language_tma_1d():
     run_elementwise_add(128, 128)
     run_elementwise_add(256, 128)
