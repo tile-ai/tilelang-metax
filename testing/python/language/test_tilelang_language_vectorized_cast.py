@@ -96,9 +96,6 @@ def test_vectorized_cast(src_dtype, dst_dtype, check_str, lanes):
     run_vectorized_cast(src_dtype, dst_dtype, check_str, lanes)
 
 
-_X_FAIL_FLOAT_TO_HALF = pytest.mark.xfail(reason="MACA kernel did not call the corresponding function")
-
-
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     "src_dtype, dst_dtype, check_str, lanes",
@@ -113,12 +110,12 @@ _X_FAIL_FLOAT_TO_HALF = pytest.mark.xfail(reason="MACA kernel did not call the c
         (T.float8_e5m2, T.float32, "__tl_cvt_fp8x2_to_float2", 2),
         (T.float8_e5m2, T.float32, "__tl_cvt_fp8x2_to_float2", 4),
         # FP8 <-> Half
-        pytest.param(T.float8_e4m3fn, T.float16, "__tl_cvt_fp8x2_to_half2", 2, marks=_X_FAIL_FLOAT_TO_HALF),
-        pytest.param(T.float8_e4m3fn, T.float16, "__tl_cvt_fp8x2_to_half2", 4, marks=_X_FAIL_FLOAT_TO_HALF),
-        pytest.param(T.float8_e5m2, T.float16, "__tl_cvt_fp8x2_to_half2", 2, marks=_X_FAIL_FLOAT_TO_HALF),
-        pytest.param(T.float16, T.float8_e4m3fn, "__tl_cvt_half2_to_fp8x2", 2, marks=_X_FAIL_FLOAT_TO_HALF),
-        pytest.param(T.float16, T.float8_e4m3fn, "__tl_cvt_half2_to_fp8x2", 4, marks=_X_FAIL_FLOAT_TO_HALF),
-        pytest.param(T.float16, T.float8_e5m2, "__tl_cvt_half2_to_fp8x2", 2, marks=_X_FAIL_FLOAT_TO_HALF),
+        pytest.param(T.float8_e4m3fn, T.float16, "__tl_cvt_fp8x2_to_half2", 2),
+        pytest.param(T.float8_e4m3fn, T.float16, "__tl_cvt_fp8x2_to_half2", 4),
+        pytest.param(T.float8_e5m2, T.float16, "__tl_cvt_fp8x2_to_half2", 2),
+        pytest.param(T.float16, T.float8_e4m3fn, "__tl_cvt_half2_to_fp8x2", 2),
+        pytest.param(T.float16, T.float8_e4m3fn, "__tl_cvt_half2_to_fp8x2", 4),
+        pytest.param(T.float16, T.float8_e5m2, "__tl_cvt_half2_to_fp8x2", 2),
         # E8M0 <-> BFloat16
         (T.float8_e8m0fnu, T.bfloat16, "__tl_cvt_e8m0x2_to_bfloat162", 2),
         (T.bfloat16, T.float8_e8m0fnu, "__tl_cvt_bfloat162_to_e8m0x2", 2),

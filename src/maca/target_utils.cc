@@ -78,6 +78,22 @@ bool IsMacaVectorizableCast(DataType from_ty, DataType target_ty) {
       target_ty.bits() == 32)
     return true;
 
+  // float8 (E4M3/E5M2) -> float16
+  if (IsMacaVectorizableFP8(from_ty) && target_ty.is_float16())
+    return true;
+
+  // float8 (E4M3/E5M2) -> bfloat16
+  if (IsMacaVectorizableFP8(from_ty) && target_ty.is_bfloat16())
+    return true;
+
+  // float16 -> float8 (E4M3/E5M2)
+  if (from_ty.is_float16() && IsMacaVectorizableFP8(target_ty))
+    return true;
+
+  // bfloat16 -> float8 (E4M3/E5M2)
+  if (from_ty.is_bfloat16() && IsMacaVectorizableFP8(target_ty))
+    return true;
+
   // Not implemented for now
 
   // float64(double) -> float8 (E4M3/E5M2)
