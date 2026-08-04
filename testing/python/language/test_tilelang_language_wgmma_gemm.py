@@ -74,19 +74,17 @@ def _make_wgmma_kernel(gemm_op):
     return main
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 @tilelang.testing.requires_cuda_compute_version_eq(9, 0)
-@pytest.mark.parametrize(
-    "gemm_api",
-    [T.wgmma_gemm],
-)
-def test_wgmma_gemm_has_no_implicit_wait(gemm_api):
-    kernel = tilelang.compile(_make_wgmma_kernel(lambda A, B, C: gemm_api(A, B, C, clear_accum=True)), target="cuda")
+def test_wgmma_gemm_has_no_implicit_wait():
+    kernel = tilelang.compile(_make_wgmma_kernel(lambda A, B, C: T.wgmma_gemm(A, B, C, clear_accum=True)), target="cuda")
     src = kernel.get_kernel_source()
 
     assert src.count("tl::wait_wgmma<0>();") == 1
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 @tilelang.testing.requires_cuda_compute_version_eq(9, 0)
 def test_wgmma_gemm_dispatch_has_no_implicit_wait():
@@ -98,6 +96,7 @@ def test_wgmma_gemm_dispatch_has_no_implicit_wait():
     assert kernel.get_kernel_source().count("tl::wait_wgmma<0>();") == 1
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 @tilelang.testing.requires_cuda_compute_version_eq(9, 0)
 def test_wgmma_gemm_rejects_mma_fallback():
@@ -155,6 +154,7 @@ def _make_sliced_wgmma_kernel(M, N, K, num_k_tiles):
     return main
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 @tilelang.testing.requires_cuda_compute_version_eq(9, 0)
 def test_wgmma_gemm_sliced_operand_emits_offset():
@@ -165,6 +165,7 @@ def test_wgmma_gemm_sliced_operand_emits_offset():
     assert "increase_descriptor_offset" in src
 
 
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 @tilelang.testing.requires_cuda_compute_version_eq(9, 0)
 @pytest.mark.parametrize(

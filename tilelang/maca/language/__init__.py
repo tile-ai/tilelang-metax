@@ -4,16 +4,13 @@ from __future__ import annotations
 
 from tilelang.language.common import *  # noqa: F401,F403
 from tilelang.language.common import __all__ as _COMMON_ALL
-from tilelang.language.allocate import alloc_cluster_barrier, alloc_descriptor, alloc_tmem  # noqa: F401
 from tilelang.language.annotations import annotate_l2_hit_ratio, annotate_min_blocks_per_sm  # noqa: F401
 from tilelang.language.builtin import (  # noqa: F401
     annotate_consumer_reg_alloc,
     annotate_producer_reg_dealloc,
-    create_tma_descriptor,
     deallocate_tmem,
     dec_max_nreg,
     disable_warp_group_reg_alloc,
-    fence_proxy_async,
     get_warp_group_idx,
     inc_max_nreg,
     increase_descriptor_offset,
@@ -26,9 +23,6 @@ from tilelang.language.builtin import (  # noqa: F401
     lds64,
     match_all_sync,
     match_any_sync,
-    named_barrier_arrive,
-    ptx_arrive_cluster_barrier,
-    ptx_mma_sm70,
     set_max_nreg,
     shuffle_elect,
     stg128,
@@ -38,16 +32,10 @@ from tilelang.language.builtin import (  # noqa: F401
     sts128,
     sts32,
     sts64,
-    tma_load,
-    tma_load_2sm,
-    tma_store_arrive,
-    tma_store_wait,
 )
-from tilelang.language.copy_op import copy_cluster, tma_copy, tma_gather4, tma_gather4_bytes, tma_scatter4  # noqa: F401
-from tilelang.language.kernel import ClusterKernel, CUDASourceCodeKernel  # noqa: F401
+from tilelang.language.copy_op import maca_async_copy  # noqa: F401
+from tilelang.language.kernel import CUDASourceCodeKernel  # noqa: F401
 
-from .cluster import *  # noqa: F401,F403
-from .cluster import __all__ as _CLUSTER_ALL
 from .intrinsics import *  # noqa: F401,F403
 from .intrinsics import __all__ as _INTRINSICS_ALL
 from .pdl import *  # noqa: F401,F403
@@ -62,21 +50,14 @@ from .warpgroup import *  # noqa: F401,F403
 from .warpgroup import __all__ as _WARPGROUP_ALL
 
 _MACA_API_ALL = (
-    "ClusterKernel",
     "CUDASourceCodeKernel",
-    "alloc_cluster_barrier",
-    "alloc_descriptor",
-    "alloc_tmem",
     "annotate_consumer_reg_alloc",
     "annotate_l2_hit_ratio",
     "annotate_min_blocks_per_sm",
     "annotate_producer_reg_dealloc",
-    "copy_cluster",
-    "create_tma_descriptor",
     "deallocate_tmem",
     "dec_max_nreg",
     "disable_warp_group_reg_alloc",
-    "fence_proxy_async",
     "get_warp_group_idx",
     "inc_max_nreg",
     "increase_descriptor_offset",
@@ -89,9 +70,6 @@ _MACA_API_ALL = (
     "lds64",
     "match_all_sync",
     "match_any_sync",
-    "named_barrier_arrive",
-    "ptx_arrive_cluster_barrier",
-    "ptx_mma_sm70",
     "set_max_nreg",
     "shuffle_elect",
     "stg128",
@@ -101,14 +79,7 @@ _MACA_API_ALL = (
     "sts128",
     "sts32",
     "sts64",
-    "tma_copy",
-    "tma_gather4",
-    "tma_gather4_bytes",
-    "tma_load",
-    "tma_load_2sm",
-    "tma_scatter4",
-    "tma_store_arrive",
-    "tma_store_wait",
+    "maca_async_copy",
 )
 
 __tilelang_dialect__ = "maca"
@@ -117,7 +88,6 @@ __all__ = tuple(
         (
             *_COMMON_ALL,
             *_MACA_API_ALL,
-            *_CLUSTER_ALL,
             *_INTRINSICS_ALL,
             *_PDL_ALL,
             *_PRINT_ALL,
@@ -128,4 +98,4 @@ __all__ = tuple(
     )
 )
 
-del _CLUSTER_ALL, _COMMON_ALL, _MACA_API_ALL, _INTRINSICS_ALL, _PDL_ALL, _PRINT_ALL, _RANDOM_ALL, _TIR_ALL, _WARPGROUP_ALL
+del _COMMON_ALL, _MACA_API_ALL, _INTRINSICS_ALL, _PDL_ALL, _PRINT_ALL, _RANDOM_ALL, _TIR_ALL, _WARPGROUP_ALL

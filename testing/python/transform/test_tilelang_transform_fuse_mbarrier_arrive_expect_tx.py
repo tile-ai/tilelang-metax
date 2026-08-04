@@ -27,6 +27,8 @@ def _collect_calls(stmt, op_name: str):
     return calls
 
 
+@tilelang.testing.skip_on_maca
+@tilelang.testing.requires_cuda
 def test_fuse_simple_tma_expect_arrive():
     @T.prim_func
     def before(A_desc: T.handle("uint8x128", "grid_constant")):
@@ -52,6 +54,8 @@ def test_fuse_simple_tma_expect_arrive():
     assert len(_collect_calls(main.body, "tirx.ptx_arrive_barrier")) == 0
 
 
+@tilelang.testing.skip_on_maca
+@tilelang.testing.requires_cuda
 def test_fuse_requires_same_barrier():
     @T.prim_func
     def before(A_desc: T.handle("uint8x128", "grid_constant")):
@@ -77,6 +81,8 @@ def test_fuse_requires_same_barrier():
     assert len(_collect_calls(main.body, "tirx.ptx_arrive_barrier")) == 1
 
 
+@tilelang.testing.skip_on_maca
+@tilelang.testing.requires_cuda
 def test_fuse_inside_warp_specialization_scope():
     @T.prim_func
     def before(A_desc: T.handle("uint8x128", "grid_constant")):

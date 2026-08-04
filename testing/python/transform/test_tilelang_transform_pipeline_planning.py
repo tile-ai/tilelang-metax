@@ -2,6 +2,7 @@ from tilelang import tvm as tvm
 import tilelang as tl
 from tilelang.backend.target import determine_target
 import tilelang.language as T
+import tilelang.testing
 from tvm.tirx.stmt_functor import post_order_visit
 
 auto_target = tvm.target.Target(determine_target("auto"))
@@ -258,6 +259,8 @@ def test_pipeline_planning_before_after_mbarrier_arrive_wait_plan():
     _check(before, after, target=sm80_target)
 
 
+@tilelang.testing.skip_on_maca
+@tilelang.testing.requires_cuda
 def test_pipeline_planning_before_after_tma_copy_plan():
     @T.prim_func
     def before(A: T.Tensor((64,), T.float16), C: T.Tensor((64,), T.float16)):
@@ -314,6 +317,8 @@ def test_pipeline_planning_before_after_tma_copy_plan():
     _check(before, after, target=sm90_target)
 
 
+@tilelang.testing.skip_on_maca
+@tilelang.testing.requires_cuda
 def test_pipeline_planning_before_after_wgmma_gemm_plan():
     @T.prim_func
     def before(
@@ -388,6 +393,8 @@ def test_pipeline_planning_before_after_wgmma_gemm_plan():
     _check(before, after, target=sm90_target)
 
 
+@tilelang.testing.skip_on_maca
+@tilelang.testing.requires_cuda
 def test_pipeline_planning_before_after_tcgen05_gemm_plan():
     @T.prim_func
     def before(

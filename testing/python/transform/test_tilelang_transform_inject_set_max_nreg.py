@@ -35,6 +35,8 @@ def _find_if_with_set_max_nreg(func, then_call, else_call):
     return matches[0]
 
 
+@tilelang.testing.skip_on_maca
+@tilelang.testing.requires_cuda
 def test_inject_set_max_nreg():
     """Test the InjectSetMaxNReg pass"""
 
