@@ -38,7 +38,6 @@ def test_dynamic_shared_memory_merge_emits_named_aliases():
     assert _get_dynamic_shared_memory_bytes(artifact) == 128
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_static_and_local_fp4_allocations_use_packed_extents():
     @T.prim_func
@@ -49,7 +48,7 @@ def test_static_and_local_fp4_allocations_use_packed_extents():
             A_shared[126] = T.cast(0.0, T.float4_e2m1fn)
             A_local[126] = A_shared[126]
 
-    source = tilelang.lower(kernel, target="cuda").kernel_source
+    source = tilelang.lower(kernel, target="auto").kernel_source
 
     assert "fp4_e2_t A_shared[64];" in source
     assert "fp4_e2_2_t A_local_packed[64];" in source
@@ -90,7 +89,6 @@ def test_merged_dynamic_fp4_allocations_use_packed_sizes_and_offsets():
     assert _get_dynamic_shared_memory_bytes(artifact) == 128
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     "dtype,storage_type",

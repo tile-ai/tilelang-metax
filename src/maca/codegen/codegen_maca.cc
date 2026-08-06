@@ -575,6 +575,18 @@ void CodeGenTileLangMACA::PrintType(DataType t, std::ostream &os) { // NOLINT(*)
       os << GetTileLangFP6Type(t);
     }
     return;
+  } else if (t.is_float4_e2m1_unpacked()) {
+    LOG(FATAL) << "float4_e2m1_unpacked is a SMEM/TMA storage tag and must be "
+                  "lowered through shared-memory allocation";
+    return;
+  } else if (t.is_float4_e2m1fn()) {
+    enable_fp4_ = true;
+    if (t.lanes() <= 64) {
+      os << GetTileLangFP4Type(t);
+    } else {
+      fail = true;
+    }
+    return;
   } else if (t.is_tfloat32()) {
     if (t.is_scalar()) {
       os << "float";
@@ -589,14 +601,14 @@ void CodeGenTileLangMACA::PrintType(DataType t, std::ostream &os) { // NOLINT(*)
     }
     if (!fail)
       return;
-  } else if (t.is_float4()) {
-    enable_fp4_ = true;
-    if (t.lanes() <= 64) {
-      os << GetTileLangFP4Type(t);
-    } else {
-      fail = true;
-    }
-    return;
+    // } else if (t.is_float4()) {
+    //   enable_fp4_ = true;
+    //   if (t.lanes() <= 64) {
+    //     os << GetTileLangFP4Type(t);
+    //   } else {
+    //     fail = true;
+    //   }
+    //   return;
   } else if (t == DataType::Bool()) {
     os << "bool";
     return;
@@ -632,7 +644,12 @@ void CodeGenTileLangMACA::PrintType(DataType t, std::ostream &os) { // NOLINT(*)
     }
     case 4: {
       if (t.is_scalar()) {
-        os << "int";
+        enable_int8_ = true;
+        if (!t.is_uint()) {
+          os << "signed char";
+        } else {
+          os << "char";
+        }
         return;
       } else if (t.lanes() == 4) {
         os << "int16_t";
@@ -1743,6 +1760,11 @@ std::string CodeGenTileLangMACA::GetBufferRef(DataType t,
   const VarNode *buffer_var = buffer->data.get();
   std::ostringstream os;
   std::string vid = GetVarID(buffer_var);
+  // For fp4 packed buffers, use the packed buffer name for vector accesses
+  auto it = fp4_packed_buffers_.find(buffer_var);
+  if (it != fp4_packed_buffers_.end() && !t.is_scalar()) {
+    vid = it->second;
+  }
   std::string scope;
   if (alloc_storage_scope_.count(buffer_var)) {
     scope = alloc_storage_scope_.at(buffer_var);
@@ -3076,8 +3098,22 @@ void CodeGenTileLangMACA::VisitStmt_(const AllocBufferNode *op) {
     ICHECK(op->annotations.count("barrier_type"));
     stream << Downcast<StringImm>(op->annotations.at("barrier_type"))->value;
   } else {
-    PrintStorageScope(scope, stream);
-    PrintType(alloc_dtype, stream);
+    bool is_float4_unpacked_shared =
+        alloc_dtype.is_float4_e2m1_unpacked() &&
+        (scope == "shared" || scope == "shared.dyn");
+    bool is_fp4_scalar_local = alloc_dtype.is_float4_e2m1fn() &&
+                               alloc_dtype.is_scalar() && scope == "local";
+    bool is_int4_scalar_local =
+        (alloc_dtype == DataType::Int(4) || alloc_dtype == DataType::UInt(4)) &&
+        alloc_dtype.is_scalar() && scope == "local";
+    if (!is_fp4_scalar_local && !is_int4_scalar_local) {
+      PrintStorageScope(scope, stream);
+      if (is_float4_unpacked_shared) {
+        stream << "uint8_t";
+      } else {
+        PrintType(alloc_dtype, stream);
+      }
+    }
   }
 
   if (scope == "shared.dyn") {
@@ -3092,10 +3128,13 @@ void CodeGenTileLangMACA::VisitStmt_(const AllocBufferNode *op) {
     if (scope.find("wmma.") == 0) {
       constant_size = GetWmmaFragmentSize(scope, buffer, constant_size);
     }
-    if ((alloc_dtype == DataType::Int(4) || alloc_dtype == DataType::UInt(4) ||
-         alloc_dtype == DataType::Int(1)) &&
-        scope == "shared") {
-      constant_size = constant_size / (32 / alloc_dtype.bits());
+    bool is_byte_packed_4bit =
+        alloc_dtype == DataType::Int(4) || alloc_dtype == DataType::UInt(4) ||
+        (alloc_dtype.is_float4_e2m1fn() && alloc_dtype.is_scalar());
+    if (is_byte_packed_4bit && scope == "shared") {
+      constant_size = (constant_size + 1) / 2;
+    } else if (alloc_dtype == DataType::Int(1) && scope == "shared") {
+      constant_size = constant_size / 32;
     }
     if (scope == "shared") {
       stream << ' ' << vid << '[' << constant_size << "];\n";
@@ -3106,7 +3145,20 @@ void CodeGenTileLangMACA::VisitStmt_(const AllocBufferNode *op) {
       stream << "auto " << vid << " = reinterpret_cast<" << mbarrier_dtype_
              << "*>(" << v_id_mem << ");\n";
     } else if (scope == "local") {
-      stream << ' ' << vid << '[' << constant_size << "];\n";
+      if (alloc_dtype == DataType::Int(4) || alloc_dtype == DataType::UInt(4)) {
+        stream << "alignas(16) ";
+        PrintType(alloc_dtype, stream);
+        stream << ' ' << vid << '[' << (constant_size + 1) / 2 << "];\n";
+      } else {
+        if (alloc_dtype.is_float4_e2m1fn() && alloc_dtype.is_scalar()) {
+          auto vid_packed = vid + "_packed";
+          stream << "fp4_e2_2_t " << vid_packed << '['
+                 << (constant_size + 1) / 2 << "];\n";
+          fp4_packed_buffers_[op->buffer->data.get()] = vid_packed;
+        } else {
+          stream << ' ' << vid << '[' << constant_size << "];\n";
+        }
+      }
     } else if (scope == "local.var") {
       PrimExpr init = tirx::make_const(alloc_dtype, 0);
       auto init_it = op->annotations.find(tl::attr::kLocalVarInit);

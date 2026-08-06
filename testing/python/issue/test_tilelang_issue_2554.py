@@ -5,7 +5,6 @@ import tilelang.language as T
 import tilelang.testing
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_runtime_unknown_sign_vector_negative_index_load():
     @T.prim_func
@@ -32,7 +31,6 @@ def test_runtime_unknown_sign_vector_negative_index_load():
     torch.testing.assert_close(b, expected)
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_runtime_unknown_sign_vector_negative_index_store():
     @T.prim_func

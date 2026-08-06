@@ -706,3 +706,18 @@ TL_DEVICE maca_bfloat162 abs2(maca_bfloat162 a) { return __habs2(a); }
 TL_DEVICE half2 abs2(half2 a) { return __habs2(a); }
 
 } // namespace tl
+
+// MACA vector types are aggregate structs, so they do not accept the
+// function-style construction emitted by the generic C code generator (for
+// example, `longlong4(a, b, c, d)`).  The MACA SDK already provides the
+// corresponding make_* helpers.  Function-like macros only rewrite calls;
+// uses such as `longlong4 value` remain type declarations.
+#ifndef TILELANG_MACA_VECTOR_CONSTRUCTOR_COMPAT
+#define TILELANG_MACA_VECTOR_CONSTRUCTOR_COMPAT
+#define longlong2(...) make_longlong2(__VA_ARGS__)
+#define longlong3(...) make_longlong3(__VA_ARGS__)
+#define longlong4(...) make_longlong4(__VA_ARGS__)
+#define ulonglong2(...) make_ulonglong2(__VA_ARGS__)
+#define ulonglong3(...) make_ulonglong3(__VA_ARGS__)
+#define ulonglong4(...) make_ulonglong4(__VA_ARGS__)
+#endif

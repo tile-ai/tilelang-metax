@@ -18,8 +18,6 @@ from tilelang.utils.pass_timing import (
 )
 
 
-@tilelang.testing.pytest.mark.xfail
-@tilelang.testing.requires_cuda
 def _simple_module():
     @T.prim_func
     def program(A: T.Tensor((16,), "float32"), B: T.Tensor((16,), "float32")):
@@ -30,7 +28,6 @@ def _simple_module():
     return tvm.IRModule({"main": program})
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_pass_timing_records_simple_pass():
     timing = TileLangPassTimingInstrument()
@@ -44,7 +41,6 @@ def test_pass_timing_records_simple_pass():
     assert all(0 <= record.self_duration_s <= record.duration_s for record in timing.records)
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_pass_timing_wrapper_can_be_collected():
     timing = TileLangPassTimingInstrument()
@@ -58,7 +54,6 @@ def test_pass_timing_wrapper_can_be_collected():
     assert state_ref() is None
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_build_pass_instruments_prepends_timing():
     base_instrument = object()
@@ -70,7 +65,6 @@ def test_build_pass_instruments_prepends_timing():
     assert instruments[1] is base_instrument
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_build_pass_instruments_without_profile_preserves_base_instruments():
     base_instrument = object()
@@ -81,7 +75,6 @@ def test_build_pass_instruments_without_profile_preserves_base_instruments():
     assert instruments == [base_instrument]
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_pass_timing_excludes_later_after_pass_callbacks(monkeypatch):
     clock = [0.0]
@@ -102,7 +95,6 @@ def test_pass_timing_excludes_later_after_pass_callbacks(monkeypatch):
     assert clock[0] == 1.0
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_pass_timing_calculates_nested_self_time(monkeypatch):
     timing = TileLangPassTimingInstrument()
@@ -125,7 +117,6 @@ def test_pass_timing_calculates_nested_self_time(monkeypatch):
     assert timing.total_duration_s == pytest.approx(5.0)
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_pass_timing_report_filters_by_inclusive_threshold():
     timing = TileLangPassTimingInstrument(threshold_ms=10.0)
@@ -145,7 +136,6 @@ def test_pass_timing_report_filters_by_inclusive_threshold():
     assert "Self" in report
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_pass_timing_report_includes_context():
     timing = TileLangPassTimingInstrument()
@@ -156,7 +146,6 @@ def test_pass_timing_report_includes_context():
     assert "Context: stage=grouped-host, config=3, kernel=main_gc_3" in report
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_pass_timing_report_is_emitted_on_failure(monkeypatch):
     timing = TileLangPassTimingInstrument()
@@ -172,15 +161,17 @@ def test_pass_timing_report_is_emitted_on_failure(monkeypatch):
     assert contexts == ["stage=jit-lower, kernel=main"]
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
-def test_pass_timing_cleans_incomplete_frames_after_pass_failure(caplog):
+def test_pass_timing_cleans_incomplete_frames_after_pass_failure(caplog, monkeypatch):
     timing = TileLangPassTimingInstrument()
 
     @tvm.transform.module_pass(opt_level=0, name="FailingPass")
     def failing_pass(mod, ctx):
         raise RuntimeError("expected failure")
 
+    # TileLang's top-level logger normally stops propagation after its custom
+    # handler; enable propagation so pytest's caplog fixture can inspect it.
+    monkeypatch.setattr(logging.getLogger("tilelang"), "propagate", True)
     caplog.set_level(logging.WARNING, logger="tilelang.pass_timing")
     with pytest.raises(RuntimeError, match="expected failure"), tvm.transform.PassContext(instruments=[timing.instrument]):
         failing_pass(_simple_module())
@@ -189,10 +180,10 @@ def test_pass_timing_cleans_incomplete_frames_after_pass_failure(caplog):
     assert "Discarding 1 incomplete pass timing frame" in caplog.text
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
-def test_pass_timing_ignores_unmatched_after_callback(caplog):
+def test_pass_timing_ignores_unmatched_after_callback(caplog, monkeypatch):
     timing = TileLangPassTimingInstrument()
+    monkeypatch.setattr(logging.getLogger("tilelang"), "propagate", True)
     caplog.set_level(logging.WARNING, logger="tilelang.pass_timing")
 
     timing._enter_pass_ctx()

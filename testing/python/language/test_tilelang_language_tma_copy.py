@@ -397,7 +397,7 @@ def run_fp4_tma_copy_roundtrip():
     assert torch.equal(b.view(torch.int8), a)
 
 
-@tilelang.testing.pytest.mark.xfail
+@tilelang.testing.skip_on_maca
 def test_fp4_unpacksmem_tma_descriptor_uses_align16b():
     program = fp4_tma_copy_unpacked_smem_load()
     artifact = tilelang.lower(
@@ -413,7 +413,7 @@ def test_fp4_unpacksmem_tma_descriptor_uses_align16b():
     assert 'T.call_packed("__tvm_tensormap_create_tiled", A_desc, 14,' in host_ir
 
 
-@tilelang.testing.pytest.mark.xfail
+@tilelang.testing.skip_on_maca
 def test_fp4_unpacksmem_tma_store_is_rejected():
     program = fp4_tma_copy_unpacked_smem_store()
     with pytest.raises(tvm.TVMError, match="only supports float4_e2m1_unpacked as an FP4 unpack load"):
@@ -424,7 +424,7 @@ def test_fp4_unpacksmem_tma_store_is_rejected():
         )
 
 
-@tilelang.testing.pytest.mark.xfail
+@tilelang.testing.skip_on_maca
 def test_copy_prefer_tma_lowers_as_synchronous_tma_load():
     @T.prim_func
     def main(x: T.Tensor((128, 32), T.float32)):

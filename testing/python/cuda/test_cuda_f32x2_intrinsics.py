@@ -327,7 +327,7 @@ def test_codegen_auto_vec_fma_f32():
     assert "tl::fma2" in src, "Expected tl::fma2 in SM100 auto-vectorised CUDA source for float32 mul+add"
 
 
-@tilelang.testing.pytest.mark.xfail
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize("op_name,reduce_func,packed_ops", _REDUCE_OPS, ids=[op[0] for op in _REDUCE_OPS])
 def test_codegen_auto_vec_reduce_f32_sm100(op_name, reduce_func, packed_ops):
@@ -346,7 +346,7 @@ def test_codegen_auto_vec_reduce_f32_no_sm80(op_name, reduce_func, packed_ops):
         assert f"tl::{packed_op}" not in src, f"tl::{packed_op} should not appear in pre-SM100 float32 {op_name} reduction"
 
 
-@tilelang.testing.pytest.mark.xfail
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     "reduce_func,packed_op",
