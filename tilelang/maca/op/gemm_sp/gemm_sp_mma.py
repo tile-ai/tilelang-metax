@@ -84,7 +84,6 @@ class GemmSPMMA(GemmSPBase):
         warp_rows = mma_emitter.warp_rows
         warp_cols = mma_emitter.warp_cols
         local_size_a = mma_emitter.local_size_a
-        local_size_e = mma_emitter.local_size_e
         local_size_b = mma_emitter.local_size_b
         micro_size_k = mma_emitter.micro_size_k
         A_shared = self.ARegion
@@ -141,7 +140,6 @@ class GemmSPMMA(GemmSPBase):
                 accumulating into C_local.
                 """
                 A_local = T.alloc_local((warp_rows * local_size_a), in_dtype)
-                E_local = T.alloc_local((warp_rows * local_size_e), self.e_dtype)
 
                 if clear_accum:
                     T.clear(C_local)
@@ -151,18 +149,12 @@ class GemmSPMMA(GemmSPBase):
                     mma_emitter.ldmatrix_a(
                         A_local,
                         A_shared,
-                        ki,
-                    )
-
-                    # Load E into fragment
-                    mma_emitter.ldmatrix_e(
-                        E_local,
                         E_shared,
                         ki,
                     )
 
                     # Perform Matrix Multiplication
-                    mma_emitter.mma_sp(A_local, E_local, B_local, C_local, ki)
+                    mma_emitter.mma(A_local, B_local, C_local, ki)
 
             # Simplify to optimize the index computing
             # Must inline let statements to simplify the analysis
@@ -170,7 +162,7 @@ class GemmSPMMA(GemmSPBase):
             # insert into parent block
             return _Simplify(_gemm_srr, inline_let=True)
         elif self.is_gemm_rs():
-            A_local = self.A
+            A_original = self.A
 
             @T.prim_func
             def _gemm_rsr() -> None:
@@ -179,7 +171,7 @@ class GemmSPMMA(GemmSPBase):
                 B_shared into local fragments, then issues Tensor Core mma ops,
                 accumulating into C_local.
                 """
-                E_local = T.alloc_local((warp_rows * local_size_e), self.e_dtype)
+                A_local = T.alloc_local((warp_rows * local_size_a), in_dtype)
                 B_local = T.alloc_local((warp_cols * local_size_b), in_dtype)
 
                 if clear_accum:
@@ -187,8 +179,9 @@ class GemmSPMMA(GemmSPBase):
 
                 for ki in T.serial(0, (self.K // micro_size_k)):
                     # Load E into fragment
-                    mma_emitter.ldmatrix_e(
-                        E_local,
+                    mma_emitter.ldmatrix_a(
+                        A_local,
+                        A_original,
                         E_shared,
                         ki,
                     )
@@ -201,13 +194,13 @@ class GemmSPMMA(GemmSPBase):
                     )
 
                     # Perform Matrix Multiplication
-                    mma_emitter.mma_sp(A_local, E_local, B_local, C_local, ki)
+                    mma_emitter.mma(A_local, B_local, C_local, ki)
 
             # Simplify to optimize the index computing
             # Must inline let statements to simplify the analysis
             return _Simplify(_gemm_rsr, inline_let=True)
         elif self.is_gemm_rr():
-            A_local = self.A
+            A_original = self.A
             B_local = self.B
 
             @T.prim_func
@@ -217,21 +210,22 @@ class GemmSPMMA(GemmSPBase):
                 B_shared into local fragments, then issues Tensor Core mma ops,
                 accumulating into C_local.
                 """
-                E_local = T.alloc_local((warp_rows * local_size_e), self.e_dtype)
+                A_local = T.alloc_local((warp_rows * local_size_a), in_dtype)
 
                 if clear_accum:
                     T.clear(C_local)
 
                 for ki in T.serial(0, (self.K // micro_size_k)):
                     # Load E into fragment
-                    mma_emitter.ldmatrix_e(
-                        E_local,
+                    mma_emitter.ldmatrix_a(
+                        A_local,
+                        A_original,
                         E_shared,
                         ki,
                     )
 
                     # Perform Matrix Multiplication
-                    mma_emitter.mma_sp(A_local, E_local, B_local, C_local, ki)
+                    mma_emitter.mma(A_local, B_local, C_local, ki)
 
             # Simplify to optimize the index computing
             # Must inline let statements to simplify the analysis

@@ -10,15 +10,7 @@ from tvm.runtime import convert
 from ..layout.utils import mma_store_index_map
 from tilelang.utils import is_fragment, get_buffer_region_from_load
 
-from tilelang.maca.intrinsics.layout.mma_sp_layout import (
-    shared_16x16_to_mma_sp_layout_sr_a,
-    shared_16x16_to_mma_sp_layout_sr_b,
-    shared_16x32_to_mma_sp_layout_sr_a,
-    shared_16x32_to_mma_sp_layout_sr_b,
-    shared_16x64_to_mma_sp_layout_sr_a,
-    shared_16x64_to_mma_sp_layout_sr_b,
-)
-
+from tilelang.maca.intrinsics.layout.mma_layout import *
 
 lift = convert
 
@@ -136,7 +128,6 @@ class SparseTensorCoreIntrinEmitter:
 
     def _initialize_local_size(self, m_dim=16, n_dim=16, k_dim=16, warp_size=64):
         self.local_size_a = (m_dim * k_dim) // warp_size
-        self.local_size_e = (m_dim * k_dim) // self.e_factor // warp_size * self.E_REPLICATE_FACTOR[self.a_dtype]
         self.local_size_b = (n_dim * k_dim) // warp_size
         self.local_size_out = (m_dim * n_dim) // warp_size
 
@@ -155,8 +146,8 @@ class SparseTensorCoreIntrinEmitter:
             "float64": "f64",
             "int8": "i8",
             "int32": "i32",
-            "float8_e4m3fn": "fp8",
-            "float8_e4m3fnuz": "fp8",
+            "float8_e4m3fn": "f8",
+            "float8_e4m3fnuz": "f8",
             "float8_e5m2": "bf8",
             "float8_e5m2fnuz": "bf8",
         }[in_dtype]
@@ -501,8 +492,6 @@ class SparseTensorCoreIntrinEmitter:
         assert matrix in ["A", "B"], "matrix should be either A or B"
         matrix_is_a: bool = matrix == "A"
         matrix_is_b: bool = matrix == "B"
-        dtype = self.a_dtype if matrix_is_a else self.b_dtype
-        dtype_bits = DataType(dtype).bits
         transposed = self.a_transposed if matrix_is_a else self.b_transposed
 
         # s represents spatial axis
@@ -513,17 +502,25 @@ class SparseTensorCoreIntrinEmitter:
         # then rs also can represent a transposed basic layout
         transform_func_sr_a: Callable = None
         transform_func_sr_b: Callable = None
-        if dtype_bits == 32:
-            transform_func_sr_a = shared_16x16_to_mma_sp_layout_sr_a
-            transform_func_sr_b = shared_16x16_to_mma_sp_layout_sr_b
-        elif dtype_bits == 16:
-            transform_func_sr_a = shared_16x32_to_mma_sp_layout_sr_a
-            transform_func_sr_b = shared_16x32_to_mma_sp_layout_sr_b
-        elif dtype_bits == 8:
-            transform_func_sr_a = shared_16x64_to_mma_sp_layout_sr_a
-            transform_func_sr_b = shared_16x64_to_mma_sp_layout_sr_b
+        k_dim = self.k_dim
+
+        if k_dim == 4:
+            transform_func_sr_a = shared_16x4_to_local_64x1_layout_A
+            transform_func_sr_b = shared_16x4_to_local_64x1_layout_A
+        elif k_dim == 8:
+            transform_func_sr_a = shared_16x4_to_local_64x1_layout_A
+            transform_func_sr_b = shared_16x8_to_local_64x2_layout_A
+        elif k_dim == 16:
+            transform_func_sr_a = shared_16x8_to_local_64x2_layout_A
+            transform_func_sr_b = shared_16x16_to_local_64x4_layout_A
+        elif k_dim == 32:
+            transform_func_sr_a = shared_16x16_to_local_64x4_layout_A
+            transform_func_sr_b = shared_16x32_to_local_64x8_layout_A
+        elif k_dim == 64:
+            transform_func_sr_a = shared_16x32_to_local_64x8_layout_A
+            transform_func_sr_b = shared_16x64_to_local_64x16_layout_A
         else:
-            raise ValueError(f"Unsupported dtype {dtype}")
+            raise ValueError(f"k_dim must be 0 currently but got {k_dim}")
 
         is_sr_conditions = [False]
         is_sr_conditions.append(matrix_is_a and not transposed)
