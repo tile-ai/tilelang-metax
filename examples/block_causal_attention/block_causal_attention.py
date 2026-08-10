@@ -184,7 +184,7 @@ def _bwd_dq_template(
     dllm_block: int,
     softmax_scale: float,
     block_size: int = 64,
-    num_stages: int = 3,
+    num_stages: int = 1,
     threads: int = 128,
     dtype: str = "bfloat16",
 ):
@@ -274,7 +274,7 @@ def _bwd_dkv_template(
     dllm_block: int,
     softmax_scale: float,
     block_size: int = 64,
-    num_stages: int = 3,
+    num_stages: int = 1,
     threads: int = 128,
     dtype: str = "bfloat16",
 ):

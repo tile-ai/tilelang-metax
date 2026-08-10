@@ -4,15 +4,11 @@ import block_causal_attention
 import block_causal_attention_varlen
 
 
-# TODO Shared memory size error
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_block_causal_attention_fixed():
     block_causal_attention.test_block_causal_attention_all_block_sizes()
 
 
-# TODO Shared memory size error
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_block_causal_attention_varlen():
     block_causal_attention_varlen.test_block_causal_attention_varlen()

@@ -22,6 +22,7 @@ def _fwd_varlen_template(
     dllm_block: int,
     softmax_scale: float,
     block_size: int = 64,
+    dim_tile: int = 64,
     num_stages: int = 1,
     threads: int = 128,
     dtype: str = "bfloat16",
@@ -32,6 +33,7 @@ def _fwd_varlen_template(
     neg_inf = -1.0e6
     total_tokens = T.dynamic("total_tokens")
     shape = [total_tokens, heads, dim]
+    num_dim_tiles = T.ceildiv(dim, dim_tile)
 
     @T.prim_func
     def fwd(
@@ -44,10 +46,10 @@ def _fwd_varlen_template(
         LSE: T.Tensor([heads, total_tokens], accum_dtype),
     ):
         with T.Kernel(T.ceildiv(max_seqlen, block_size), heads, batch, threads=threads) as (bx, by, bz):
-            Q_shared = T.alloc_shared([block_size, dim], dtype)
-            K_shared = T.alloc_shared([block_size, dim], dtype)
-            V_shared = T.alloc_shared([block_size, dim], dtype)
-            O_shared = T.alloc_shared([block_size, dim], dtype)
+            Q_shared = T.alloc_shared([block_size, dim_tile], dtype)
+            K_shared = T.alloc_shared([block_size, dim_tile], dtype)
+            V_shared = T.alloc_shared([block_size, dim_tile], dtype)
+            O_shared = T.alloc_shared([block_size, dim_tile], dtype)
             acc_s = T.alloc_fragment([block_size, block_size], accum_dtype)
             acc_s_cast = T.alloc_fragment([block_size, block_size], dtype)
             acc_o = T.alloc_fragment([block_size, dim], accum_dtype)
@@ -56,6 +58,7 @@ def _fwd_varlen_template(
             scores_scale = T.alloc_fragment([block_size], accum_dtype)
             scores_sum = T.alloc_fragment([block_size], accum_dtype)
             logsum = T.alloc_fragment([block_size], accum_dtype)
+            o_partial = T.alloc_fragment([block_size, dim_tile], accum_dtype)
 
             seq_start = cu_seqlens[bz]
             seqlen = cu_seqlens[bz + 1] - seq_start
@@ -64,7 +67,6 @@ def _fwd_varlen_template(
             q_is_noisy = bx < region_tiles
 
             if bx < region_tiles * 2:
-                T.copy(Q[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, :], Q_shared)
                 T.fill(acc_o, 0)
                 T.fill(logsum, 0)
                 T.fill(scores_max, neg_inf)
@@ -73,20 +75,26 @@ def _fwd_varlen_template(
                 num_steps = T.if_then_else(q_is_noisy, bx + 2, (bx - region_tiles) + 1)
                 for s in T.Pipelined(num_steps, num_stages=num_stages):
                     is_noisy_diag = T.if_then_else(s > last_clean_step, 1, 0)
-                    if is_noisy_diag != 0:
-                        T.copy(K[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, :], K_shared)
-                    else:
-                        T.copy(K[clean_off + s * block_size : clean_off + (s + 1) * block_size, by, :], K_shared)
+
+                    T.clear(acc_s)
+                    for dt in T.serial(num_dim_tiles):
+                        d_start = dt * dim_tile
+                        d_end = T.min(d_start + dim_tile, dim)
+                        T.copy(Q[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, d_start:d_end], Q_shared)
+
+                        if is_noisy_diag != 0:
+                            T.copy(K[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, d_start:d_end], K_shared)
+                        else:
+                            T.copy(K[clean_off + s * block_size : clean_off + (s + 1) * block_size, by, d_start:d_end], K_shared)
+
+                        T.gemm(Q_shared, K_shared, acc_s, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
 
                     needs_mask = is_noisy_diag + T.if_then_else(s == last_clean_step, 1, 0)
                     if needs_mask != 0:
                         for i, j in T.Parallel(block_size, block_size):
                             allowed = _fwd_tile_allowed(i, j, dllm_block, is_noisy_diag, q_is_noisy)
-                            acc_s[i, j] = T.if_then_else(allowed > 0, 0, neg_inf)
-                    else:
-                        T.clear(acc_s)
+                            acc_s[i, j] = T.if_then_else(allowed > 0, acc_s[i, j], neg_inf)
 
-                    T.gemm(Q_shared, K_shared, acc_s, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
                     T.copy(scores_max, scores_max_prev)
                     T.fill(scores_max, neg_inf)
                     T.reduce_max(acc_s, scores_max, dim=1, clear=False)
@@ -103,16 +111,32 @@ def _fwd_varlen_template(
 
                     for i, j in T.Parallel(block_size, dim):
                         acc_o[i, j] *= scores_scale[i]
-                    if is_noisy_diag != 0:
-                        T.copy(V[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, :], V_shared)
-                    else:
-                        T.copy(V[clean_off + s * block_size : clean_off + (s + 1) * block_size, by, :], V_shared)
-                    T.gemm(acc_s_cast, V_shared, acc_o, policy=T.GemmWarpPolicy.FullRow)
+
+                    for dt in T.serial(num_dim_tiles):
+                        d_start = dt * dim_tile
+                        d_end = T.min(d_start + dim_tile, dim)
+
+                        if is_noisy_diag != 0:
+                            T.copy(V[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, d_start:d_end], V_shared)
+                        else:
+                            T.copy(V[clean_off + s * block_size : clean_off + (s + 1) * block_size, by, d_start:d_end], V_shared)
+                        T.clear(o_partial)
+                        T.gemm(acc_s_cast, V_shared, o_partial, policy=T.GemmWarpPolicy.FullRow)
+                        for i, j in T.Parallel(block_size, dim_tile):
+                            if d_start + j < dim:
+                                acc_o[i, d_start + j] += o_partial[i, j]
 
                 for i, j in T.Parallel(block_size, dim):
                     acc_o[i, j] /= logsum[i] + 1e-30
-                T.copy(acc_o, O_shared)
-                T.copy(O_shared, Output[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, :])
+
+                for dt in T.serial(num_dim_tiles):
+                    d_start = dt * dim_tile
+                    d_end = T.min(d_start + dim_tile, dim)
+                    for i, j in T.Parallel(block_size, dim_tile):
+                        if d_start + j < dim:
+                            O_shared[i, j] = acc_o[i, d_start + j]
+
+                    T.copy(O_shared, Output[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, d_start:d_end])
                 for i in T.Parallel(block_size):
                     logsum[i] = T.log2(logsum[i] + 1e-30) + scores_max[i] * scale_log2e
                 T.copy(logsum, LSE[by, seq_start + bx * block_size : seq_start + (bx + 1) * block_size])
@@ -160,6 +184,7 @@ def _bwd_dq_varlen_template(
     dllm_block: int,
     softmax_scale: float,
     block_size: int = 64,
+    dim_tile: int = 64,
     num_stages: int = 3,
     threads: int = 128,
     dtype: str = "bfloat16",
@@ -171,6 +196,7 @@ def _bwd_dq_varlen_template(
     accum_dtype = "float32"
     total_tokens = T.dynamic("total_tokens")
     shape = [total_tokens, heads, dim]
+    num_dim_tiles = T.ceildiv(dim, dim_tile)
 
     @T.prim_func
     def dq_kernel(
@@ -185,17 +211,19 @@ def _bwd_dq_varlen_template(
         dQ: T.Tensor(shape, dtype),
     ):
         with T.Kernel(T.ceildiv(max_seqlen, block_size), heads, batch, threads=threads) as (bx, by, bz):
-            q = T.alloc_shared([block_size, dim], dtype)
-            k_shared = T.alloc_shared([block_size, dim], dtype)
-            v_shared = T.alloc_shared([block_size, dim], dtype)
-            do = T.alloc_shared([block_size, dim], dtype)
+            Q_shared = T.alloc_shared([block_size, dim_tile], dtype)
+            k_shared = T.alloc_shared([block_size, dim_tile], dtype)
+            v_shared = T.alloc_shared([block_size, dim_tile], dtype)
+            dO_shared = T.alloc_shared([block_size, dim_tile], dtype)
             lse = T.alloc_shared([block_size], accum_dtype)
             delta = T.alloc_shared([block_size], accum_dtype)
             qk = T.alloc_fragment([block_size, block_size], accum_dtype)
             ds = T.alloc_fragment([block_size, block_size], accum_dtype)
             ds_cast = T.alloc_fragment([block_size, block_size], dtype)
             dq = T.alloc_fragment([block_size, dim], accum_dtype)
-            dq_shared = T.alloc_shared([block_size, dim], dtype)
+            qk_partial = T.alloc_fragment([block_size, block_size], accum_dtype)
+            ds_partial = T.alloc_fragment([block_size, block_size], accum_dtype)
+            dq_partial = T.alloc_fragment([block_size, dim_tile], accum_dtype)
 
             seq_start = cu_seqlens[bz]
             seqlen = cu_seqlens[bz + 1] - seq_start
@@ -204,8 +232,6 @@ def _bwd_dq_varlen_template(
             q_is_noisy = bx < region_tiles
 
             if bx < region_tiles * 2:
-                T.copy(Q[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, :], q)
-                T.copy(dO[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, :], do)
                 T.copy(LSE[by, seq_start + bx * block_size : seq_start + (bx + 1) * block_size], lse)
                 T.copy(Delta[by, seq_start + bx * block_size : seq_start + (bx + 1) * block_size], delta)
                 T.clear(dq)
@@ -214,15 +240,23 @@ def _bwd_dq_varlen_template(
                 num_steps = T.if_then_else(q_is_noisy, bx + 2, (bx - region_tiles) + 1)
                 for s in T.Pipelined(num_steps, num_stages=num_stages):
                     is_noisy_diag = T.if_then_else(s > last_clean_step, 1, 0)
-                    if is_noisy_diag != 0:
-                        T.copy(K[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, :], k_shared)
-                        T.copy(V[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, :], v_shared)
-                    else:
-                        T.copy(K[clean_off + s * block_size : clean_off + (s + 1) * block_size, by, :], k_shared)
-                        T.copy(V[clean_off + s * block_size : clean_off + (s + 1) * block_size, by, :], v_shared)
 
                     T.clear(qk)
-                    T.gemm(q, k_shared, qk, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
+                    for dt in T.serial(num_dim_tiles):
+                        d_start = dt * dim_tile
+                        d_end = T.min(d_start + dim_tile, dim)
+
+                        T.copy(Q[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, d_start:d_end], Q_shared)
+
+                        if is_noisy_diag != 0:
+                            T.copy(K[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, d_start:d_end], k_shared)
+                        else:
+                            T.copy(K[clean_off + s * block_size : clean_off + (s + 1) * block_size, by, d_start:d_end], k_shared)
+
+                        T.clear(qk_partial)
+                        T.gemm(Q_shared, k_shared, qk_partial, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
+                        for i, j in T.Parallel(block_size, block_size):
+                            qk[i, j] += qk_partial[i, j]
                     for i, j in T.Parallel(block_size, block_size):
                         qk[i, j] = T.exp2(qk[i, j] * scale_log2e - lse[i])
 
@@ -233,13 +267,42 @@ def _bwd_dq_varlen_template(
                             qk[i, j] = T.if_then_else(allowed > 0, qk[i, j], 0)
 
                     T.clear(ds)
-                    T.gemm(do, v_shared, ds, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
+                    for dt in T.serial(num_dim_tiles):
+                        d_start = dt * dim_tile
+                        d_end = T.min(d_start + dim_tile, dim)
+
+                        T.copy(dO[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, d_start:d_end], dO_shared)
+                        if is_noisy_diag != 0:
+                            T.copy(V[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, d_start:d_end], v_shared)
+                        else:
+                            T.copy(V[clean_off + s * block_size : clean_off + (s + 1) * block_size, by, d_start:d_end], v_shared)
+                        T.clear(ds_partial)
+                        T.gemm(dO_shared, v_shared, ds_partial, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
+                        for i, j in T.Parallel(block_size, block_size):
+                            ds[i, j] += ds_partial[i, j]
                     for i, j in T.Parallel(block_size, block_size):
                         ds_cast[i, j] = qk[i, j] * (ds[i, j] - delta[i]) * sm_scale
-                    T.gemm(ds_cast, k_shared, dq, policy=T.GemmWarpPolicy.FullRow)
+                    for dt in T.serial(num_dim_tiles):
+                        d_start = dt * dim_tile
+                        d_end = T.min(d_start + dim_tile, dim)
 
-                T.copy(dq, dq_shared)
-                T.copy(dq_shared, dQ[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, :])
+                        if is_noisy_diag != 0:
+                            T.copy(K[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, d_start:d_end], k_shared)
+                        else:
+                            T.copy(K[clean_off + s * block_size : clean_off + (s + 1) * block_size, by, d_start:d_end], k_shared)
+                        T.clear(dq_partial)
+                        T.gemm(ds_cast, k_shared, dq_partial, policy=T.GemmWarpPolicy.FullRow)
+                        for i, j in T.Parallel(block_size, dim_tile):
+                            if d_start + j < dim:
+                                dq[i, d_start + j] += dq_partial[i, j]
+                    for dt in T.serial(num_dim_tiles):
+                        d_start = dt * dim_tile
+                        d_end = T.min(d_start + dim_tile, dim)
+
+                        for i, j in T.Parallel(block_size, dim_tile):
+                            if d_start + j < dim:
+                                Q_shared[i, j] = dq[i, d_start + j]
+                        T.copy(Q_shared, dQ[seq_start + bx * block_size : seq_start + (bx + 1) * block_size, by, d_start:d_end])
 
     return dq_kernel
 
@@ -252,6 +315,7 @@ def _bwd_dkv_varlen_template(
     dllm_block: int,
     softmax_scale: float,
     block_size: int = 64,
+    dim_tile: int = 32,
     num_stages: int = 3,
     threads: int = 128,
     dtype: str = "bfloat16",
@@ -266,6 +330,7 @@ def _bwd_dkv_varlen_template(
     accum_dtype = "float32"
     total_tokens = T.dynamic("total_tokens")
     shape = [total_tokens, heads, dim]
+    num_dim_tiles = T.ceildiv(dim, dim_tile)
 
     @T.prim_func
     def dkv_kernel(
@@ -281,10 +346,10 @@ def _bwd_dkv_varlen_template(
         dV: T.Tensor(shape, dtype),
     ):
         with T.Kernel(heads, T.ceildiv(max_seqlen, block_size), batch, threads=threads) as (bx, by, bz):
-            k_shared = T.alloc_shared([block_size, dim], dtype)
-            v_shared = T.alloc_shared([block_size, dim], dtype)
-            q = T.alloc_shared([block_size, dim], dtype)
-            do = T.alloc_shared([block_size, dim], dtype)
+            K_shared = T.alloc_shared([block_size, dim_tile], dtype)
+            V_shared = T.alloc_shared([block_size, dim_tile], dtype)
+            Q_shared = T.alloc_shared([block_size, dim_tile], dtype)
+            dO_shared = T.alloc_shared([block_size, dim_tile], dtype)
             lse = T.alloc_shared([block_size], accum_dtype)
             delta = T.alloc_shared([block_size], accum_dtype)
             qkT = T.alloc_fragment([block_size, block_size], accum_dtype)
@@ -293,16 +358,17 @@ def _bwd_dkv_varlen_template(
             dsT_cast = T.alloc_fragment([block_size, block_size], dtype)
             dv = T.alloc_fragment([block_size, dim], accum_dtype)
             dk = T.alloc_fragment([block_size, dim], accum_dtype)
-            dv_shared = T.alloc_shared([block_size, dim], dtype)
-            dk_shared = T.alloc_shared([block_size, dim], dtype)
+
+            qkT_partial = T.alloc_fragment([block_size, block_size], accum_dtype)
+            dsT_partial = T.alloc_fragment([block_size, block_size], accum_dtype)
+            dv_partial = T.alloc_fragment([block_size, dim_tile], accum_dtype)
+            dk_partial = T.alloc_fragment([block_size, dim_tile], accum_dtype)
 
             seq_start = cu_seqlens[bz]
             seqlen = cu_seqlens[bz + 1] - seq_start
             region_tiles = (seqlen // 2) // block_size
 
             if by < region_tiles * 2:
-                T.copy(K[seq_start + by * block_size : seq_start + (by + 1) * block_size, bx, :], k_shared)
-                T.copy(V[seq_start + by * block_size : seq_start + (by + 1) * block_size, bx, :], v_shared)
                 T.clear(dv)
                 T.clear(dk)
 
@@ -320,55 +386,142 @@ def _bwd_dkv_varlen_template(
                 # noisy-query group (mask: noisy key always -> block diagonal
                 for step in T.Pipelined(noisy_count, num_stages=num_stages):
                     q_tile = noisy_start + step
-                    T.copy(Q[seq_start + q_tile * block_size : seq_start + (q_tile + 1) * block_size, bx, :], q)
                     T.clear(qkT)
-                    T.gemm(k_shared, q, qkT, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
+                    for dt in T.serial(num_dim_tiles):
+                        d_start = dt * dim_tile
+                        d_end = T.min(d_start + dim_tile, dim)
+
+                        T.copy(K[seq_start + by * block_size : seq_start + (by + 1) * block_size, bx, d_start:d_end], K_shared)
+                        T.copy(Q[seq_start + q_tile * block_size : seq_start + (q_tile + 1) * block_size, bx, d_start:d_end], Q_shared)
+
+                        T.clear(qkT_partial)
+                        T.gemm(K_shared, Q_shared, qkT_partial, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
+                        for i, j in T.Parallel(block_size, block_size):
+                            qkT[i, j] += qkT_partial[i, j]
+
                     T.copy(LSE[bx, seq_start + q_tile * block_size : seq_start + (q_tile + 1) * block_size], lse)
                     for i, j in T.Parallel(block_size, block_size):
                         qkT[i, j] = T.exp2(qkT[i, j] * scale_log2e - lse[j])
+
                     needs_mask = T.if_then_else(key_is_noisy, 1, T.if_then_else(step == 0, 1, 0))
                     if needs_mask != 0:
                         for i, j in T.Parallel(block_size, block_size):
                             allowed = _fwd_tile_allowed(j, i, dllm_block, is_noisy_diag, q_tile < region_tiles)
                             qkT[i, j] = T.if_then_else(allowed > 0, qkT[i, j], 0)
-                    T.copy(dO[seq_start + q_tile * block_size : seq_start + (q_tile + 1) * block_size, bx, :], do)
-                    T.clear(dsT)
-                    T.gemm(v_shared, do, dsT, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
+
                     T.copy(qkT, qkT_cast)
-                    T.gemm(qkT_cast, do, dv, policy=T.GemmWarpPolicy.FullRow)
+                    T.clear(dsT)
+
+                    for dt in T.serial(num_dim_tiles):
+                        d_start = dt * dim_tile
+                        d_end = T.min(d_start + dim_tile, dim)
+
+                        T.copy(V[seq_start + by * block_size : seq_start + (by + 1) * block_size, bx, d_start:d_end], V_shared)
+                        T.copy(dO[seq_start + q_tile * block_size : seq_start + (q_tile + 1) * block_size, bx, d_start:d_end], dO_shared)
+
+                        T.clear(dsT_partial)
+                        T.gemm(V_shared, dO_shared, dsT_partial, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
+                        for i, j in T.Parallel(block_size, block_size):
+                            dsT[i, j] += dsT_partial[i, j]
+
                     T.copy(Delta[bx, seq_start + q_tile * block_size : seq_start + (q_tile + 1) * block_size], delta)
                     for i, j in T.Parallel(block_size, block_size):
                         dsT_cast[i, j] = qkT[i, j] * (dsT[i, j] - delta[j]) * sm_scale
-                    T.gemm(dsT_cast, q, dk, policy=T.GemmWarpPolicy.FullRow)
+
+                    for dt in T.serial(num_dim_tiles):
+                        d_start = dt * dim_tile
+                        d_end = T.min(d_start + dim_tile, dim)
+
+                        T.copy(dO[seq_start + q_tile * block_size : seq_start + (q_tile + 1) * block_size, bx, d_start:d_end], dO_shared)
+                        T.clear(dv_partial)
+                        T.gemm(qkT_cast, dO_shared, dv_partial, policy=T.GemmWarpPolicy.FullRow)
+                        for i, j in T.Parallel(block_size, dim_tile):
+                            if d_start + j < dim:
+                                dv[i, d_start + j] += dv_partial[i, j]
+
+                        T.copy(Q[seq_start + q_tile * block_size : seq_start + (q_tile + 1) * block_size, bx, d_start:d_end], Q_shared)
+                        T.clear(dk_partial)
+                        T.gemm(dsT_cast, Q_shared, dk_partial, policy=T.GemmWarpPolicy.FullRow)
+                        for i, j in T.Parallel(block_size, dim_tile):
+                            if d_start + j < dim:
+                                dk[i, d_start + j] += dk_partial[i, j]
 
                 # clean-query group (clean keys only, boundary = clean diagonal at step 0)
                 for step in T.Pipelined(clean_count, num_stages=num_stages):
                     q_tile = clean_start + step
-                    T.copy(Q[seq_start + q_tile * block_size : seq_start + (q_tile + 1) * block_size, bx, :], q)
+
                     T.clear(qkT)
-                    T.gemm(k_shared, q, qkT, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
+                    for dt in T.serial(num_dim_tiles):
+                        d_start = dt * dim_tile
+                        d_end = T.min(d_start + dim_tile, dim)
+
+                        T.copy(K[seq_start + by * block_size : seq_start + (by + 1) * block_size, bx, d_start:d_end], K_shared)
+                        T.copy(Q[seq_start + q_tile * block_size : seq_start + (q_tile + 1) * block_size, bx, d_start:d_end], Q_shared)
+
+                        T.clear(qkT_partial)
+                        T.gemm(K_shared, Q_shared, qkT_partial, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
+                        for i, j in T.Parallel(block_size, block_size):
+                            qkT[i, j] += qkT_partial[i, j]
+
                     T.copy(LSE[bx, seq_start + q_tile * block_size : seq_start + (q_tile + 1) * block_size], lse)
                     for i, j in T.Parallel(block_size, block_size):
                         qkT[i, j] = T.exp2(qkT[i, j] * scale_log2e - lse[j])
+
                     needs_mask = T.if_then_else(step == 0, 1, 0)
                     if needs_mask != 0:
                         for i, j in T.Parallel(block_size, block_size):
                             allowed = _fwd_tile_allowed(j, i, dllm_block, is_noisy_diag, q_tile < region_tiles)
                             qkT[i, j] = T.if_then_else(allowed > 0, qkT[i, j], 0)
-                    T.copy(dO[seq_start + q_tile * block_size : seq_start + (q_tile + 1) * block_size, bx, :], do)
-                    T.clear(dsT)
-                    T.gemm(v_shared, do, dsT, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
+
                     T.copy(qkT, qkT_cast)
-                    T.gemm(qkT_cast, do, dv, policy=T.GemmWarpPolicy.FullRow)
+
+                    T.clear(dsT)
+                    for dt in T.serial(num_dim_tiles):
+                        d_start = dt * dim_tile
+                        d_end = T.min(d_start + dim_tile, dim)
+
+                        T.copy(V[seq_start + by * block_size : seq_start + (by + 1) * block_size, bx, d_start:d_end], V_shared)
+                        T.copy(dO[seq_start + q_tile * block_size : seq_start + (q_tile + 1) * block_size, bx, d_start:d_end], dO_shared)
+
+                        T.clear(dsT_partial)
+                        T.gemm(V_shared, dO_shared, dsT_partial, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
+                        for i, j in T.Parallel(block_size, block_size):
+                            dsT[i, j] += dsT_partial[i, j]
+
                     T.copy(Delta[bx, seq_start + q_tile * block_size : seq_start + (q_tile + 1) * block_size], delta)
                     for i, j in T.Parallel(block_size, block_size):
                         dsT_cast[i, j] = qkT[i, j] * (dsT[i, j] - delta[j]) * sm_scale
-                    T.gemm(dsT_cast, q, dk, policy=T.GemmWarpPolicy.FullRow)
 
-                T.copy(dv, dv_shared)
-                T.copy(dk, dk_shared)
-                T.copy(dv_shared, dV[seq_start + by * block_size : seq_start + (by + 1) * block_size, bx, :])
-                T.copy(dk_shared, dK[seq_start + by * block_size : seq_start + (by + 1) * block_size, bx, :])
+                    for dt in T.serial(num_dim_tiles):
+                        d_start = dt * dim_tile
+                        d_end = T.min(d_start + dim_tile, dim)
+
+                        T.copy(dO[seq_start + q_tile * block_size : seq_start + (q_tile + 1) * block_size, bx, d_start:d_end], dO_shared)
+                        T.clear(dv_partial)
+                        T.gemm(qkT_cast, dO_shared, dv_partial, policy=T.GemmWarpPolicy.FullRow)
+                        for i, j in T.Parallel(block_size, dim_tile):
+                            if d_start + j < dim:
+                                dv[i, d_start + j] += dv_partial[i, j]
+                        T.copy(Q[seq_start + q_tile * block_size : seq_start + (q_tile + 1) * block_size, bx, d_start:d_end], Q_shared)
+                        T.clear(dk_partial)
+                        T.gemm(dsT_cast, Q_shared, dk_partial, policy=T.GemmWarpPolicy.FullRow)
+                        for i, j in T.Parallel(block_size, dim_tile):
+                            if d_start + j < dim:
+                                dk[i, d_start + j] += dk_partial[i, j]
+
+                for dt in T.serial(num_dim_tiles):
+                    d_start = dt * dim_tile
+                    d_end = T.min(d_start + dim_tile, dim)
+
+                    for i, j in T.Parallel(block_size, dim_tile):
+                        if d_start + j < dim:
+                            V_shared[i, j] = dv[i, d_start + j]
+                    T.copy(V_shared, dV[seq_start + by * block_size : seq_start + (by + 1) * block_size, bx, d_start:d_end])
+
+                    for i, j in T.Parallel(block_size, dim_tile):
+                        if d_start + j < dim:
+                            K_shared[i, j] = dk[i, d_start + j]
+                    T.copy(K_shared, dK[seq_start + by * block_size : seq_start + (by + 1) * block_size, bx, d_start:d_end])
 
     return dkv_kernel
 
@@ -381,7 +534,9 @@ class _BlockCausalAttentionVarlenTL(torch.autograd.Function):
         dtype = T.dtype(q.dtype)
         q, k, v = (t.contiguous() for t in (q, k, v))
         threads = min(128, 2 * block_size)
-        fwd = _fwd_varlen_template(batch, heads, dim, dllm_block, softmax_scale, block_size=block_size, threads=threads, dtype=dtype)
+        fwd = _fwd_varlen_template(
+            batch, heads, dim, dllm_block, softmax_scale, block_size=block_size, dim_tile=64, threads=threads, dtype=dtype
+        )
         o = torch.empty_like(q)
         lse = torch.empty((heads, total), device=q.device, dtype=torch.float32)
         fwd(q, k, v, cu_seqlens, max_seqlen, o, lse)
@@ -403,10 +558,19 @@ class _BlockCausalAttentionVarlenTL(torch.autograd.Function):
         threads = min(128, 2 * ctx.block_size)  # match thread count to the tile
         prep = _bwd_preprocess_varlen_template(heads, dim, block_size=ctx.block_size, threads=threads, dtype=dtype)
         dq_kernel = _bwd_dq_varlen_template(
-            batch, heads, dim, ctx.dllm_block, ctx.softmax_scale, block_size=ctx.block_size, threads=threads, dtype=dtype
+            batch, heads, dim, ctx.dllm_block, ctx.softmax_scale, block_size=ctx.block_size, dim_tile=32, threads=threads, dtype=dtype
         )
         dkv_kernel = _bwd_dkv_varlen_template(
-            batch, heads, dim, ctx.dllm_block, ctx.softmax_scale, block_size=ctx.block_size, threads=threads, num_stages=1, dtype=dtype
+            batch,
+            heads,
+            dim,
+            ctx.dllm_block,
+            ctx.softmax_scale,
+            block_size=ctx.block_size,
+            dim_tile=32,
+            threads=threads,
+            num_stages=1,
+            dtype=dtype,
         )
         delta = torch.empty((heads, total), device=q.device, dtype=torch.float32)
         prep(o, do, delta)
