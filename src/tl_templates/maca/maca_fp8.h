@@ -146,6 +146,14 @@ public:
   }
 };
 
+TL_DEVICE bool operator==(fp8_e4_t lhs, fp8_e4_t rhs) {
+  return lhs.v.__x == rhs.v.__x;
+}
+
+TL_DEVICE bool operator!=(fp8_e4_t lhs, fp8_e4_t rhs) {
+  return lhs.v.__x != rhs.v.__x;
+}
+
 TL_DEVICE half_t __cvt_fp8_e5m2_to_half(__maca_fp8_e5m2 x) {
   uint16_t bits = (uint16_t)x.__x;
   bits = (uint16_t)(bits << 8U);
@@ -248,6 +256,14 @@ public:
     return static_cast<To>(v);
   }
 };
+
+TL_DEVICE bool operator==(fp8_e5_t lhs, fp8_e5_t rhs) {
+  return lhs.v.__x == rhs.v.__x;
+}
+
+TL_DEVICE bool operator!=(fp8_e5_t lhs, fp8_e5_t rhs) {
+  return lhs.v.__x != rhs.v.__x;
+}
 
 TL_DEVICE unsigned char __tl_cvt_float_to_e8m0(const float src);
 TL_DEVICE unsigned char __tl_cvt_double_to_e8m0(const double src);

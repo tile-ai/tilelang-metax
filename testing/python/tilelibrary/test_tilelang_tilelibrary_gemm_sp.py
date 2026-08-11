@@ -116,7 +116,12 @@ def run_gemm_ss(
             B = B.T
         A = A.to(torch.float32)
         B = B.to(torch.float32)
-        return torch.matmul(A, B)
+        if in_dtype == T.int8:
+            torch.backends.cuda.matmul.allow_tf32 = False
+        C = torch.matmul(A, B)
+        if in_dtype == T.int8:
+            torch.backends.cuda.matmul.allow_tf32 = True
+        return C
 
     C = _matmul(A, B)
 
@@ -149,7 +154,6 @@ def generate_dense_input(M, N, K, trans_A, trans_B, in_dtype, seed=0):
     return A, B
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     "M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeAccum, block_M, block_N, block_K, num_stages, num_threads, meta_dtype",
@@ -304,7 +308,12 @@ def run_gemm_rs(
             B = B.T
         A = A.to(torch.float32)
         B = B.to(torch.float32)
-        return torch.matmul(A, B)
+        if in_dtype == T.int8:
+            torch.backends.cuda.matmul.allow_tf32 = False
+        C = torch.matmul(A, B)
+        if in_dtype == T.int8:
+            torch.backends.cuda.matmul.allow_tf32 = True
+        return C
 
     C = _matmul(A, B)
 
@@ -318,7 +327,6 @@ def run_gemm_rs(
     )
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     "M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeAccum, block_M, block_N, block_K, num_stages, num_threads, meta_dtype",
@@ -474,7 +482,12 @@ def run_gemm_sr(
             B = B.T
         A = A.to(torch.float32)
         B = B.to(torch.float32)
-        return torch.matmul(A, B)
+        if in_dtype == T.int8:
+            torch.backends.cuda.matmul.allow_tf32 = False
+        C = torch.matmul(A, B)
+        if in_dtype == T.int8:
+            torch.backends.cuda.matmul.allow_tf32 = True
+        return C
 
     C = _matmul(A, B)
 
@@ -488,7 +501,6 @@ def run_gemm_sr(
     )
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     "M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeAccum, block_M, block_N, block_K, num_stages, num_threads, meta_dtype",
@@ -648,7 +660,12 @@ def run_gemm_rr(
             B = B.T
         A = A.to(torch.float32)
         B = B.to(torch.float32)
-        return torch.matmul(A, B)
+        if in_dtype == T.int8:
+            torch.backends.cuda.matmul.allow_tf32 = False
+        C = torch.matmul(A, B)
+        if in_dtype == T.int8:
+            torch.backends.cuda.matmul.allow_tf32 = True
+        return C
 
     C = _matmul(A, B)
 
@@ -662,7 +679,6 @@ def run_gemm_rr(
     )
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     "M, N, K, trans_A, trans_B, in_dtype, out_dtype, dtypeAccum, block_M, block_N, block_K, num_stages, num_threads, meta_dtype",
@@ -701,7 +717,6 @@ def test_gemm_rr(
     )
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize(
     "in_dtype, out_dtype, dtypeAccum, meta_dtype",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tilelang.language as T
+from tilelang.backend.target import determine_target
 from typing import Literal
 from collections.abc import Callable
 from tvm import DataType, tirx
@@ -9,15 +10,7 @@ from tvm.ir import Range
 from tvm.runtime import convert
 from ..layout.utils import mma_store_index_map
 from tilelang.utils import is_fragment, get_buffer_region_from_load
-
-from tilelang.maca.intrinsics.layout.mma_sp_layout import (
-    shared_16x16_to_mma_sp_layout_sr_a,
-    shared_16x16_to_mma_sp_layout_sr_b,
-    shared_16x32_to_mma_sp_layout_sr_a,
-    shared_16x32_to_mma_sp_layout_sr_b,
-    shared_16x64_to_mma_sp_layout_sr_a,
-    shared_16x64_to_mma_sp_layout_sr_b,
-)
+from tilelang.maca.intrinsics.layout.mma_layout import *
 
 
 lift = convert
@@ -46,27 +39,6 @@ class SparseTensorCoreIntrinEmitter:
         "float8_e5m2": "e5m2",
     }
 
-    E_FACTOR_MAP = {  # e_kdim = mma_kdim // e_factor
-        "float": {"int16": 8, "uint16": 8},
-        "float32": {"int16": 8, "uint16": 8},
-        "float16": {"int8": 8, "uint8": 8, "int16": 16, "uint16": 16, "int32": 32, "uint32": 32},
-        "bfloat16": {"int8": 8, "uint8": 8, "int16": 16, "uint16": 16, "int32": 32, "uint32": 32},
-        "int8": {"int8": 8, "uint8": 8, "int16": 16, "uint16": 16, "int32": 32, "uint32": 32},
-        "uint8": {"int8": 8, "uint8": 8, "int16": 16, "uint16": 16, "int32": 32, "uint32": 32},
-        "float8_e4m3": {"int8": 8, "uint8": 8, "int16": 16, "uint16": 16, "int32": 32, "uint32": 32},
-        "float8_e5m2": {"int8": 8, "uint8": 8, "int16": 16, "uint16": 16, "int32": 32, "uint32": 32},
-    }
-
-    E_REPLICATE_FACTOR = {  # metadata replicate every 4 consecutive threads
-        "float32": 2,
-        "float16": 2,  # 2 of 4 consecutive threads provides
-        "bfloat16": 2,
-        "int8": 1,  # 4 of 4 consecutive threads provides
-        "uint8": 1,
-        "float8_e4m3": 1,
-        "float8_e5m2": 1,
-    }
-
     # Represent the thread binding in the form of (tx, warp_n, warp_m)
     is_m_first = False
 
@@ -88,11 +60,12 @@ class SparseTensorCoreIntrinEmitter:
         num_elems_per_byte: int = 1,
         is_m_first: bool = False,
         thread_var: Var | None = None,
+        blockn8_flag: bool = False,
     ):
-        self.a_dtype = a_dtype
-        self.e_dtype = e_dtype
-        self.b_dtype = b_dtype
-        self.accum_dtype = accum_dtype
+        self.a_dtype = str(a_dtype)
+        self.e_dtype = str(e_dtype)
+        self.b_dtype = str(b_dtype)
+        self.accum_dtype = str(accum_dtype)
         self.a_transposed = a_transposed
         self.b_transposed = b_transposed
         self.e_transposed = e_transposed
@@ -102,14 +75,13 @@ class SparseTensorCoreIntrinEmitter:
         self.warp_row_tiles = warp_row_tiles
         self.warp_col_tiles = warp_col_tiles
         self.warp_k = warp_k
-        self.e_factor = self.E_FACTOR_MAP[self.a_dtype][self.e_dtype]
-        self._initialize_k_dim(a_dtype)
-        self._initialize_abbrev(a_dtype, b_dtype, accum_dtype)
+        self._initialize_k_dim(self.a_dtype)
+        self._initialize_abbrev(self.a_dtype, self.b_dtype, self.accum_dtype)
         self._initialize_micro_size(self.M_DIM, self.k_dim)
         self._initialize_local_size(self.M_DIM, self.N_DIM, self.k_dim, self.WARP_SIZE)
         self._initialize_mma_prefix(self.k_dim)
         self._initialize_is_m_first(is_m_first)
-
+        self.blockn8_flag = blockn8_flag
         self.reduce_k = reduce_k
         self.threads = self.WARP_SIZE * (block_row_warps * block_col_warps) * reduce_k
         self.num_elems_per_byte = num_elems_per_byte
@@ -120,23 +92,42 @@ class SparseTensorCoreIntrinEmitter:
                 f"Invalid threads configuration for this tile shape, {self.warp_rows} x {self.warp_cols} with threads {self.threads}"
             )
 
+    def get_target_serial(self):
+        target = determine_target(return_object=True)
+        xcore = target.attrs.get("mcpu")
+        non_digits_part = xcore.rstrip("0123456789")
+        xcore_num = int(xcore[len(non_digits_part) :])
+        return xcore_num
+
     def _initialize_k_dim(self, a_dtype="float16"):
+        serial = self.get_target_serial()
         if isinstance(a_dtype, str):
             if a_dtype in ["float8_e4m3fn", "float8_e4m3fnuz", "float8_e5m2", "float8_e5m2fnuz"]:
                 self.k_dim = 32
                 return
             a_dtype = DataType(a_dtype)
 
-        if a_dtype.bits == 64 or a_dtype.bits == 32:
+        if a_dtype.bits == 32:
+            if a_dtype in {T.tfloat32, T.float32}:
+                self.k_dim = 8
+            else:
+                self.k_dim = 4
+        elif a_dtype.bits == 64:
             self.k_dim = 4
-        elif a_dtype.bits in {16, 8}:
+        elif a_dtype.bits == 16:
             self.k_dim = 16
+        elif a_dtype.bits == 8:
+            if serial >= 1500 and serial <= 1600:
+                self.k_dim = 32
+            elif serial >= 1000 and serial < 1500:
+                self.k_dim = 16
+            else:
+                raise ValueError("Unsupported MetaXGPU Card")
         else:
             raise ValueError(f"Unsupported a_dtype = {a_dtype}")
 
     def _initialize_local_size(self, m_dim=16, n_dim=16, k_dim=16, warp_size=64):
         self.local_size_a = (m_dim * k_dim) // warp_size
-        self.local_size_e = (m_dim * k_dim) // self.e_factor // warp_size * self.E_REPLICATE_FACTOR[self.a_dtype]
         self.local_size_b = (n_dim * k_dim) // warp_size
         self.local_size_out = (m_dim * n_dim) // warp_size
 
@@ -145,18 +136,19 @@ class SparseTensorCoreIntrinEmitter:
         self.b_dtype_abbrv = self.dtype_abbrv[b_dtype]
         self.accum_dtype_abbrv = self.dtype_abbrv[accum_dtype]
 
-    def _initialize_mma_prefix(self, k_dim: int = 16):
+    def _initialize_mma_prefix(self, k_dim=16):
         in_dtype = self.a_dtype
         M_DIM, N_DIM = self.M_DIM, self.N_DIM
+
         in_dtype_abbrv = {
             "bfloat16": "bf16",
             "float16": "f16",
-            "float32": "f32",
+            "float32": "tf32",
             "float64": "f64",
             "int8": "i8",
             "int32": "i32",
-            "float8_e4m3fn": "fp8",
-            "float8_e4m3fnuz": "fp8",
+            "float8_e4m3fn": "f8",
+            "float8_e4m3fnuz": "f8",
             "float8_e5m2": "bf8",
             "float8_e5m2fnuz": "bf8",
         }[in_dtype]
@@ -253,7 +245,6 @@ class SparseTensorCoreIntrinEmitter:
         local_size_a = self.local_size_a
         a_transposed = self.a_transposed
         e_transposed = self.e_transposed
-        e_factor = self.e_factor
         thread_binding = self.get_thread_binding()
 
         A_region = self._legalize_to_buffer_region(A_shared_buf)
@@ -296,18 +287,21 @@ class SparseTensorCoreIntrinEmitter:
                             if a_transposed
                             else A_buf[tuple(A_other) + (A_base0 + l + row, A_base1 + r + col + groupoffset // 2)]
                         )
-
                         rowe, cole = getindexe(tx, k)
-                        le, re = (warp_m * warp_row_tiles + i * micro_size_x, ki * micro_size_k // e_factor)
-                        offsetk = ki * micro_size_k % e_factor
+                        le = (warp_m * warp_row_tiles + i * micro_size_x, 0)[0]
+
+                        dtype_bits = DataType(self.e_dtype).bits
+                        total_bits = (ki * micro_size_k + cole + groupoffset) + k * 2
+                        E_re = total_bits // dtype_bits
+                        E_shift = total_bits % dtype_bits
                         if e_transposed:
-                            E_elementi = (
-                                E_buf[tuple(E_other) + (E_base0 + re, E_base1 + rowe + le)] >> (cole + groupoffset + offsetk + k * 2)
-                            ) & 0b11
+                            E_val = E_buf[tuple(E_other) + (E_base0 + E_re, E_base1 + rowe + le)]
                         else:
-                            E_elementi = (
-                                E_buf[tuple(E_other) + (E_base0 + rowe + le, E_base1 + re)] >> (cole + groupoffset + offsetk + k * 2)
-                            ) & 0b11
+                            E_val = E_buf[tuple(E_other) + (E_base0 + rowe + le, E_base1 + E_re)]
+                        if self.SPARSE_FACTOR == 2:
+                            E_elementi = (E_val >> E_shift) & 0b11
+                        else:
+                            E_elementi = ((E_val >> E_shift) >> 1) & 0b1
                         A_local_buf[i * local_size_a + groupoffset + E_elementi] = Ak
 
         return _warp_ldmatrix_a(A_local_buf, A_region, E_region, ki, thread_binding, rk)
@@ -390,7 +384,6 @@ class SparseTensorCoreIntrinEmitter:
         compute_a_dtype = a_dtype if local_size_a == 1 else f"{a_dtype}x{local_size_a}"
         compute_b_dtype = b_dtype if local_size_b == 1 else f"{b_dtype}x{local_size_b}"
         compute_out_dtype = out_dtype if local_size_out == 1 else f"{out_dtype}x{local_size_out}"
-
         a_is_fragment = is_fragment(A_local_buf)
         b_is_fragment = is_fragment(B_local_buf)
         a_local_stride: PrimExpr = k_inner * warp_rows * k_pack * local_size_a if a_is_fragment else 0
@@ -501,8 +494,6 @@ class SparseTensorCoreIntrinEmitter:
         assert matrix in ["A", "B"], "matrix should be either A or B"
         matrix_is_a: bool = matrix == "A"
         matrix_is_b: bool = matrix == "B"
-        dtype = self.a_dtype if matrix_is_a else self.b_dtype
-        dtype_bits = DataType(dtype).bits
         transposed = self.a_transposed if matrix_is_a else self.b_transposed
 
         # s represents spatial axis
@@ -513,17 +504,25 @@ class SparseTensorCoreIntrinEmitter:
         # then rs also can represent a transposed basic layout
         transform_func_sr_a: Callable = None
         transform_func_sr_b: Callable = None
-        if dtype_bits == 32:
-            transform_func_sr_a = shared_16x16_to_mma_sp_layout_sr_a
-            transform_func_sr_b = shared_16x16_to_mma_sp_layout_sr_b
-        elif dtype_bits == 16:
-            transform_func_sr_a = shared_16x32_to_mma_sp_layout_sr_a
-            transform_func_sr_b = shared_16x32_to_mma_sp_layout_sr_b
-        elif dtype_bits == 8:
-            transform_func_sr_a = shared_16x64_to_mma_sp_layout_sr_a
-            transform_func_sr_b = shared_16x64_to_mma_sp_layout_sr_b
+        k_dim = self.k_dim
+
+        if k_dim == 4:
+            transform_func_sr_a = shared_16x4_to_local_64x1_layout_A
+            transform_func_sr_b = shared_16x4_to_local_64x1_layout_A
+        elif k_dim == 8:
+            transform_func_sr_a = shared_16x4_to_local_64x1_layout_A
+            transform_func_sr_b = shared_16x8_to_local_64x2_layout_A
+        elif k_dim == 16:
+            transform_func_sr_a = shared_16x8_to_local_64x2_layout_A
+            transform_func_sr_b = shared_16x16_to_local_64x4_layout_A
+        elif k_dim == 32:
+            transform_func_sr_a = shared_16x16_to_local_64x4_layout_A
+            transform_func_sr_b = shared_16x32_to_local_64x8_layout_A
+        elif k_dim == 64:
+            transform_func_sr_a = shared_16x32_to_local_64x8_layout_A
+            transform_func_sr_b = shared_16x64_to_local_64x16_layout_A
         else:
-            raise ValueError(f"Unsupported dtype {dtype}")
+            raise ValueError(f"k_dim must be 4, 8, 16, 32, or 64 but got {k_dim}")
 
         is_sr_conditions = [False]
         is_sr_conditions.append(matrix_is_a and not transposed)
@@ -636,6 +635,7 @@ class SparseTensorCoreIntrinEmitter:
         warp_rows, warp_cols = self.warp_rows, self.warp_cols
         warp_size = self.WARP_SIZE
         is_m_first = self.is_m_first
+        blockn8_flag = self.blockn8_flag
 
         def forward_thread(i: int, j: int) -> int:
             """
@@ -654,6 +654,9 @@ class SparseTensorCoreIntrinEmitter:
                 thread_id = block_j * (block_row_warps * warp_size) + block_i * warp_size + lane_id
             return thread_id
 
+        def forward_thread_blockn8(i: int, j: int, rep: int):
+            return forward_thread(i, j) + rep * 32
+
         def forward_index(i: int, j: int) -> int:
             """
             Given the row index `i` and column index `j` in the fragment,
@@ -668,8 +671,12 @@ class SparseTensorCoreIntrinEmitter:
             _, local_id = inverse_mma_store_layout.map_indices([mma_i, mma_j])
             return warp_i * (warp_cols * local_size_out) + warp_j * local_size_out + local_id
 
-        return T.Fragment(
-            shape,
-            forward_thread_fn=forward_thread,
-            forward_index_fn=forward_index,
-        )
+        if not blockn8_flag:
+            resFragment = T.Fragment(
+                shape,
+                forward_thread_fn=forward_thread,
+                forward_index_fn=forward_index,
+            )
+        else:
+            resFragment = T.Fragment(shape, forward_thread_fn=forward_thread_blockn8, forward_index_fn=forward_index, replicate=2)
+        return resFragment

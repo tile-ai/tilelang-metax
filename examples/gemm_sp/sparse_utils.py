@@ -59,6 +59,7 @@ def _compress_fn(D, dtype, meta_dtype, block_M=_BLOCK_M, block_K=_BLOCK_K, elem_
                     dense[bz * block_M + tm, bk * block_K + tn * elem_per_thread : k_base + (tn + 1) * elem_per_thread],
                     dense_local,
                 )
+                T.sync_threads()
 
                 for gid in T.unroll(elem_per_thread // group):
                     T.clear(nz_idx)
@@ -131,6 +132,7 @@ def _compress_fn(D, dtype, meta_dtype, block_M=_BLOCK_M, block_K=_BLOCK_K, elem_
                     dense[bz * block_M + tm, k_base + tn * elem_per_thread : k_base + (tn + 1) * elem_per_thread],
                     dense_local,
                 )
+                T.sync_threads()
 
                 for gid in T.unroll(elem_per_thread // group):
                     T.clear(nz_idx)

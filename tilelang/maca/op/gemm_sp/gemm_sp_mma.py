@@ -15,13 +15,15 @@ GEMM_SP_INST_MMA_SP = "maca.mma.sp"
 class GemmSPMMA(GemmSPBase):
     def infer_layout(self, target: Target, thread_nums: int):
         # NOTE(wt): Actually gemm_sp v2 currently use GemmWarpPolicy
-        m_warp, n_warp = self.policy.compute_warp_partition(self.M, self.N, thread_nums, target, GEMM_SP_INST_MMA_SP)
+        blockn8_flag = self.N == 8
+        shapeN = self.N if not blockn8_flag else 16
+        m_warp, n_warp = self.policy.compute_warp_partition(self.M, shapeN, thread_nums, target, GEMM_SP_INST_MMA_SP)
         warp_row_tiles = int(self.M // m_warp)
-        warp_col_tiles = int(self.N // n_warp)
+        warp_col_tiles = int(shapeN // n_warp)
         mma_emitter = SparseTensorCoreIntrinEmitter(
-            a_dtype=self.in_dtype,
+            a_dtype=self.a_dtype,
             e_dtype=self.e_dtype,
-            b_dtype=self.in_dtype,
+            b_dtype=self.b_dtype,
             accum_dtype=self.accum_dtype,
             a_transposed=self.trans_A,
             b_transposed=self.trans_B,
@@ -31,6 +33,7 @@ class GemmSPMMA(GemmSPBase):
             warp_row_tiles=warp_row_tiles,
             warp_col_tiles=warp_col_tiles,
             warp_k=self.K,
+            blockn8_flag=blockn8_flag,
         )
         if self.is_gemm_ss():
             return {
@@ -59,14 +62,16 @@ class GemmSPMMA(GemmSPBase):
         else:
             raise ValueError(f"Unsupported gemm combination, A: {self.A.scope()}, B: {self.B.scope()}")
 
-    def lower(self, layout_map: dict, target: Target, thread_nums: int, thread_var: tirx.Var):
+    def lower(self, layout_map: dict, target: Target, thread_bounds: range, thread_var: tirx.Var):
         # NOTE(wt): Actually gemm_sp v2 currently use GemmWarpPolicy
-        m_warp, n_warp = self.policy.compute_warp_partition(self.M, self.N, thread_nums, target, GEMM_SP_INST_MMA_SP)
+        thread_nums = thread_bounds.extent
+        shapeN = self.N if self.N != 8 else 16
+        m_warp, n_warp = self.policy.compute_warp_partition(self.M, shapeN, thread_nums, target, GEMM_SP_INST_MMA_SP)
         warp_row_tiles = int(self.M // m_warp)
-        warp_col_tiles = int(self.N // n_warp)
+        warp_col_tiles = int(shapeN // n_warp)
         mma_emitter = SparseTensorCoreIntrinEmitter(
-            a_dtype=self.in_dtype,
-            b_dtype=self.in_dtype,
+            a_dtype=self.a_dtype,
+            b_dtype=self.b_dtype,
             e_dtype=self.e_dtype,
             accum_dtype=self.accum_dtype,
             a_transposed=self.trans_A,
@@ -80,11 +85,10 @@ class GemmSPMMA(GemmSPBase):
             thread_var=thread_var,
         )
 
-        in_dtype = self.in_dtype
+        in_dtype = self.a_dtype
         warp_rows = mma_emitter.warp_rows
         warp_cols = mma_emitter.warp_cols
         local_size_a = mma_emitter.local_size_a
-        local_size_e = mma_emitter.local_size_e
         local_size_b = mma_emitter.local_size_b
         micro_size_k = mma_emitter.micro_size_k
         A_shared = self.ARegion
@@ -141,7 +145,6 @@ class GemmSPMMA(GemmSPBase):
                 accumulating into C_local.
                 """
                 A_local = T.alloc_local((warp_rows * local_size_a), in_dtype)
-                E_local = T.alloc_local((warp_rows * local_size_e), self.e_dtype)
 
                 if clear_accum:
                     T.clear(C_local)
@@ -151,18 +154,12 @@ class GemmSPMMA(GemmSPBase):
                     mma_emitter.ldmatrix_a(
                         A_local,
                         A_shared,
-                        ki,
-                    )
-
-                    # Load E into fragment
-                    mma_emitter.ldmatrix_e(
-                        E_local,
                         E_shared,
                         ki,
                     )
 
                     # Perform Matrix Multiplication
-                    mma_emitter.mma_sp(A_local, E_local, B_local, C_local, ki)
+                    mma_emitter.mma(A_local, B_local, C_local, ki)
 
             # Simplify to optimize the index computing
             # Must inline let statements to simplify the analysis
@@ -170,7 +167,7 @@ class GemmSPMMA(GemmSPBase):
             # insert into parent block
             return _Simplify(_gemm_srr, inline_let=True)
         elif self.is_gemm_rs():
-            A_local = self.A
+            A_original = self.A
 
             @T.prim_func
             def _gemm_rsr() -> None:
@@ -179,7 +176,7 @@ class GemmSPMMA(GemmSPBase):
                 B_shared into local fragments, then issues Tensor Core mma ops,
                 accumulating into C_local.
                 """
-                E_local = T.alloc_local((warp_rows * local_size_e), self.e_dtype)
+                A_local = T.alloc_local((warp_rows * local_size_a), in_dtype)
                 B_local = T.alloc_local((warp_cols * local_size_b), in_dtype)
 
                 if clear_accum:
@@ -187,8 +184,9 @@ class GemmSPMMA(GemmSPBase):
 
                 for ki in T.serial(0, (self.K // micro_size_k)):
                     # Load E into fragment
-                    mma_emitter.ldmatrix_e(
-                        E_local,
+                    mma_emitter.ldmatrix_a(
+                        A_local,
+                        A_original,
                         E_shared,
                         ki,
                     )
@@ -201,13 +199,13 @@ class GemmSPMMA(GemmSPBase):
                     )
 
                     # Perform Matrix Multiplication
-                    mma_emitter.mma_sp(A_local, E_local, B_local, C_local, ki)
+                    mma_emitter.mma(A_local, B_local, C_local, ki)
 
             # Simplify to optimize the index computing
             # Must inline let statements to simplify the analysis
             return _Simplify(_gemm_rsr, inline_let=True)
         elif self.is_gemm_rr():
-            A_local = self.A
+            A_original = self.A
             B_local = self.B
 
             @T.prim_func
@@ -217,21 +215,22 @@ class GemmSPMMA(GemmSPBase):
                 B_shared into local fragments, then issues Tensor Core mma ops,
                 accumulating into C_local.
                 """
-                E_local = T.alloc_local((warp_rows * local_size_e), self.e_dtype)
+                A_local = T.alloc_local((warp_rows * local_size_a), in_dtype)
 
                 if clear_accum:
                     T.clear(C_local)
 
                 for ki in T.serial(0, (self.K // micro_size_k)):
                     # Load E into fragment
-                    mma_emitter.ldmatrix_e(
-                        E_local,
+                    mma_emitter.ldmatrix_a(
+                        A_local,
+                        A_original,
                         E_shared,
                         ki,
                     )
 
                     # Perform Matrix Multiplication
-                    mma_emitter.mma_sp(A_local, E_local, B_local, C_local, ki)
+                    mma_emitter.mma(A_local, B_local, C_local, ki)
 
             # Simplify to optimize the index computing
             # Must inline let statements to simplify the analysis
