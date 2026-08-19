@@ -4,7 +4,6 @@
 #include <atomic>
 #include <common/maca_bfloat16.h>
 #include <common/maca_fp16.h>
-#include <mctlass/numeric_types.h>
 #include <type_traits>
 
 using half_t = __half;

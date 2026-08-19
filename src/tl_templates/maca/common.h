@@ -6,10 +6,9 @@
 #include "atomic.h"
 #include <common/maca_bfloat16.h>
 #include <common/maca_fp16.h>
-#include <cute/arch/mma.hpp>
-#include <cute/underscore.hpp>
+#include <cstdio>
+#include <limits>
 #include <mcr/mc_runtime.h>
-#include <mctlass/fast_math.h>
 
 #define MACART_INF_F __int_as_float(0x7f800000)
 #define MACART_NEGINF_F __int_as_float(0xff800000)
@@ -98,6 +97,7 @@ using int8x4 = __attribute__((__vector_size__(4 * sizeof(int8_t)))) int8_t;
 
 namespace platform {
 
+template <typename T> struct numeric_limits : std::numeric_limits<T> {};
 /// Numeric limits
 template <> struct numeric_limits<__half> {
   static bool const is_specialized = true;

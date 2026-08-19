@@ -129,7 +129,7 @@ def run_gemm_jit_kernel(
         num_threads,
     )
 
-    matmul_kernel = tilelang.compile(program, out_idx=-1, execution_backend="nvrtc")
+    matmul_kernel = tilelang.compile(program, out_idx=-1, execution_backend="mcrtc")
 
     in_dtype = T.dtype(in_dtype).as_torch()
     out_dtype = T.dtype(out_dtype).as_torch()
@@ -165,7 +165,7 @@ def test_gemm_jit_kernel():
         False,
         T.float16,
         T.float16,
-        T.float16,
+        T.float32,
         128,
         256,
         32,
@@ -192,7 +192,7 @@ def run_nvrtc_kernel_do_bench(
         num_threads,
     )
 
-    matmul_kernel = tilelang.compile(program, execution_backend="nvrtc")
+    matmul_kernel = tilelang.compile(program, execution_backend="mcrtc")
 
     profiler = matmul_kernel.get_profiler()
 
@@ -232,7 +232,7 @@ def run_nvrtc_kernel_multi_stream(
         num_threads,
     )
 
-    matmul_kernel = tilelang.compile(program, execution_backend="nvrtc")
+    matmul_kernel = tilelang.compile(program, execution_backend="mcrtc")
     in_dtype = T.dtype(in_dtype).as_torch()
     out_dtype = T.dtype(out_dtype).as_torch()
     tensor_a = torch.randn(M, K, dtype=in_dtype).cuda()
@@ -245,15 +245,20 @@ def run_nvrtc_kernel_multi_stream(
     tensor_c = torch.randn(M, N, dtype=out_dtype).cuda()
 
     num_streams = 4
+    streams = []
     for _ in range(num_streams):
         stream = torch.cuda.Stream()
+        streams.append(stream)
         with torch.cuda.stream(stream):
             matmul_kernel(tensor_a, tensor_b, tensor_c)
+
+    for stream in streams:
+        stream.synchronize()
 
 
 @tilelang.testing.requires_cuda
 def test_nvrtc_kernel_multi_stream():
-    run_nvrtc_kernel_multi_stream(512, 1024, 768, False, False, T.float16, T.float16, T.float16, 128, 256, 32, 2)
+    run_nvrtc_kernel_multi_stream(512, 1024, 768, False, False, T.float16, T.float16, T.float32, 128, 256, 32, 2)
 
 
 def run_nvrtc_dynamic_shape(
@@ -275,7 +280,7 @@ def run_nvrtc_dynamic_shape(
         num_threads,
     )
 
-    matmul_kernel = tilelang.compile(program, execution_backend="nvrtc")
+    matmul_kernel = tilelang.compile(program, execution_backend="mcrtc")
     if isinstance(M, T.Var):
         M = 1024
     if isinstance(N, T.Var):
@@ -303,11 +308,11 @@ def run_nvrtc_dynamic_shape(
 
 @tilelang.testing.requires_cuda
 def test_nvrtc_dynamic_shape():
-    run_nvrtc_dynamic_shape(T.dynamic("m"), 1024, 768, False, False, T.float16, T.float16, T.float16, 128, 256, 32, 2)
+    run_nvrtc_dynamic_shape(T.dynamic("m"), 1024, 768, False, False, T.float16, T.float16, T.float32, 128, 256, 32, 2)
 
-    run_nvrtc_dynamic_shape(T.dynamic("m"), T.dynamic("n"), 768, False, False, T.float16, T.float16, T.float16, 128, 256, 32, 2)
+    run_nvrtc_dynamic_shape(T.dynamic("m"), T.dynamic("n"), 768, False, False, T.float16, T.float16, T.float32, 128, 256, 32, 2)
 
-    run_nvrtc_dynamic_shape(T.dynamic("m"), T.dynamic("n"), T.dynamic("k"), False, False, T.float16, T.float16, T.float16, 128, 256, 32, 2)
+    run_nvrtc_dynamic_shape(T.dynamic("m"), T.dynamic("n"), T.dynamic("k"), False, False, T.float16, T.float16, T.float32, 128, 256, 32, 2)
 
 
 def check_hopper():
@@ -354,7 +359,7 @@ def run_nvrtc_im2col_tma_desc(N, C, H, W, F, K, S, D, P, block_M, block_N, block
     """Test im2col TMA descriptor functionality in NVRTC backend."""
     program = convolution_im2col(N, C, H, W, F, K, S, D, P, block_M, block_N, block_K, num_stages, num_threads)
 
-    conv_kernel = tilelang.compile(program, out_idx=-1, execution_backend="nvrtc")
+    conv_kernel = tilelang.compile(program, out_idx=-1, execution_backend="mcrtc")
 
     a = torch.randn(N, H, W, C).cuda().half()
     b = torch.randn(K, K, C, F).cuda().half()
@@ -395,7 +400,7 @@ def test_nvrtc_l2_persistent_map():
     M = 1024
     N = 1024
 
-    @tilelang.jit(out_idx=[-1], execution_backend="nvrtc")
+    @tilelang.jit(out_idx=[-1], execution_backend="mcrtc")
     def elementwise_add_with_l2_cache(
         M,
         N,
@@ -446,7 +451,7 @@ def test_nvrtc_pdl():
 
     N = 64
 
-    @tilelang.jit(execution_backend="nvrtc")
+    @tilelang.jit(execution_backend="mcrtc")
     def multi_kernels_with_pdl(N, block_size=256, dtype=T.float32):
         @T.prim_func
         def main(

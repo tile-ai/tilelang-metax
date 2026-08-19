@@ -1,10 +1,7 @@
 #pragma once
 
 #include "common.h"
-#include "mctlass/mctlass.h"
-
-#include "cute/arch/cluster_sm90.hpp"
-#include "cute/arch/mma_sm90_gmma.hpp"
+#include <assert.h>
 
 namespace tl {
 
@@ -21,6 +18,14 @@ TL_DEVICE int linear_thread_idx_in_block() {
   return threadIdx.x + blockDim.x * (threadIdx.y + blockDim.y * threadIdx.z);
 #else
   return 0;
+#endif
+}
+
+TL_DEVICE bool elect_one_sync() {
+#if defined(__MACA_ARCH__)
+  return (threadIdx.x % NumThreadsPerWarp) == 0;
+#else
+  return false;
 #endif
 }
 
@@ -52,31 +57,30 @@ get_warp_group_idx(int warp_size = detail::default_warp_size(),
   return detail::linear_thread_idx_in_block() / threads_per_group;
 }
 
-TL_DEVICE void warpgroup_arrive() { cute::warpgroup_arrive(); }
-TL_DEVICE void warpgroup_commit_batch() { cute::warpgroup_commit_batch(); }
+TL_DEVICE void warpgroup_arrive() {
+  assert(false && "warpgroup_arrive is not supported on MACA");
+}
+
+TL_DEVICE void warpgroup_commit_batch() {
+  assert(false && "warpgroup_commit_batch is not supported on MACA");
+}
 
 template <int NumMma> TL_DEVICE void warpgroup_wait() {
-  cute::warpgroup_wait<NumMma>();
+  assert(false && "warpgroup_wait is not supported on MACA");
 }
 
 TL_DEVICE void warpgroup_fence_operand(uint32_t *regs, int count) {
-#pragma unroll
-  for (int i = 0; i < count; ++i) {
-    cute::warpgroup_fence_operand(regs[i]);
-  }
+  assert(false && "warpgroup_fence_operand is not supported on MACA");
 }
 
 TL_DEVICE void warpgroup_fence_operand(float *regs, int count) {
-#pragma unroll
-  for (int i = 0; i < count; ++i) {
-    cute::warpgroup_fence_operand(regs[i]);
-  }
+  assert(false && "warpgroup_fence_operand is not supported on MACA");
 }
 
-MCTLASS_DEVICE
+TL_DEVICE
 int canonical_warp_idx_sync() {
 #if defined(__MACA_ARCH__)
-  return __shfl_sync(UINT64_MAX, threadIdx.x / NumThreadsPerWarp, 0);
+  return __shfl_sync(0xffffffff, threadIdx.x / NumThreadsPerWarp, 0);
 #else
   return 0;
 #endif
@@ -101,9 +105,9 @@ template <int thread_extent> TL_DEVICE bool tl_shuffle_elect() {
     // The condition ensures that:
     //   (1) We are in warp 0 of the block.
     //   (2) We are the elected lane in this warp.
-    return canonical_warp_idx_sync() == 0 && cute::elect_one_sync();
+    return canonical_warp_idx_sync() == 0 && detail::elect_one_sync();
   } else if constexpr (thread_extent == 64) {
-    return cute::elect_one_sync();
+    return detail::elect_one_sync();
   }
   // General case: thread_extent != 0
   // (threadIdx.x / 64) is the warp index in the block.
@@ -114,13 +118,20 @@ template <int thread_extent> TL_DEVICE bool tl_shuffle_elect() {
   // lanes in the warp. Here it broadcasts the group-local warp index from lane
   // 0. Comparing to 0 selects only the group's warp 0.
   return __shfl_sync(UINT64_MAX, // full warp mask
-                     (threadIdx.x / 64) %
+                     (threadIdx.x / 64) /
                          (thread_extent / 64), // warp index within group
                      0                         // take the value from lane 0
                      ) == 0 &&
          // Within that group leader warp, elect exactly one lane (typically
          // lane 0) to be the single representative for the group.
-         cute::elect_one_sync();
+         detail::elect_one_sync();
 }
 
+template <uint32_t RegCount> TL_DEVICE void warpgroup_reg_alloc() {
+  assert(false && "warpgroup_reg_alloc is not supported on MACA");
+}
+
+template <uint32_t RegCount> TL_DEVICE void warpgroup_reg_dealloc() {
+  assert(false && "warpgroup_reg_dealloc is not supported on MACA");
+}
 } // namespace tl

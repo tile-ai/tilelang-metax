@@ -36,6 +36,7 @@ HOST_KERNEL_PATH = "host_kernel.cu"
 EXECUTABLE_PATH = "executable.so"
 KERNEL_LIB_PATH = "kernel_lib.so"
 KERNEL_CUBIN_PATH = "kernel.cubin"
+KERNEL_MCBIN_PATH = "kernel.mcbin"
 KERNEL_PY_PATH = "kernel.py"
 PARAMS_PATH = "params.pkl"
 TargetLike = str | dict[str, object] | Target
@@ -55,7 +56,7 @@ class CompileArgs:
     """
 
     out_idx: list[int] | int | None = None
-    execution_backend: Literal["auto", "tvm_ffi", "cython", "nvrtc", "torch"] = "auto"
+    execution_backend: Literal["auto", "tvm_ffi", "cython", "nvrtc", "mcrtc", "torch"] = "auto"
     target: TargetLike = "auto"
     target_host: TargetLike | None = None
     verbose: bool = False
@@ -246,6 +247,19 @@ class AutotuneResult:
             if verbose:
                 logger.debug(f"Saving kernel library to file: {kernel_lib_path}")
             self._safe_write_file(kernel_lib_path, "wb", lambda f: f.write(self._load_binary(src_lib_path)))
+        elif kernel.execution_backend == "mcrtc":
+            # Save mcbin and MCRTC Python helper file
+            src_lib_path = kernel.adapter.libpath
+            if not src_lib_path.endswith(".mcbin"):
+                raise ValueError(f"MCRTC kernel library must use the .mcbin suffix, got: {src_lib_path}")
+            kernel_py_path = os.path.join(cache_path, KERNEL_PY_PATH)
+            py_src_path = src_lib_path.replace(".mcbin", ".py")
+            if verbose:
+                logger.debug(f"Saving kernel mcrtc python code to file: {kernel_py_path}")
+            self._safe_write_file(kernel_py_path, "wb", lambda f: f.write(self._load_binary(py_src_path)))
+            if verbose:
+                logger.debug(f"Saving MCRTC kernel library to file: {kernel_lib_path}")
+            self._safe_write_file(kernel_lib_path, "wb", lambda f: f.write(self._load_binary(src_lib_path)))
         elif kernel.execution_backend == "tvm_ffi":
             if hasattr(kernel.adapter, "libpath") and kernel.adapter.libpath:
                 src_lib_path = kernel.adapter.libpath
@@ -300,7 +314,7 @@ class AutotuneResult:
         target: TargetLike = "auto",
         target_host: TargetLike | None = None,
         out_idx: list[int] | int | None = None,
-        execution_backend: Literal["tvm_ffi", "cython", "nvrtc", "torch", "cutedsl"] = "tvm_ffi",
+        execution_backend: Literal["tvm_ffi", "cython", "nvrtc", "mcrtc", "torch", "cutedsl"] = "tvm_ffi",
         pass_configs: dict = None,
         compile_flags: list[str] | str | None = None,
         func: Callable = None,
@@ -545,6 +559,8 @@ class AutotuneResult:
         """Return the cache filename for one backend's executable artifact."""
         if execution_backend == "nvrtc":
             return KERNEL_CUBIN_PATH
+        if execution_backend == "mcrtc":
+            return KERNEL_MCBIN_PATH
         if execution_backend == "tvm_ffi":
             return EXECUTABLE_PATH
         if execution_backend == "cutedsl":
@@ -555,7 +571,7 @@ class AutotuneResult:
     def _get_required_kernel_files(cls, path: Path, execution_backend: str) -> list[Path]:
         """Return backend-specific files required to reload a kernel."""
         files = [path / cls._get_kernel_lib_file(execution_backend)]
-        if execution_backend == "nvrtc":
+        if execution_backend == "nvrtc" or execution_backend == "mcrtc":
             files.append(path / KERNEL_PY_PATH)
         return files
 

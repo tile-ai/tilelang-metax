@@ -408,7 +408,6 @@ std::string CodeGenTileLangMACA::Finish() {
     decl_stream << "#include <mcrand/mcrand_kernel.h>\n";
   }
 
-  decl_stream << "#include <tl_templates/maca/gemm.h>\n";
   if (enable_sparse_gemm_) {
     decl_stream << "#include <tl_templates/maca/gemm_sp.h>\n";
   }

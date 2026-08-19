@@ -1185,6 +1185,10 @@ class TLPyWrapper(TLWrapper):
             from tilelang.jit.adapter.cutedsl import TLCuTeDSLSourceWrapper
 
             wrapper_class = TLCuTeDSLSourceWrapper
+        elif is_maca_target(self.target):
+            from tilelang.jit.adapter.mcrtc import TLMCRTCSourceWrapper
+
+            wrapper_class = TLMCRTCSourceWrapper
         elif is_cuda_target(self.target):
             from tilelang.jit.adapter.nvrtc import TLNVRTCSourceWrapper
 
