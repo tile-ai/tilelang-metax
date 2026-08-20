@@ -516,7 +516,19 @@ private:
     return op == builtin::ptx_cp_async() || op == tl::ptx_cp_async() ||
            op == tl::maca_memcpy_async();
   }
+  int GetCPAsyncSrcPtrArgIndex(const Call &call) const {
+    if (call->op == tl::maca_memcpy_async()) {
+      return 0;
+    }
+    return 1;
+  }
 
+  int GetCPAsyncDstPtrArgIndex(const Call &call) const {
+    if (call->op == tl::maca_memcpy_async()) {
+      return 1;
+    }
+    return 0;
+  }
   static constexpr int kCPAsyncDstPtrArg = 0;
   static constexpr int kCPAsyncSrcPtrArg = 1;
 
@@ -602,12 +614,12 @@ private:
     ICHECK_GE(call->args.size(), 3U)
         << "cp.async expects at least 3 arguments, but got " << call->args;
     Array<PrimExpr> conditions;
-    AccessPtrInfo src_info =
-        GetRequiredAccessPtrInfo(call->args[kCPAsyncSrcPtrArg], "cp.async");
+    AccessPtrInfo src_info = GetRequiredAccessPtrInfo(
+        call->args[GetCPAsyncSrcPtrArgIndex(call)], "cp.async");
     if (!AccessMaskMayUse(src_info.rw_mask, kAccessRead)) {
       return conditions;
     }
-
+    BufferLoad base_load = src_info.base_load;
     SafeMemChecker checker(analyzer_, /*recursively_collect_conds=*/false);
     checker.CheckBufferIndices(src_info.base_load->buffer,
                                src_info.base_load->indices,
@@ -616,10 +628,10 @@ private:
   }
 
   Buffer GetCPAsyncSourceBuffer(const Call &call) {
-    ICHECK_GE(call->args.size(), 3U)
-        << "cp.async expects at least 3 arguments, but got " << call->args;
-    AccessPtrInfo src_info =
-        GetRequiredAccessPtrInfo(call->args[kCPAsyncSrcPtrArg], "cp.async");
+    ICHECK_GE(call->args.size(), 2U)
+        << "cp.async expects at least 2 arguments, but got " << call->args;
+    AccessPtrInfo src_info = GetRequiredAccessPtrInfo(
+        call->args[GetCPAsyncSrcPtrArgIndex(call)], "cp.async");
     return src_info.base_load->buffer;
   }
 
@@ -633,6 +645,9 @@ private:
   }
 
   Optional<PrimExpr> GetCPAsyncPredicate(const Call &call) {
+    if (call->op == tl::maca_memcpy_async()) {
+      return Optional<PrimExpr>();
+    }
     if (call->args.size() >= 4U) {
       return call->args[3];
     }
@@ -645,14 +660,19 @@ private:
       return evaluate;
     }
 
-    ICHECK_GE(call->args.size(), 3U)
-        << "cp.async expects at least 3 arguments, but got " << call->args;
-    AccessPtrInfo dst_info =
-        GetRequiredAccessPtrInfo(call->args[kCPAsyncDstPtrArg], "cp.async");
+    ICHECK_GE(call->args.size(), 2U)
+        << "cp.async expects at least 2 arguments, but got " << call->args;
+    AccessPtrInfo dst_info = GetRequiredAccessPtrInfo(
+        call->args[GetCPAsyncDstPtrArgIndex(call)], "cp.async");
     Buffer src_buffer = GetCPAsyncSourceBuffer(call);
 
     PrimExpr combined = CombineConditions(conditions);
     Optional<PrimExpr> existing_predicate = GetCPAsyncPredicate(call);
+
+    if (existing_predicate.defined() &&
+        !existing_predicate.value().dtype().is_bool()) {
+      existing_predicate = Optional<PrimExpr>();
+    }
 
     PrimExpr safe_value = GetSafeValue(src_buffer);
     DataType dst_dtype = dst_info.base_load->buffer->dtype;
@@ -670,6 +690,10 @@ private:
                                ? analyzer_->Simplify(tirx::And(
                                      existing_predicate.value(), combined))
                                : combined;
+
+      if (call->op == tl::maca_memcpy_async()) {
+        return IfThenElse(predicate, evaluate);
+      }
       Array<PrimExpr> new_args{call->args[0], call->args[1], call->args[2]};
       new_args.push_back(predicate);
       return Evaluate(

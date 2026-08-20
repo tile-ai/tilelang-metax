@@ -1929,15 +1929,22 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
   };
   if (op->op.same_as(tl::maca_memcpy_async())) {
     // args[0] = dst_access_ptr, args[1] = src_access_ptr, args[2] = bytes,
-    // args[3] = barrier
-    ICHECK(op->args.size() == 4)
-        << "maca_memcpy_async expects 4 arguments (dst_access_ptr, "
-           "src_access_ptr, bytes, barrier)";
+    // args[3] = mbar (MACA hardware barrier handle, optional under OOB
+    // rewriter)
+    ICHECK_GE(op->args.size(), 3)
+        << "maca_memcpy_async expects at least 3 arguments (dst_access_ptr, "
+           "src_access_ptr, bytes)";
 
     std::string dst = this->PrintExpr(op->args[0]);
     std::string src = this->PrintExpr(op->args[1]);
     std::string bytes = this->PrintExpr(op->args[2]);
-    std::string mbar = this->PrintExpr(op->args[3]);
+
+    std::string mbar;
+    if (op->args.size() >= 4) {
+      mbar = this->PrintExpr(op->args[3]);
+    } else {
+      mbar = "bar";
+    }
 
     this->PrintIndent();
     this->stream << mbar << " = memcpy_async<" << bytes

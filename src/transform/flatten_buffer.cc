@@ -43,7 +43,38 @@ namespace tl {
 
 using namespace tirx;
 using namespace ffi;
+namespace {
 
+/*!
+ * \brief Apply barrier_type annotations collected from tl.maca_memcpy_async.
+ * AllocBuffer(local.barrier) nodes are often visited before the memcpy_async
+ * calls that populate the barrier-type map during flattening. Run this pass
+ * after the main flatten walk so every barrier allocation is annotated.
+ */
+class MacaBarrierAllocAnnotator : public StmtExprMutator {
+public:
+  static Stmt Apply(Stmt stmt, Map<Var, StringImm> barrier_type_map) {
+    MacaBarrierAllocAnnotator annotator(std::move(barrier_type_map));
+    return annotator(std::move(stmt));
+  }
+
+private:
+  explicit MacaBarrierAllocAnnotator(Map<Var, StringImm> barrier_type_map)
+      : barrier_type_map_(std::move(barrier_type_map)) {}
+
+  Stmt VisitStmt_(const AllocBufferNode *op) final {
+    auto node = Downcast<AllocBuffer>(StmtExprMutator::VisitStmt_(op));
+    if (barrier_type_map_.count(node->buffer->data)) {
+      node.CopyOnWrite()->annotations.Set(
+          "barrier_type", barrier_type_map_.at(node->buffer->data));
+    }
+    return std::move(node);
+  }
+
+  Map<Var, StringImm> barrier_type_map_;
+};
+
+} // namespace
 /*!
  * \brief Transform multi-dimension BufferLoad/BufferStore into device-supported
  * dimension for the TIR not contains opaque block.
@@ -60,6 +91,10 @@ public:
     auto writer = func.CopyOnWrite();
     pass.MarkBufferMapShapes(func);
     writer->body = pass.VisitStmt(func->body);
+    if (!pass.maca_barrier_type_map_.empty()) {
+      writer->body = MacaBarrierAllocAnnotator::Apply(
+          writer->body, std::move(pass.maca_barrier_type_map_));
+    }
     // The buffers in func->buffer_map are deliberately left
     // unflattened, as they are used for validation of user-provided
     // arguments.  The flattened buffers used in the updated
@@ -232,13 +267,26 @@ private:
       }
     }
     if (call->op.same_as(tl::maca_memcpy_async())) {
-      ICHECK_EQ(call->args.size(), 4);
-      ICHECK(call->args[3].as<BufferLoad>());
-      ICHECK(call->annotations.count("barrier_type"));
-      auto barrier = call->args[3].as<BufferLoad>().value()->buffer->data;
-      auto barrier_type =
-          Downcast<StringImm>(call->annotations.at("barrier_type"));
-      maca_barrier_type_map_.Set(barrier, barrier_type);
+      ICHECK_GE(call->args.size(), 2)
+          << "maca_memcpy_async must have at least src and dst arguments";
+
+      Var barrier_var;
+      if (call->annotations.count("barrier")) {
+        auto bar_attr = call->annotations.at("barrier");
+        if (auto bar_load = bar_attr.as<BufferLoadNode>()) {
+          barrier_var = bar_load->buffer->data;
+        } else if (auto bar_var_node = bar_attr.as<VarNode>()) {
+          barrier_var = Downcast<Var>(bar_attr);
+        }
+      } else if (call->args.size() >= 4 && call->args[3].as<BufferLoadNode>()) {
+        barrier_var = call->args[3].as<BufferLoad>().value()->buffer->data;
+      }
+
+      if (barrier_var.defined() && call->annotations.count("barrier_type")) {
+        auto barrier_type =
+            Downcast<StringImm>(call->annotations.at("barrier_type"));
+        maca_barrier_type_map_.Set(barrier_var, barrier_type);
+      }
     }
     return std::move(call);
   }
