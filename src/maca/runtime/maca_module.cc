@@ -237,24 +237,6 @@ public:
       }
       TVM_FFI_THROW(InternalError) << os.str();
     }
-
-    // Check for asynchronous MACA errors that mcLaunchKernel's return value
-    // does not capture (e.g. illegal memory access during kernel execution).
-    // This matches the Cython backend's TILELANG_CHECK_LAST_ERROR macro.
-    if (result == mcSuccess) {
-      mcError_t last_err = mcPeekAtLastError();
-      if (last_err != mcSuccess) {
-        // Use driver API mcGetErrorName for the error name (mcGetErrorName
-        // is not available in the macart stub).
-        const char *err_name = mcGetErrorName(last_err);
-        const char *err_str = mcGetErrorString(last_err);
-        // Clear the sticky error so subsequent MACA calls are not poisoned.
-        mcGetLastError();
-        TVM_FFI_THROW(InternalError)
-            << func_name_ << ": " << (err_name ? err_name : "unknown") << " - "
-            << err_str;
-      }
-    }
   }
 
 private:
