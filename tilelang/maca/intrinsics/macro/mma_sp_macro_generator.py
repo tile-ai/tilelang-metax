@@ -117,12 +117,12 @@ class SparseTensorCoreIntrinEmitter:
         elif a_dtype.bits == 16:
             self.k_dim = 16
         elif a_dtype.bits == 8:
-            if serial >= 1500 and serial <= 1600:
+            if serial >= 1500 and serial < 1700:
                 self.k_dim = 32
             elif serial >= 1000 and serial < 1500:
                 self.k_dim = 16
             else:
-                raise ValueError("Unsupported MetaXGPU Card")
+                raise ValueError(f"Unsupported MetaXGPU Card, arch={serial}")
         else:
             raise ValueError(f"Unsupported a_dtype = {a_dtype}")
 
