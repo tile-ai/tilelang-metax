@@ -422,35 +422,34 @@ def test_syncthreads_or():
 
 @tilelang.jit
 def kernel_match_any_sync():
-    """Lanes 0-15 share value 1; lanes 16-31 share value 2. match_any_sync
-    should return 0x0000FFFF for the first half and 0xFFFF0000 for the
-    second half."""
+    """Lanes 0-31 share value 1; lanes 32-63 share value 2."""
 
     @T.prim_func
     def main(
-        B: T.Tensor((32,), "int32"),
+        B: T.Tensor((64,), "int64"),
     ):
-        with T.Kernel(1, threads=32):
+        with T.Kernel(1, threads=64):
             tx = T.get_thread_binding()
-            value = T.if_then_else(tx < 16, 1, 2)
+            value = T.if_then_else(tx < 32, 1, 2)
             peers = T.match_any_sync(value)
-            B[tx] = T.cast(peers, "int32")
+            B[tx] = T.cast(peers, "int64")
 
     return main
 
 
 @tilelang.testing.requires_cuda
 def test_match_any_sync():
-    b = torch.zeros((32,), device="cuda", dtype=torch.int32)
+    b = torch.zeros((64,), device="cuda", dtype=torch.int64)
     kernel = kernel_match_any_sync()
     src = kernel.get_kernel_source()
     assert "__match_any_sync" in src, f"Expected __match_any_sync in source:\n{src}"
     kernel(b)
-    # Reinterpret the int32 buffer as uint32 to compare against bitmasks
-    # whose high bit is set (0xFFFF0000 overflows int32).
-    observed_u32 = b.to(torch.int64) & 0xFFFFFFFF
-    expected = torch.tensor([0x0000FFFF] * 16 + [0xFFFF0000] * 16, dtype=torch.int64, device="cuda")
-    assert torch.equal(observed_u32, expected), f"Expected {expected}, got {observed_u32}"
+    expected = torch.tensor(
+        [0x00000000FFFFFFFF] * 32 + [-0x0000000100000000] * 32,
+        dtype=torch.int64,
+        device="cuda",
+    )
+    assert torch.equal(b, expected), f"Expected {expected}, got {b}"
 
 
 # ---------------------------------------------------------------------------
@@ -460,16 +459,16 @@ def test_match_any_sync():
 
 @tilelang.jit
 def kernel_match_all_sync_true():
-    """All lanes share value 7 → match_all_sync returns the full mask."""
+    """All 64 lanes share value 7 → match_all_sync returns the full mask."""
 
     @T.prim_func
     def main(
-        B: T.Tensor((32,), "int32"),
+        B: T.Tensor((64,), "int64"),
     ):
-        with T.Kernel(1, threads=32):
+        with T.Kernel(1, threads=64):
             tx = T.get_thread_binding()
             result = T.match_all_sync(7)
-            B[tx] = T.cast(result, "int32")
+            B[tx] = T.cast(result, "int64")
 
     return main
 
@@ -480,26 +479,26 @@ def kernel_match_all_sync_false():
 
     @T.prim_func
     def main(
-        B: T.Tensor((32,), "int32"),
+        B: T.Tensor((64,), "int64"),
     ):
-        with T.Kernel(1, threads=32):
+        with T.Kernel(1, threads=64):
             tx = T.get_thread_binding()
             result = T.match_all_sync(tx)
-            B[tx] = T.cast(result, "int32")
+            B[tx] = T.cast(result, "int64")
 
     return main
 
 
 @tilelang.testing.requires_cuda
 def test_match_all_sync():
-    b = torch.zeros((32,), device="cuda", dtype=torch.int32)
+    b = torch.zeros((64,), device="cuda", dtype=torch.int64)
     kernel = kernel_match_all_sync_true()
     src = kernel.get_kernel_source()
     assert "__match_all_sync" in src, f"Expected __match_all_sync in source:\n{src}"
     kernel(b)
-    assert torch.all(b == -1), f"Expected all 0xFFFFFFFF (sign-extended -1), got {b}"
+    assert torch.all(b == -1), f"Expected all 0xFFFFFFFFFFFFFFFF, got {b}"
 
-    b2 = torch.zeros((32,), device="cuda", dtype=torch.int32)
+    b2 = torch.zeros((64,), device="cuda", dtype=torch.int64)
     kernel_match_all_sync_false()(b2)
     assert torch.all(b2 == 0), f"Expected all 0, got {b2}"
 

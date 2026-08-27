@@ -2538,7 +2538,8 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     // hide the out-parameter behind an immediately-invoked lambda and
     // discard pred (the returned mask already encodes whether all lanes
     // agreed: a non-zero result implies pred == 1).
-    os << "([&]() -> unsigned { int _tl_pred = 0; return __match_all_sync("
+    os << "([&]() -> unsigned long long { int _tl_pred = 0; return "
+          "__match_all_sync("
        << PrintExpr(op->args[0]) << ", " << PrintExpr(op->args[1])
        << ", &_tl_pred); }())";
   } else if (op->op.same_as(tl::get_lane_idx())) {

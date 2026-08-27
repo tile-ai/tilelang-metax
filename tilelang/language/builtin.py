@@ -16,6 +16,16 @@ from tilelang.utils.language import retrieve_ptr, get_buffer_region_from_load, r
 
 _IS_MACA_AVAILABLE = check_maca_availability()
 
+# Full-warp mask uses the target's native lane-mask width, avoiding signed
+# widening when the TIR constant is emitted as device source.
+if _IS_MACA_AVAILABLE:
+    # MACA executes 64-lane warps, so a full mask must include all 64 lanes.
+    _FULL_WARP_MASK = tirx.const(0xFFFFFFFFFFFFFFFF, "uint64")
+    _DEFAULT_SHFL_WIDTH = 64
+else:
+    _DEFAULT_SHFL_WIDTH = 32
+    _FULL_WARP_MASK = tirx.const(0xFFFFFFFF, "uint32")
+
 
 def _normalize_index_arg(value: int | PrimExpr | None) -> PrimExpr | None:
     """
@@ -913,17 +923,6 @@ def barrier_arrive(mbarrier: BarrierType):
     return mbarrier_arrive(mbarrier)
 
 
-# Full-warp mask uses the target's native lane-mask width, avoiding signed
-# widening when the TIR constant is emitted as device source.
-if _IS_MACA_AVAILABLE:
-    # MACA executes 64-lane warps, so a full mask must include all 64 lanes.
-    _FULL_WARP_MASK = tirx.const(0xFFFFFFFFFFFFFFFF, "uint64")
-    _DEFAULT_SHFL_WIDTH = 64
-else:
-    _DEFAULT_SHFL_WIDTH = 32
-    _FULL_WARP_MASK = tirx.const(0xFFFFFFFF, "uint32")
-
-
 def _as_uint32_mask(mask: int | PrimExpr) -> PrimExpr:
     """Normalize a warp lane mask to a uint32 TIR expression.
 
@@ -1191,6 +1190,8 @@ def match_any_sync(
     the calling lane's value. Lowers to ``__match_any_sync`` on CUDA
     (compute capability >= 7.0). Not supported on HIP.
     """
+    if _IS_MACA_AVAILABLE:
+        return tirx.call_intrin("uint64", tirx.op.Op.get("tl.match_any_sync"), _as_uint64_mask(mask), value)
     return tirx.call_intrin("uint32", tirx.op.Op.get("tl.match_any_sync"), _as_uint32_mask(mask), value)
 
 
@@ -1205,6 +1206,8 @@ def match_all_sync(
     Callers can reconstruct the predicate as ``result != 0``. Not supported
     on HIP.
     """
+    if _IS_MACA_AVAILABLE:
+        return tirx.call_intrin("uint64", tirx.op.Op.get("tl.match_all_sync"), _as_uint64_mask(mask), value)
     return tirx.call_intrin("uint32", tirx.op.Op.get("tl.match_all_sync"), _as_uint32_mask(mask), value)
 
 
