@@ -913,10 +913,11 @@ def barrier_arrive(mbarrier: BarrierType):
     return mbarrier_arrive(mbarrier)
 
 
-# Full-warp mask as a proper uint32 TIR constant so the emitted C/C++ source
-# prints as `0xFFFFFFFFu` instead of `(int64_t)4294967295` after TIR widening.
+# Full-warp mask uses the target's native lane-mask width, avoiding signed
+# widening when the TIR constant is emitted as device source.
 if _IS_MACA_AVAILABLE:
-    _FULL_WARP_MASK = tirx.const(0xFFFFFFFF, "uint64")
+    # MACA executes 64-lane warps, so a full mask must include all 64 lanes.
+    _FULL_WARP_MASK = tirx.const(0xFFFFFFFFFFFFFFFF, "uint64")
     _DEFAULT_SHFL_WIDTH = 64
 else:
     _DEFAULT_SHFL_WIDTH = 32

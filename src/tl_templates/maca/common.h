@@ -344,6 +344,54 @@ public:
 };
 } // namespace tl
 
+// MACA does not provide native __shfl_*_sync overloads for TileLang's FP8
+// wrappers. Shuffle their byte storage through the native unsigned-int
+// overload so overload resolution is unambiguous and the bits are preserved.
+// Half and BF16 are deliberately omitted: the MACA SDK already provides exact
+// overloads for those native types.
+#define TL_DEFINE_MACA_SHFL_SYNC_OVERLOADS(TYPE, RAW)                          \
+  TL_PATCH TL_DEVICE TYPE __shfl_sync(maca_uint64_t mask, TYPE val,            \
+                                      int src_lane, int width = 64) {          \
+    RAW raw = static_cast<RAW>(val.v.__x);                                     \
+    RAW shuffled = static_cast<RAW>(                                           \
+        __shfl_sync(mask, static_cast<unsigned int>(raw), src_lane, width));   \
+    TYPE result;                                                               \
+    result.v.__x = static_cast<unsigned char>(shuffled);                       \
+    return result;                                                             \
+  }                                                                            \
+  TL_PATCH TL_DEVICE TYPE __shfl_xor_sync(maca_uint64_t mask, TYPE val,        \
+                                          int lane_mask, int width = 64) {     \
+    RAW raw = static_cast<RAW>(val.v.__x);                                     \
+    RAW shuffled = static_cast<RAW>(__shfl_xor_sync(                           \
+        mask, static_cast<unsigned int>(raw), lane_mask, width));              \
+    TYPE result;                                                               \
+    result.v.__x = static_cast<unsigned char>(shuffled);                       \
+    return result;                                                             \
+  }                                                                            \
+  TL_PATCH TL_DEVICE TYPE __shfl_down_sync(maca_uint64_t mask, TYPE val,       \
+                                           int delta, int width = 64) {        \
+    RAW raw = static_cast<RAW>(val.v.__x);                                     \
+    RAW shuffled = static_cast<RAW>(                                           \
+        __shfl_down_sync(mask, static_cast<unsigned int>(raw), delta, width)); \
+    TYPE result;                                                               \
+    result.v.__x = static_cast<unsigned char>(shuffled);                       \
+    return result;                                                             \
+  }                                                                            \
+  TL_PATCH TL_DEVICE TYPE __shfl_up_sync(maca_uint64_t mask, TYPE val,         \
+                                         int delta, int width = 64) {          \
+    RAW raw = static_cast<RAW>(val.v.__x);                                     \
+    RAW shuffled = static_cast<RAW>(                                           \
+        __shfl_up_sync(mask, static_cast<unsigned int>(raw), delta, width));   \
+    TYPE result;                                                               \
+    result.v.__x = static_cast<unsigned char>(shuffled);                       \
+    return result;                                                             \
+  }
+
+TL_DEFINE_MACA_SHFL_SYNC_OVERLOADS(tl::fp8_e4_t, uint8_t)
+TL_DEFINE_MACA_SHFL_SYNC_OVERLOADS(tl::fp8_e5_t, uint8_t)
+
+#undef TL_DEFINE_MACA_SHFL_SYNC_OVERLOADS
+
 namespace platform {
 
 template <typename T> struct numeric_limits : std::numeric_limits<T> {};

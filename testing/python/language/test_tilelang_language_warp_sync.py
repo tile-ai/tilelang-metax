@@ -40,9 +40,9 @@ def test_warp_sync():
 def kernel_with_shfl_sync():
     @T.prim_func
     def main(
-        A: T.Tensor((32,), "int32"),
+        A: T.Tensor((64,), "int32"),
     ):
-        with T.Kernel(1, threads=32):
+        with T.Kernel(1, threads=64):
             tx = T.get_thread_binding()
             val = tx * 10
             broadcast = T.shfl_sync(val, 31)
@@ -53,7 +53,7 @@ def kernel_with_shfl_sync():
 
 @tilelang.testing.requires_cuda
 def test_shfl_sync():
-    a = torch.empty((32), device="cuda", dtype=torch.int32)
+    a = torch.empty((64,), device="cuda", dtype=torch.int32)
     kernel = kernel_with_shfl_sync()
     assert "__shfl_sync" in kernel.get_kernel_source()
     kernel(a)
@@ -63,13 +63,13 @@ def test_shfl_sync():
 def _shift(lane, delta):
     """Return the source lane, or the current lane when the shift is out of range."""
     shifted = lane + delta
-    return shifted if 0 <= shifted < 32 else lane
+    return shifted if 0 <= shifted < 64 else lane
 
 
 # Builtin each shuffle lowers to and the lane its result comes from, in the row
 # order shfl_all_ops_kernel writes. The tables differ so the two shapes cannot fold.
 SHFL_TEMP_OPS = (
-    ("__shfl_sync", lambda lane: 31),
+    ("__shfl_sync", lambda lane: 63),
     ("__shfl_xor_sync", lambda lane: lane ^ 1),
     ("__shfl_down_sync", lambda lane: _shift(lane, 1)),
     ("__shfl_up_sync", lambda lane: _shift(lane, -1)),
@@ -84,20 +84,20 @@ SHFL_INLINE_OPS = (
 # One distinct value per lane so a wrong source lane cannot match by accident, on
 # float8_e5m2's coarse grid. Lane 0's negative zero needs the byte comparison.
 _MANTISSAS = (1.0, 1.25, 1.5, 1.75)
-_GRID = [sign * mant * 2.0**exp for exp in range(4) for mant in _MANTISSAS for sign in (1, -1)]
+_GRID = [sign * mant * 2.0**exp for exp in range(8) for mant in _MANTISSAS for sign in (1, -1)]
 LANE_VALUES = [-0.0, *_GRID[1:]]
 
 
 def shfl_all_ops_kernel(dtype):
     @T.prim_func
     def main(
-        A: T.Tensor((32,), dtype),
-        B: T.Tensor((len(SHFL_TEMP_OPS) + len(SHFL_INLINE_OPS), 32), dtype),
+        A: T.Tensor((64,), dtype),
+        B: T.Tensor((len(SHFL_TEMP_OPS) + len(SHFL_INLINE_OPS), 64), dtype),
     ):
-        with T.Kernel(1, threads=32):
+        with T.Kernel(1, threads=64):
             tx = T.get_thread_binding()
             # Rows 0-3 copy-initialize the result, rows 4-7 store it inline.
-            broadcast = T.shfl_sync(A[tx], 31)
+            broadcast = T.shfl_sync(A[tx], 63)
             swapped = T.shfl_xor(A[tx], 1)
             shifted_down = T.shfl_down(A[tx], 1)
             shifted_up = T.shfl_up(A[tx], 1)
@@ -113,7 +113,6 @@ def shfl_all_ops_kernel(dtype):
     return main
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize("dtype", [T.float16, T.bfloat16, T.float8_e4m3, T.float8_e5m2])
 def test_shfl_narrow_float_dtypes(dtype):
@@ -124,7 +123,7 @@ def test_shfl_narrow_float_dtypes(dtype):
     torch_dtype = dtype.as_torch()
     rows = len(SHFL_TEMP_OPS) + len(SHFL_INLINE_OPS)
     # out_idx would rebuild a torch tensor from float8 DLPack, unsupported on some versions.
-    b = torch.empty(rows, 32, device="cuda", dtype=torch_dtype)
+    b = torch.empty(rows, 64, device="cuda", dtype=torch_dtype)
     kernel(values.to(torch_dtype), b)
 
     # Both shapes must still reach the raw builtin, or these overloads stop being
@@ -135,7 +134,7 @@ def test_shfl_narrow_float_dtypes(dtype):
 
     for base, ops, form in ((0, SHFL_TEMP_OPS, "temporary"), (len(SHFL_TEMP_OPS), SHFL_INLINE_OPS, "inline")):
         for offset, (builtin, src_lane) in enumerate(ops):
-            ref = values[[src_lane(lane) for lane in range(32)]].to(torch_dtype)
+            ref = values[[src_lane(lane) for lane in range(64)]].to(torch_dtype)
             # Compare bytes: a float comparison would not separate -0.0 from +0.0.
             got_bytes = b[base + offset].view(torch.uint8)
             ref_bytes = ref.view(torch.uint8)
