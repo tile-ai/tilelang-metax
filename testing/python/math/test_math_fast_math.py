@@ -367,7 +367,6 @@ TAN_MATHOPS = [
 ]
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize(("name", "func"), TAN_MATHOPS, ids=[name for name, _ in TAN_MATHOPS])
 @pytest.mark.parametrize("dtype", [T.float16, T.bfloat16], ids=["float16", "bfloat16"])
