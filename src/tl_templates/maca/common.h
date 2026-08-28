@@ -273,6 +273,12 @@ struct fp8_e4_t {
 
   TL_DEVICE explicit fp8_e4_t(value_t x) : v(x) {}
 
+  TL_DEVICE static fp8_e4_t bitcast(unsigned char raw) {
+    fp8_e4_t result;
+    result.v.__x = raw;
+    return result;
+  }
+
   template <class T,
             std::enable_if_t<!std::is_same_v<std::decay_t<T>, fp8_e4_t> &&
                                  std::is_constructible_v<value_t, T>,
@@ -311,6 +317,12 @@ struct fp8_e5_t {
   TL_DEVICE constexpr fp8_e5_t() : v{} {}
 
   TL_DEVICE explicit fp8_e5_t(value_t x) : v(x) {}
+
+  TL_DEVICE static fp8_e5_t bitcast(unsigned char raw) {
+    fp8_e5_t result;
+    result.v.__x = raw;
+    return result;
+  }
 
   template <class T,
             std::enable_if_t<!std::is_same_v<std::decay_t<T>, fp8_e5_t> &&
