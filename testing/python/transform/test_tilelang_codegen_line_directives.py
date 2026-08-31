@@ -87,16 +87,15 @@ def test_line_directives_disabled_when_config_absent():
     assert "#line" not in artifact.kernel_source, artifact.kernel_source
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_line_directives_cuda_source():
-    """CUDA source (compile-only path, no GPU/nvcc) also maps statements."""
+    """MACA source (compile-only path, no GPU/nvcc) also maps statements."""
     target = {"kind": "maca"}
     config = {tilelang.PassConfigKey.TL_EMIT_LINE_DIRECTIVES: True}
     with tvm.transform.PassContext(opt_level=3, config=config), tvm.target.Target(target):
         artifact = tilelang.lower(vec_add_cuda, target=target)
     source = artifact.kernel_source
-    assert source is not None, "CUDA codegen produced no kernel source"
+    assert source is not None, "MACA codegen produced no kernel source"
     directives = _line_directives(source)
     store_line = _marker_line("line_marker_store_cuda")
     assert (store_line, __file__) in directives, f"store line {store_line} not mapped; directives: {directives}\n{source}"

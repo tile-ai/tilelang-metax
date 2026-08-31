@@ -3,6 +3,7 @@
 
 #include "../runtime/maca_module.h"
 #include "codegen_maca.h"
+#include "op/builtin.h"
 #include "runtime/pack_args.h"
 #include "support/check.h"
 #include "transform/common/attr.h"
@@ -102,6 +103,10 @@ Module BuildTileLangMACA(IRModule mod, Target target) {
   bool output_ssa = false;
   CodeGenTileLangMACA cg;
   cg.Init(output_ssa);
+  cg.SetEmitLineDirectives(
+      tvm::transform::PassContext::Current()
+          ->GetConfig<Bool>(tl::kEmitLineDirectives, Bool(false))
+          .value());
 
   ValidateUniqueDeviceGlobalSymbols(mod);
   if (const auto f = Function::GetGlobal("tilelang_callback_maca_validate")) {
@@ -143,6 +148,10 @@ ffi::Module BuildTileLangMACAWithoutCompile(IRModule mod, Target target) {
   bool output_ssa = false;
   CodeGenTileLangMACA cg;
   cg.Init(output_ssa);
+  cg.SetEmitLineDirectives(
+      tvm::transform::PassContext::Current()
+          ->GetConfig<Bool>(tl::kEmitLineDirectives, Bool(false))
+          .value());
 
   ValidateUniqueDeviceGlobalSymbols(mod);
   if (const auto f =

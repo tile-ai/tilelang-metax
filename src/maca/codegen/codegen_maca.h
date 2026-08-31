@@ -17,14 +17,14 @@
 #include <string>
 #include <unordered_map>
 
-#include "target/source/codegen_c.h"
+#include "backend/common/codegen/codegen_c_line_directives.h"
 #include "tvm/ir/expr.h"
 #include "tvm/runtime/data_type.h"
 
 namespace tvm {
 namespace codegen {
 
-class CodeGenTileLangMACA final : public CodeGenC {
+class CodeGenTileLangMACA final : public CodeGenCWithLineDirectives {
 public:
   CodeGenTileLangMACA();
   std::string Finish();
