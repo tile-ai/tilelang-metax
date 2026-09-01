@@ -143,7 +143,6 @@ def test_grouped_layout_inference_uses_fresh_z3_context_per_kernel():
         assert kernel is not None
 
 
-@tilelang.testing.pytest.mark.xfail
 @tilelang.testing.requires_cuda
 def test_grouped_tvm_ffi_manual_out_idx_uses_callee_allocation():
     unit_items = [(0, {"size": 17}), (1, {"size": 23})]

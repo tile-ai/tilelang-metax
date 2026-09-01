@@ -345,7 +345,8 @@ std::vector<int> GetCalleeAllocatedOutputIndices(const PrimFunc &func) {
   }
 
   auto target = func->GetAttr<Target>(tvm::attr::kTarget);
-  if (!target || target.value()->kind->name != "cuda") {
+  if (!target || target.value()->kind->name != "cuda" &&
+                     target.value()->kind->name != "maca") {
     return {};
   }
   auto target_host = target.value()->GetHost();
@@ -438,6 +439,7 @@ MakePackedAPI(PrimFunc func,
   // The device context
   Var device_id("dev_id");
   Integer device_type(target_device_type);
+  PrimExpr allocator_device_type = device_type;
   // seq_init gives sequence of initialization
   // seq_check gives sequence of later checks after init
   std::vector<Stmt> seq_init, seq_check, arg_buffer_declarations;
@@ -744,9 +746,23 @@ MakePackedAPI(PrimFunc func,
         Call(DataType::Int(32), builtin::tvm_struct_get(),
              {anchor_tensor, IntImm(DataType::Int(32), 0),
               IntImm(DataType::Int(32), builtin::kDLTensorDeviceType)});
-    seq_init.push_back(MakeAssertEQ(
-        anchor_device_type, IntImm(DataType::Int(32), device_type.IntValue()),
-        name_hint + ": allocator anchor has the wrong device type"));
+    allocator_device_type = anchor_device_type;
+    // PyTorch's MACA compatibility layer exports CUDA's DLPack device enum
+    // (kDLCUDA), while TileLang's MACA target uses kDLMACA.  Keep the target
+    // enum for code generation, but accept this producer-side alias at the
+    // allocator boundary.
+    PrimExpr anchor_device_type_matches_target =
+        anchor_device_type == IntImm(DataType::Int(32), device_type.IntValue());
+    if (target_device_type == DLDeviceType::kDLMACA) {
+      anchor_device_type_matches_target =
+          anchor_device_type_matches_target ||
+          anchor_device_type ==
+              IntImm(DataType::Int(32), DLDeviceType::kDLCUDA);
+    }
+    seq_init.push_back(AssertStmt(
+        anchor_device_type_matches_target, tvm::tirx::StringImm("RuntimeError"),
+        Array<tvm::tirx::StringImm>({tvm::tirx::StringImm(
+            name_hint + ": allocator anchor has the wrong device type")})));
     PrimExpr anchor_device_id =
         Call(DataType::Int(32), builtin::tvm_struct_get(),
              {anchor_tensor, IntImm(DataType::Int(32), 0),
@@ -910,7 +926,10 @@ MakePackedAPI(PrimFunc func,
       set_prototype_field(builtin::kDLTensorByteOffset,
                           IntImm(DataType::UInt(64), 0));
       set_prototype_field(builtin::kDLTensorDeviceId, device_id);
-      set_prototype_field(builtin::kDLTensorDeviceType, device_type);
+      // The DLPack allocator belongs to the producer represented by the
+      // anchor.  Passing its actual enum lets PyTorch's CUDA-masquerading
+      // MACA allocator consume the prototype (device type 2) correctly.
+      set_prototype_field(builtin::kDLTensorDeviceType, allocator_device_type);
       PrimExpr prototype = Call(
           DataType::Handle(), builtin::tvm_struct_get(),
           {output_prototype_storage, IntImm(DataType::Int(32), output_ordinal),

@@ -151,7 +151,7 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
         # The native wrapper is currently emitted for CUDA with TileLang's C
         # host codegen. Other device and host backends retain the preallocated-
         # output path until they have equivalent result-slot lowering.
-        if self.target.kind.name != "cuda":
+        if self.target.kind.name not in ["cuda", "maca"]:
             return False
         target_host = self.target.host
         return target_host is not None and target_host.kind.name == "c"
