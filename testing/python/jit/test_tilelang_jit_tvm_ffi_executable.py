@@ -1,12 +1,18 @@
+import pytest
 import threading
 from types import SimpleNamespace
 
-import pytest
 import torch
 
 from tilelang import tvm
 from tilelang.jit.abi import prepare_tvm_ffi_callee_allocated_outputs
 from tilelang.jit.adapter.tvm_ffi import TVMFFIKernelAdapter
+from tilelang.jit.abi import torch_supports_tvm_ffi_callee_allocated_output_abi
+
+_XFAIL_TORCH_FFI_CALLEE_ALLOCATED_OUTPUT = pytest.mark.xfail(
+    condition=not torch_supports_tvm_ffi_callee_allocated_output_abi(),
+    reason="PyTorch <= 2.8 does not support the tvm_ffi_callee_allocated_output ABI",
+)
 
 tirx = tvm.tirx
 
@@ -118,11 +124,12 @@ def test_callee_allocated_output_dispatch_uses_single_main_entry():
     assert calls == [(tensor, tensor)]
 
 
+@_XFAIL_TORCH_FFI_CALLEE_ALLOCATED_OUTPUT
 def test_subbyte_output_uses_callee_allocated_abi():
     adapter, _ = _make_adapter()
     adapter.params = [SimpleNamespace(dtype=SimpleNamespace(bits=4))]
     adapter.result_idx = [0]
-    adapter.target = tvm.target.Target("cuda", host="c")
+    adapter.target = tvm.target.Target("maca", host="c")
 
     assert adapter._uses_ffi_callee_allocated_output_abi()
 

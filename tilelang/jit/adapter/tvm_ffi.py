@@ -23,9 +23,11 @@ from tilelang.jit.adapter.base import BaseKernelAdapter, CachedTextSource
 from tilelang.utils.language import retrieve_func_from_module
 from tilelang.engine.param import KernelParam
 from tilelang.language.dtypes import dtype
+from tilelang.jit.abi import should_use_tvm_ffi_callee_allocated_output_abi
 
 
 COMPILE_ARGS = {}
+
 
 if sys.platform == "darwin":
     from torch.utils import cpp_extension
@@ -154,7 +156,7 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
         if self.target.kind.name not in ["cuda", "maca"]:
             return False
         target_host = self.target.host
-        return target_host is not None and target_host.kind.name == "c"
+        return target_host is not None and target_host.kind.name == "c" and should_use_tvm_ffi_callee_allocated_output_abi(self.target)
 
     def _process_dynamic_symbolic(self) -> dict[tirx.Var, tuple[int, int, int, int]]:
         """Extract information about dynamic shapes from the TIR function.

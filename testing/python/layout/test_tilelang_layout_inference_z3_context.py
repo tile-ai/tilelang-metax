@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import pytest
 import torch
 
 import tilelang
@@ -23,7 +24,12 @@ import tilelang.testing
 from tilelang import tvm
 from tilelang.autotuner.grouped_compile import compile_grouped_unit_tvm_ffi
 from tilelang.autotuner.param import CompileArgs
+from tilelang.jit.abi import torch_supports_tvm_ffi_callee_allocated_output_abi
 
+_XFAIL_TORCH_FFI_CALLEE_ALLOCATED_OUTPUT = pytest.mark.xfail(
+    condition=not torch_supports_tvm_ffi_callee_allocated_output_abi(),
+    reason="PyTorch <= 2.8 does not support the tvm_ffi_callee_allocated_output ABI",
+)
 
 _STATE_CACHE_CASES = (
     (266, 138, 44, 576),
@@ -143,6 +149,7 @@ def test_grouped_layout_inference_uses_fresh_z3_context_per_kernel():
         assert kernel is not None
 
 
+@_XFAIL_TORCH_FFI_CALLEE_ALLOCATED_OUTPUT
 @tilelang.testing.requires_cuda
 def test_grouped_tvm_ffi_manual_out_idx_uses_callee_allocation():
     unit_items = [(0, {"size": 17}), (1, {"size": 23})]

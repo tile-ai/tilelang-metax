@@ -21,7 +21,10 @@ from tilelang.jit.adapter import (
 from tilelang.profiler import Profiler, TensorSupplyType
 from tilelang.contrib import nvcc as tl_nvcc
 from tilelang.contrib.hip_resource_info import pop_recorded, reset_recorder
-from tilelang.jit.abi import prepare_tvm_ffi_callee_allocated_outputs
+from tilelang.jit.abi import (
+    prepare_tvm_ffi_callee_allocated_outputs,
+    should_use_tvm_ffi_callee_allocated_output_abi,
+)
 from tilelang.jit.diagnostics import jit_phase
 from tilelang.transform import PassConfigKey
 from tilelang.transform.pass_config import normalize_pass_configs
@@ -219,9 +222,14 @@ class JITKernel(Generic[_P, _T]):
         if self.execution_backend == "tvm_ffi":
             # MakePackedAPI consumes this attribute to omit all result buffers
             # from main's packed arguments and replace them with one allocator
-            # anchor.  Use a derived PrimFunc so manual out_idx does not become
-            # a persistent frontend attribute on the user's function.
-            tilelang_func, out_idx = prepare_tvm_ffi_callee_allocated_outputs(tilelang_func, out_idx)
+            # anchor. Use a derived PrimFunc so manual out_idx does not become
+            # a persistent frontend attribute on the user's function. MACA
+            # Torch <= 2.8 retains the legacy preallocated-output layout.
+            tilelang_func, out_idx = prepare_tvm_ffi_callee_allocated_outputs(
+                tilelang_func,
+                out_idx,
+                enable=should_use_tvm_ffi_callee_allocated_output_abi(self.target),
+            )
 
         func_name = str(tilelang_func.attrs.get("global_symbol", "<unknown>"))
         timing_tool = create_pass_timing_tool(self.pass_configs)

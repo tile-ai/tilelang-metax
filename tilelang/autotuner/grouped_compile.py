@@ -17,7 +17,10 @@ from tilelang.backend.module import create_backend_context
 from tilelang.engine.lower import lower_to_host_device_ir, device_codegen, host_codegen
 from tilelang.engine.param import CompiledArtifact
 from tilelang.jit.adapter import TVMFFIKernelAdapter
-from tilelang.jit.abi import prepare_tvm_ffi_callee_allocated_outputs
+from tilelang.jit.abi import (
+    prepare_tvm_ffi_callee_allocated_outputs,
+    should_use_tvm_ffi_callee_allocated_output_abi,
+)
 from tilelang.jit.kernel import JITKernel
 from tilelang.transform import PassConfigKey
 from tilelang.transform.pass_config import normalize_pass_configs
@@ -64,7 +67,11 @@ def compile_grouped_unit_tvm_ffi(
                 original_symbol = str(program.attrs["global_symbol"])
                 unique_symbol = f"{original_symbol}_gc_{idx}"
                 program = program.with_attr("global_symbol", unique_symbol)
-                program, output_indices = prepare_tvm_ffi_callee_allocated_outputs(program, compile_args.out_idx)
+                program, output_indices = prepare_tvm_ffi_callee_allocated_outputs(
+                    program,
+                    compile_args.out_idx,
+                    enable=should_use_tvm_ffi_callee_allocated_output_abi(backend_context.target),
+                )
 
                 lower_context = f"stage=grouped-lower, config={idx}, kernel={unique_symbol}"
                 config_instruments = [

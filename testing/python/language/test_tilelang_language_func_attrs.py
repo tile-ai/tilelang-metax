@@ -5,7 +5,14 @@ import torch
 import tilelang
 import tilelang.testing
 from tilelang import language as T
+from tilelang.jit.abi import torch_supports_tvm_ffi_callee_allocated_output_abi
 from tilelang.transform import PassConfigKey
+
+
+_XFAIL_TORCH_FFI_CALLEE_ALLOCATED_OUTPUT = pytest.mark.xfail(
+    condition=not torch_supports_tvm_ffi_callee_allocated_output_abi(),
+    reason="PyTorch <= 2.8 does not support the tvm_ffi_callee_allocated_output ABI",
+)
 
 
 @tilelang.testing.requires_cuda
@@ -35,6 +42,7 @@ def test_out_idx_via_attr_lazy():
         rt_mod.get_function(f"{kernel.attrs['global_symbol']}_auto_output", query_imports=True)
 
 
+@_XFAIL_TORCH_FFI_CALLEE_ALLOCATED_OUTPUT
 @tilelang.testing.requires_cuda
 def test_empty_dynamic_shape_is_allocated_by_tvm_ffi():
     """T.empty shape expressions should be evaluated by the packed ABI binder."""
@@ -56,6 +64,7 @@ def test_empty_dynamic_shape_is_allocated_by_tvm_ffi():
     torch.testing.assert_close(b, a.repeat(3)[:75] + 1.0)
 
 
+@_XFAIL_TORCH_FFI_CALLEE_ALLOCATED_OUTPUT
 @tilelang.testing.requires_cuda
 def test_empty_dynamic_shape_from_scalar_uses_ffi_allocator_anchor():
     """Scalar-only kernels should still install Torch's FFI allocator."""
@@ -94,6 +103,7 @@ def test_empty_dynamic_shape_from_scalar_uses_ffi_allocator_anchor():
         ),
     ],
 )
+@_XFAIL_TORCH_FFI_CALLEE_ALLOCATED_OUTPUT
 @tilelang.testing.requires_cuda
 def test_empty_subbyte_output_uses_torch_storage_dtype(
     logical_dtype,
@@ -118,6 +128,7 @@ def test_empty_subbyte_output_uses_torch_storage_dtype(
     assert output.shape == expected_shape
 
 
+@_XFAIL_TORCH_FFI_CALLEE_ALLOCATED_OUTPUT
 @tilelang.testing.requires_cuda
 def test_empty_dynamic_subbyte_output_packs_symbolic_final_dimension():
     """Storage-shape packing should remain symbolic until the packed call."""
@@ -138,6 +149,7 @@ def test_empty_dynamic_subbyte_output_packs_symbolic_final_dimension():
     assert output.shape == (3, 11)
 
 
+@_XFAIL_TORCH_FFI_CALLEE_ALLOCATED_OUTPUT
 @tilelang.testing.requires_cuda
 def test_multiple_empty_outputs_are_returned_from_tvm_ffi():
     """Multiple FFI-allocated outputs should preserve TileLang's list API."""
@@ -227,6 +239,7 @@ def test_out_idx_conflict_detection():
         tilelang.compile(kernel, out_idx=[-1])
 
 
+@_XFAIL_TORCH_FFI_CALLEE_ALLOCATED_OUTPUT
 @tilelang.testing.requires_cuda
 def test_manual_out_idx_multiple_dynamic_outputs_are_allocated_by_tvm_ffi():
     """Manual output indices should share T.empty's native allocation ABI."""
