@@ -353,6 +353,15 @@ def resolve_torch_storage_dtype(value: AnyDType) -> dtype:
     return dtype(get_tvm_dtype(value).as_torch())
 
 
+@tvm_ffi.register_global_func("tl.tvm_ffi.resolve_output_allocator_dtype", override=True)
+def resolve_output_allocator_dtype(value: AnyDType) -> dtype:
+    logical_dtype = get_tvm_dtype(value)
+    torch_version = tuple(int_(part) for part in str(torch.__version__).split(".")[:2])
+    if torch_version < (2, 10) and (logical_dtype.is_float4() or str(logical_dtype).startswith("float8")):
+        return dtype("int8")
+    return dtype(logical_dtype.as_torch())
+
+
 if TYPE_CHECKING:
     # yapf: disable
     class bool(dtype): ...

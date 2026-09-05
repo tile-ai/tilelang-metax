@@ -304,6 +304,7 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
     def _convert_ffi_callee_allocated_output_func(self) -> Callable[..., Any]:
         """Create a Torch callable whose outputs are allocated by TVM-FFI."""
         current_device_functor = self.get_current_device_functor()
+        torch_version = tuple(int(part) for part in str(torch.__version__).split(".")[:2])
         expected_inputs = len(self.params) - len(self.result_idx)
         cuda_available = torch.cuda.is_available()
         has_allocator_exchange = hasattr(torch.Tensor, "__dlpack_c_exchange_api__") or hasattr(torch.Tensor, "__c_dlpack_exchange_api__")
@@ -328,6 +329,21 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
                 allocator_anchor = torch.empty(0, device=current_device_functor())
 
             result = self._get_executable()(*inputs, allocator_anchor)
+            if torch_version < (2, 10):
+
+                def restore_logical_dtype(value: torch.Tensor, param_index: int):
+                    if not isinstance(value, torch.Tensor):
+                        return value
+                    param = self.params[param_index]
+                    if value.dtype != torch.int8 or not (param.is_float8() or param.is_float4()):
+                        return value
+                    if param.is_float4() and not hasattr(torch, "float4_e2m1fn_x2"):
+                        return value
+                    return value.view(param.torch_dtype())
+
+                if len(self.result_idx) == 1:
+                    return restore_logical_dtype(result, self.result_idx[0])
+                return [restore_logical_dtype(value, index) for value, index in zip(result, self.result_idx)]
             if len(self.result_idx) == 1:
                 return result
             return list(result)
