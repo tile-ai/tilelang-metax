@@ -37,12 +37,13 @@ using namespace ffi;
 namespace {
 constexpr const char *kTileLangOutIdx = "tilelang_out_idx";
 constexpr const char *kOutputStorageDTypeResolver =
-    "tl.tvm_ffi.resolve_output_storage_dtype";
+    "tl.tvm_ffi.resolve_output_allocator_dtype";
 
 struct OutputStorageInfo {
   DataType dtype;
   Array<PrimExpr> shape;
   Optional<PrimExpr> packing_condition;
+  Buffer buffer;
 };
 
 OutputStorageInfo ResolveOutputStorage(const Buffer &buffer) {
@@ -76,7 +77,12 @@ OutputStorageInfo ResolveOutputStorage(const Buffer &buffer) {
     storage_shape.Set(storage_shape.size() - 1,
                       floordiv(logical_extent, factor));
   }
-  return {storage_dtype, storage_shape, packing_condition};
+  Buffer storage_buffer(buffer->data, storage_dtype, storage_shape,
+                        Array<PrimExpr>(), buffer->elem_offset, buffer->name,
+                        buffer->data_alignment, buffer->offset_factor,
+                        buffer->buffer_type, buffer->axis_separators,
+                        buffer->span);
+  return {storage_dtype, storage_shape, packing_condition, storage_buffer};
 }
 
 Stmt StoreFFIAny(PrimExpr result, int type_index, PrimExpr value) {
@@ -973,7 +979,7 @@ MakePackedAPI(PrimFunc func,
                                  static_cast<int64_t>(sizeof(TVMFFIObject)))});
       output_binder.Bind(param, output_tensor,
                          name_hint + "." + param->name_hint, true);
-      output_buffer_def.emplace_back(param, buffer);
+      output_buffer_def.emplace_back(param, storage_info.buffer);
       used_output_buffers.insert(param.get());
       arg_buffer_declarations.push_back(DeclBuffer(buffer));
     }
