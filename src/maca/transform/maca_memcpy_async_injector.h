@@ -12,8 +12,7 @@ struct MACAMemcpyAsyncInjectResult {
 
 /*! \brief Inject MACA memcpy_async lowering patterns into a statement.
  */
-MACAMemcpyAsyncInjectResult InjectMACAMemcpyAsync(const tvm::tirx::Stmt &body,
-                                                  const tvm::PrimExpr &mbar);
+MACAMemcpyAsyncInjectResult InjectMACAMemcpyAsync(const tvm::tirx::Stmt &body);
 
 } // namespace tl
 } // namespace tvm

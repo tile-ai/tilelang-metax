@@ -61,6 +61,8 @@ static constexpr const char *kDisableSharedMemoryReuse =
     "tl.disable_shared_memory_reuse";
 static constexpr const char *kEnableFastMath = "tl.enable_fast_math";
 static constexpr const char *kEnableAsyncCopy = "tl.enable_async_copy";
+static constexpr const char *kEnableAsyncCopySwizzle =
+    "tl.enable_async_copy_swizzle";
 // Force the canonical FullParticipant baseline for every reducer epoch,
 // disabling narrow physical plans (compact storage / sub-block collectives).
 //
@@ -229,6 +231,14 @@ TVM_DLL const Op &ptx_stmatrix();
  *
  */
 TVM_DLL const Op &ptx_cp_async();
+
+/*!
+ * \brief TileLang intrinsic for maca async copy.
+ *
+ * maca_memcpy_async(dst_ptr, src_ptr, num_elems)
+ *
+ */
+TVM_DLL const Op &maca_memcpy_async();
 
 /*!
  * \brief Pack two b16 value into a b32 value

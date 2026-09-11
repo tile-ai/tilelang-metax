@@ -48,6 +48,8 @@ from .tir import *  # noqa: F401,F403
 from .tir import __all__ as _TIR_ALL
 from .warpgroup import *  # noqa: F401,F403
 from .warpgroup import __all__ as _WARPGROUP_ALL
+from .barrier import *  # noqa: F401,F403
+from .barrier import __all__ as _BARRIER
 
 _MACA_API_ALL = (
     "CUDASourceCodeKernel",
@@ -85,17 +87,8 @@ _MACA_API_ALL = (
 __tilelang_dialect__ = "maca"
 __all__ = tuple(
     dict.fromkeys(
-        (
-            *_COMMON_ALL,
-            *_MACA_API_ALL,
-            *_INTRINSICS_ALL,
-            *_PDL_ALL,
-            *_PRINT_ALL,
-            *_RANDOM_ALL,
-            *_TIR_ALL,
-            *_WARPGROUP_ALL,
-        )
+        (*_COMMON_ALL, *_MACA_API_ALL, *_INTRINSICS_ALL, *_PDL_ALL, *_PRINT_ALL, *_RANDOM_ALL, *_TIR_ALL, *_WARPGROUP_ALL, *_BARRIER)
     )
 )
 
-del _COMMON_ALL, _MACA_API_ALL, _INTRINSICS_ALL, _PDL_ALL, _PRINT_ALL, _RANDOM_ALL, _TIR_ALL, _WARPGROUP_ALL
+del _COMMON_ALL, _MACA_API_ALL, _INTRINSICS_ALL, _PDL_ALL, _PRINT_ALL, _RANDOM_ALL, _TIR_ALL, _WARPGROUP_ALL, _BARRIER

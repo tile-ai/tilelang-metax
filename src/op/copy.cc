@@ -650,7 +650,7 @@ TVM_REGISTER_OP("tl.tileop.tma_copy")
                                Integer(CallEffectKind::kOpaque));
 
 // Register the maca_async_copy operation - for MACA async copy using
-// memcpy_async and barrier_arrive_and_wait.
+// memcpy_async.
 TVM_REGISTER_OP("tl.tileop.maca_async_copy")
     .set_attr<TScriptPrinterName>("TScriptPrinterName", "maca_async_copy")
     .set_attr<OpBuilderFunc>("TLOpBuilder",

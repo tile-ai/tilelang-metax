@@ -24,14 +24,20 @@ namespace tl {
 TVM_DLL const Op &maca_mma();
 
 /*!
- * \brief tilelang intrinsic for MACA memory async copy.
- */
-TVM_DLL const Op &maca_memcpy_async();
-
-/*!
  * \brief tilelang intrinsic for MACA barrier arrive and wait.
  */
 TVM_DLL const Op &maca_barrier_arrive_and_wait();
+
+/*!
+ * \brief tilelang intrinsic for MACA synchronization barrier.
+ */
+TVM_DLL const Op &mxc_barrier_inst();
+
+/*!
+ * \brief tilelang intrinsic for MACA wait until the number of outstanding
+ * global memory instructions drops below the threshold n.
+ */
+TVM_DLL const Op &mxc_arrive_gvmcnt();
 
 } // namespace tl
 } // namespace tvm

@@ -1559,8 +1559,8 @@ def maca_barrier_arrive_and_wait(barrier: tirx.Buffer | BufferLoad | PrimExpr) -
                     # Allocate MACA barrier
                     bar = T.alloc_maca_barrier()
 
-                    # Async copy with barrier
-                    T.maca_async_copy(A[...], A_shared, barrier=bar)
+                    # Async copy
+                    T.maca_async_copy(A[...], A_shared)
 
                     # Wait for the async copy to complete
                     T.maca_barrier_arrive_and_wait(bar)

@@ -25,6 +25,7 @@
 #include "arith/ir_mutator_with_analyzer.h"
 #include "common/attr.h"
 #include "cuda/op/builtin.h"
+#include "op/builtin.h"
 #include "runtime/thread_storage_scope.h"
 #include "support/check.h"
 #include "tir/transforms/ir_utils.h"
@@ -1339,6 +1340,11 @@ struct TileLangThreadSyncPlanner : public ConstrVisitor {
       e.type = kSync;
       e.scope = sync_scope_;
       curr_stmt_.access.emplace_back(std::move(e));
+    } else if (op->op.same_as(tl::maca_memcpy_async())) {
+      // MACA async copies are synchronized by the MXC barrier intrinsics
+      // inserted around them, so their shared destination must not make the
+      // planner emit an additional block-level barrier.
+      return;
     } else {
       ConstrVisitor::VisitExpr_(op);
     }

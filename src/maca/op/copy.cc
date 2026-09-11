@@ -197,14 +197,6 @@ Stmt Copy::LowerMemcpyAsync(const CopyNode &op, const LowerArgs &lower_args,
     return LowerNormal(op, lower_args, analyzer);
   }
 
-  PrimExpr mbar_handle;
-  if (auto user_barrier = op.annotations.Get("barrier")) {
-    mbar_handle = Downcast<PrimExpr>(user_barrier.value());
-  } else {
-    LOG(FATAL) << "T.maca_async_copy() requires a barrier argument. "
-               << "Use T.maca_async_copy(src, dst, barrier=bar).";
-  }
-
   auto simt_loop = op.MakeSIMTLoop(analyzer);
   auto fused_loop = Downcast<For>(ParallelLoopFuser::Fuse(simt_loop));
   auto par_op = ParallelOp(fused_loop);
@@ -226,7 +218,7 @@ Stmt Copy::LowerMemcpyAsync(const CopyNode &op, const LowerArgs &lower_args,
       lower_args.layout_map, par_op->GetPredicate(lower_args.thread_index),
       /*parallel_loop=*/true, par_op->LoopLayoutRequiresPaddingGuard());
 
-  auto inject_result = InjectMACAMemcpyAsync(lowered_loop, mbar_handle);
+  auto inject_result = InjectMACAMemcpyAsync(lowered_loop);
   Stmt memcpy_async_loop = inject_result.stmt;
   if (!inject_result.injected_maca_memcpy_async) {
     DLOG(WARNING) << "maca_async_copy rewrite miss for copy src ="

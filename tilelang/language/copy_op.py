@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from typing import Literal, Any
-from tilelang._typing import BufferLikeType, BarrierType
+from tilelang._typing import BufferLikeType
 from tilelang.utils.language import (
     to_buffer_region,
     legalize_pairwise_extents,
@@ -536,24 +536,23 @@ def tma_scatter4(
 def maca_async_copy(
     src: BufferLikeType,
     dst: BufferLikeType,
-    barrier: BarrierType,
     *,
     annotations: dict | None = None,
 ) -> tirx.PrimExpr:
     """MACA async copy - emits memcpy_async.
 
-    The operation writes the returned barrier handle to the provided barrier buffer.
-    The user must call T.maca_barrier_arrive_and_wait() for synchronization.
+    The operation lowers to tl.maca_memcpy_async. Synchronize it with the MXC
+    barrier intrinsics (e.g. T.mxc_arrive_gvmcnt)
+    before consuming the copied data.
 
     Args:
         src: Source memory region (global memory)
         dst: Destination memory region (shared memory)
-        barrier: MACA barrier (from T.alloc_maca_barrier()) for storing the barrier handle.
         annotations: Additional annotations dict. Values in annotations take
             precedence over individual arguments.
 
     Returns:
-        tirx.PrimExpr: The barrier handle that was stored (for convenience, same as buffer access)
+        tirx.PrimExpr: The handle-typed intrinsic call of the copy operation.
     """
     # If both side are buffers, we should make sure their shapes are equal
     if isinstance(src, tirx.Buffer) and isinstance(dst, tirx.Buffer):
@@ -572,10 +571,6 @@ def maca_async_copy(
     dst = to_buffer_region(dst, access_type="w", extents=dst_extent)
 
     ann = annotations.copy() if annotations else {}
-
-    from .builtin import _mbar_to_buffer_load
-
-    ann["barrier"] = _mbar_to_buffer_load(barrier)
 
     return tirx.call_intrin("handle", tirx.op.Op.get("tl.tileop.maca_async_copy"), src, dst, annotations=ann)
 

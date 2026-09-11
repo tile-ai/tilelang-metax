@@ -8,6 +8,7 @@
 
 #include "support/check.h"
 #include <tvm/ffi/extra/structural_equal.h>
+#include <tvm/ir/transform.h>
 #include <tvm/runtime/logging.h>
 #include <tvm/tirx/op.h>
 #include <tvm/tirx/stmt_functor.h>
@@ -577,7 +578,26 @@ Layout MakeHalfBankSwizzleLayout(const Buffer &buffer) {
                                           info.element_size);
   return ExpandLayout2D(base, buffer);
 }
-
+// Layout swizzling for 128 bytes for maca asynccopy
+static Layout MakeFullBankSwizzleLayout2DMACAAsync(int stride, int continuous,
+                                                   int element_size) {
+  // Swizzle 3 bit
+  Var i = InputPlaceholder(0);
+  Var j = InputPlaceholder(1);
+  int vector_size = 128 / element_size;
+  // See MakeQuarterBankSwizzleLayout2D for stride==4 rationale.
+  ICHECK(stride == 4 || stride % 8 == 0) << "stride=" << stride;
+  ICHECK(continuous % (vector_size * 8) == 0)
+      << "continuous=" << continuous << ", vector_size=" << vector_size;
+  PrimExpr ts = FloorDiv(i, 8);
+  PrimExpr s = FloorMod(i, 8);
+  PrimExpr tc = FloorDiv(FloorDiv(j, vector_size), 8);
+  PrimExpr c = FloorMod(FloorDiv(j, vector_size), 8);
+  PrimExpr vec = FloorMod(j, vector_size);
+  PrimExpr c_swizzle = xor8x8(c, s);
+  PrimExpr index = vec + (c_swizzle + tc * 8) * vector_size;
+  return Layout(Array<PrimExpr>{stride, continuous}, {ts, s, index});
+}
 // Layout swizzling for 128 bytes
 static Layout MakeFullBankSwizzleLayout2D(int stride, int continuous,
                                           int element_size) {
@@ -912,10 +932,19 @@ Layout MakeGemmABLayout(int mat_stride, int mat_continuous, int continuity,
   int vector_size = 128 / element_size;
   if (!k_inner && element_size == 8) // int8 KxN
     return MakeGemmABLayoutPadded(mat_stride, mat_continuous, element_size);
-  else if (mat_continuous % (vector_size * 8) == 0)
-    return MakeFullBankSwizzleLayout2D(mat_stride, mat_continuous,
-                                       element_size);
-  else if (mat_continuous % (vector_size * 4) == 0)
+  else if (mat_continuous % (vector_size * 8) == 0) {
+    transform::PassContext ctx = transform::PassContext::Current();
+    // maca async need 1024B align
+    bool is_maca_async_copy =
+        ctx->GetConfig<Bool>("tl.enable_async_copy_swizzle", Bool(false))
+            .value();
+    if (is_maca_async_copy)
+      return MakeFullBankSwizzleLayout2DMACAAsync(mat_stride, mat_continuous,
+                                                  element_size);
+    else
+      return MakeFullBankSwizzleLayout2D(mat_stride, mat_continuous,
+                                         element_size);
+  } else if (mat_continuous % (vector_size * 4) == 0)
     return MakeHalfBankSwizzleLayout2D(mat_stride, mat_continuous,
                                        element_size);
   else if (mat_continuous % (vector_size * 2) == 0)

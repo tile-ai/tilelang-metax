@@ -263,8 +263,7 @@ def alloc_maca_barrier(shape: ShapeType = 1) -> Buffer:
     Examples
     --------
     >>> bar = alloc_maca_barrier(4)  # allocate 4 barrier handles for pipelining
-    >>> T.maca_async_copy(A[...], A_shared, barrier=bar[i])  # assign barrier handle
-    >>> T.barrier_arrive_and_wait(bar[i])  # wait for barrier
+    >>> T.maca_async_copy(A[...], A_shared)  # issue the async copy
     """
     buffer = T.alloc_buffer(shape, "void", scope="local.barrier")
     return buffer

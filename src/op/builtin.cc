@@ -23,6 +23,7 @@ TVM_REGISTER_PASS_CONFIG_OPTION(kDisableSharedMemoryReuse, Bool);
 TVM_REGISTER_PASS_CONFIG_OPTION(kForceLetInline, Bool);
 TVM_REGISTER_PASS_CONFIG_OPTION(kEnableFastMath, Bool);
 TVM_REGISTER_PASS_CONFIG_OPTION(kEnableAsyncCopy, Bool);
+TVM_REGISTER_PASS_CONFIG_OPTION(kEnableAsyncCopySwizzle, Bool);
 TVM_REGISTER_PASS_CONFIG_OPTION(kReducerForceBaseline, Bool);
 TVM_REGISTER_PASS_CONFIG_OPTION(kEnableReducerPlanVerbose, Bool);
 TVM_REGISTER_PASS_CONFIG_OPTION(kLayoutCostModel, ffi::String);
@@ -94,6 +95,11 @@ TIR_DEFINE_TL_BUILTIN(ptx_stmatrix)
                                Integer(CallEffectKind::kOpaque));
 
 TIR_DEFINE_TL_BUILTIN(ptx_cp_async)
+    .set_num_inputs(-1)
+    .set_attr<TCallEffectKind>("TCallEffectKind",
+                               Integer(CallEffectKind::kOpaque));
+
+TIR_DEFINE_TL_BUILTIN(maca_memcpy_async)
     .set_num_inputs(-1)
     .set_attr<TCallEffectKind>("TCallEffectKind",
                                Integer(CallEffectKind::kOpaque));

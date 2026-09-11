@@ -36,6 +36,75 @@ bool IsProvablyDivisible(const PrimExpr &expr, int64_t divisor) {
   return modular_set->coeff % divisor == 0 && modular_set->base % divisor == 0;
 }
 
+bool IsValidCPAsyncTransferBytes(int64_t bytes) {
+  return bytes == 4 || bytes == 8 || bytes == 16;
+}
+
+std::optional<DataType> GetAccessPtrElementType(const PrimExpr &expr) {
+  const auto *ptr_call = expr.as<CallNode>();
+  if (ptr_call == nullptr) {
+    return std::nullopt;
+  }
+  if (ptr_call->op.same_as(builtin::address_of())) {
+    const auto *buffer_load = ptr_call->args[0].as<BufferLoadNode>();
+    ICHECK(buffer_load) << "address_of arg must be BufferLoad";
+    return buffer_load->buffer->dtype;
+  }
+  if (ptr_call->op.same_as(builtin::tvm_access_ptr())) {
+    ICHECK(!ptr_call->args.empty());
+    return ptr_call->args[0].dtype();
+  }
+  if (ptr_call->op.same_as(tl::access_ptr())) {
+    ICHECK_EQ(ptr_call->args.size(), 3U)
+        << "tl.access_ptr expects 3 args: (BufferLoad, extent, rw_mask)";
+    const auto *buffer_load = ptr_call->args[0].as<BufferLoadNode>();
+    ICHECK(buffer_load) << "tl.access_ptr arg0 must be BufferLoad";
+    return buffer_load->buffer->dtype;
+  }
+  return std::nullopt;
+}
+
+// tl.maca_memcpy_async carries a logical element count; the memcpy_async<N>
+// template argument is a byte count, so derive it from the access pointer
+// element types, exactly like the CUDA and ROCm backends do for
+// tl.ptx_cp_async.
+int GetMACAMemcpyAsyncTransferBytes(const CallNode *op) {
+  ICHECK(op->args.size() == 3 || op->args.size() == 4)
+      << "tl.maca_memcpy_async expects 3 or 4 arguments (dst_access_ptr, "
+         "src_access_ptr, num_elems, [predicate])";
+  const auto *num_elems_imm = op->args[2].as<IntImmNode>();
+  ICHECK(num_elems_imm)
+      << "tl.maca_memcpy_async num_elems must be IntImm, but got "
+      << op->args[2];
+  int64_t num_elems = num_elems_imm->value;
+  ICHECK_GT(num_elems, 0) << "tl.maca_memcpy_async num_elems must be positive";
+
+  auto dst_elem_type = GetAccessPtrElementType(op->args[0]);
+  auto src_elem_type = GetAccessPtrElementType(op->args[1]);
+  ICHECK(dst_elem_type.has_value() && src_elem_type.has_value())
+      << "tl.maca_memcpy_async expects address_of, tl.access_ptr, or "
+         "tvm_access_ptr operands";
+
+  int64_t dst_total_bits =
+      num_elems * dst_elem_type.value().bits() * dst_elem_type.value().lanes();
+  int64_t src_total_bits =
+      num_elems * src_elem_type.value().bits() * src_elem_type.value().lanes();
+  ICHECK_EQ(dst_total_bits, src_total_bits)
+      << "tl.maca_memcpy_async requires src/dst transfer widths to match, but "
+         "got "
+      << dst_total_bits << " vs " << src_total_bits << " bits";
+  ICHECK_EQ(dst_total_bits % 8, 0)
+      << "tl.maca_memcpy_async requires byte-aligned transfers, but got "
+      << dst_total_bits << " bits";
+
+  int64_t total_bytes = dst_total_bits / 8;
+  ICHECK(IsValidCPAsyncTransferBytes(total_bytes))
+      << "tl.maca_memcpy_async requires a transfer width in {4, 8, 16} bytes, "
+         "but got "
+      << total_bytes;
+  return static_cast<int>(total_bytes);
+}
+
 bool CanEmitPackedX2MathMACA(DataType t) {
   int lanes = t.lanes();
   if (lanes < 2 || lanes % 2 != 0) {
@@ -2000,27 +2069,42 @@ void CodeGenTileLangMACA::VisitExpr_(const CallNode *op, std::ostream &os) {
     this->stream << ");\n";
   };
   if (op->op.same_as(tl::maca_memcpy_async())) {
-    // args[0] = dst_access_ptr, args[1] = src_access_ptr, args[2] = bytes,
-    // args[3] = barrier
-    ICHECK(op->args.size() == 4)
-        << "maca_memcpy_async expects 4 arguments (dst_access_ptr, "
-           "src_access_ptr, bytes, barrier)";
+    // args[0] = dst_access_ptr, args[1] = src_access_ptr,
+    // args[2] = num_elems (logical element count),
+    // args[3] = predicate (optional, for zero-fill guarded copies).
+    int transfer_bytes = GetMACAMemcpyAsyncTransferBytes(op);
 
     std::string dst = this->PrintExpr(op->args[0]);
     std::string src = this->PrintExpr(op->args[1]);
-    std::string bytes = this->PrintExpr(op->args[2]);
-    std::string mbar = this->PrintExpr(op->args[3]);
+    std::string predicate;
+    if (op->args.size() == 4) {
+      predicate = this->PrintExpr(op->args[3]);
+    }
 
     this->PrintIndent();
-    this->stream << mbar << " = memcpy_async<" << bytes
+    this->stream << "memcpy_async<" << transfer_bytes
                  << ">((void* __restrict__)" << dst << ", (void* __restrict__)"
-                 << src << ");\n";
+                 << src;
+    if (!predicate.empty()) {
+      this->stream << ", " << predicate;
+    }
+    this->stream << ");\n";
   } else if (op->op.same_as(tl::maca_barrier_arrive_and_wait())) {
     this->PrintIndent();
     ICHECK(op->args.size() == 1)
         << "maca_barrier_arrive_and_wait expects 1 argument (bar)";
     std::string dummyRet = this->PrintExpr(op->args[0]);
     this->stream << "barrier_arrive_and_wait(" << dummyRet << ");\n";
+  } else if (op->op.same_as(tl::mxc_barrier_inst())) {
+    ICHECK(op->args.empty()) << "mxc_barrier_inst expects no arguments";
+    this->PrintIndent();
+    this->stream << "__builtin_mxc_barrier_inst();\n";
+  } else if (op->op.same_as(tl::mxc_arrive_gvmcnt())) {
+    ICHECK(op->args.size() == 1)
+        << "mxc_arrive_gvmcnt expects 1 argument (gvmcnt threshold)";
+    std::string gvmcnt = this->PrintExpr(op->args[0]);
+    this->PrintIndent();
+    this->stream << "__builtin_mxc_arrive_gvmcnt(" << gvmcnt << ");\n";
   } else if (op->op.same_as(builtin::create_barriers())) {
     this->PrintIndent();
     int barrier_count = Downcast<IntImm>(op->args[0])->value;

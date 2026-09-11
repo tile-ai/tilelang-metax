@@ -17,7 +17,6 @@
 #include <optional>
 #include <vector>
 
-#include "maca/op/builtin.h"
 #include "maca_memcpy_async_injector.h"
 #include "op/builtin.h"
 #include "op/utils.h"
@@ -31,10 +30,24 @@ using namespace ffi;
 
 class MACAMemcpyAsyncInjector : public StmtMutator {
 public:
-  explicit MACAMemcpyAsyncInjector(const PrimExpr &mbar) : mbar_(mbar) {}
-
   bool InjectedMACAMemcpyAsync() const { return injected_maca_memcpy_async_; }
+  class TxXorMutator : public ExprMutator {
+  public:
+    TxXorMutator(int shlf_rights_bits, int xor_bits)
+        : shlf_rights_bits_(shlf_rights_bits), xor_bits_(xor_bits) {}
+    PrimExpr VisitExpr_(const VarNode *op) override {
+      if (op->name_hint == "tx") {
+        Var tx = GetRef<Var>(op);
+        auto xor_bit = (tx >> shlf_rights_bits_) & ((1 << xor_bits_) - 1);
+        return tx ^ xor_bit;
+      }
+      return GetRef<PrimExpr>(op);
+    }
 
+  private:
+    int shlf_rights_bits_;
+    int xor_bits_;
+  };
   Stmt VisitStmt_(const ForNode *op) final {
     // Track nested vectorized loop extents so we can decide whether an
     // element-wise copy has a legal final memcpy_async width after later loop
@@ -87,13 +100,28 @@ public:
                                           index_info->dst_index)) {
         return Optional<Stmt>();
       }
+      int64_t expval;
+      if (const int64_t *val_ptr = as_const_int(store->buffer->shape.back())) {
+        expval = __builtin_ctzll(*val_ptr) - 1;
+      } else {
+        LOG(FATAL) << "Expected a constant shape, but got dynamic shape!";
+      }
+      // xor 8x8
+      TxXorMutator mutator(expval - 2, 3);
+      Array<PrimExpr> newload_indices, newstore_indices;
+      for (const auto &idx : store->indices) {
+        newstore_indices.push_back(mutator(idx));
+      }
+
+      for (const auto &idx : load->indices) {
+        newload_indices.push_back(mutator(idx));
+      }
       return MakeMemcpyAsyncStmtFromLoads(
           store,
-          /*dst_base_load=*/BufferLoad(store->buffer, store->indices),
-          /*src_base_load=*/BufferLoad(load->buffer, load->indices),
+          /*dst_base_load=*/BufferLoad(store->buffer, newstore_indices),
+          /*src_base_load=*/BufferLoad(load->buffer, newload_indices),
           /*num_elems=*/index_info->per_access_num_elems,
-          /*total_bytes=*/index_info->total_bytes, /*mbar=*/mbar_, predicated,
-          predicate_value);
+          /*total_bytes=*/index_info->total_bytes, predicated, predicate_value);
     }
 
     Optional<Array<PrimExpr>> src_base_indices =
@@ -114,8 +142,7 @@ public:
         /*dst_base_load=*/BufferLoad(store->buffer, dst_base_indices.value()),
         /*src_base_load=*/BufferLoad(load->buffer, src_base_indices.value()),
         /*num_elems=*/index_info->per_access_num_elems,
-        /*total_bytes=*/index_info->total_bytes, /*mbar=*/mbar_, predicated,
-        predicate_value);
+        /*total_bytes=*/index_info->total_bytes, predicated, predicate_value);
   }
 
   Stmt VisitStmt_(const BufferStoreNode *store) final {
@@ -334,19 +361,19 @@ private:
   static Optional<Stmt> MakeMemcpyAsyncStmtFromLoads(
       const BufferStoreNode *store, const BufferLoad &dst_base_load,
       const BufferLoad &src_base_load, int num_elems, int total_bytes,
-      const PrimExpr &mbar, bool predicated, const PrimExpr &predicate_value) {
+      bool predicated, const PrimExpr &predicate_value) {
     PrimExpr dst_access_ptr =
         MakeAccessPtrFromLoad(dst_base_load, num_elems, /*rw_mask=*/2);
     PrimExpr src_access_ptr =
         MakeAccessPtrFromLoad(src_base_load, num_elems, /*rw_mask=*/1);
 
-    ffi::Array<PrimExpr> memcpy_async_args;
+    // The transfer width is carried as a logical element count; the MACA
+    // codegen derives the byte width from the access pointer element types.
+    // Zero-fill guarded copies append the predicate as the trailing argument.
+    ffi::Array<PrimExpr> memcpy_async_args{dst_access_ptr, src_access_ptr,
+                                           PrimExpr(num_elems)};
     if (predicated) {
-      memcpy_async_args = {dst_access_ptr, src_access_ptr, PrimExpr(num_elems),
-                           mbar, predicate_value};
-    } else {
-      memcpy_async_args = {dst_access_ptr, src_access_ptr, PrimExpr(num_elems),
-                           mbar};
+      memcpy_async_args.push_back(predicate_value);
     }
     std::string barrier_type;
     if (4 == total_bytes) {
@@ -409,15 +436,13 @@ private:
   int current_vectorized_lanes_{1};
   std::vector<ActiveVectorizedLoop> active_vectorized_loops_;
   arith::Analyzer analyzer_;
-  PrimExpr mbar_;
   bool injected_maca_memcpy_async_{false};
 };
 
 using namespace tirx::transform;
 
-MACAMemcpyAsyncInjectResult InjectMACAMemcpyAsync(const Stmt &body,
-                                                  const PrimExpr &mbar) {
-  MACAMemcpyAsyncInjector injector(mbar);
+MACAMemcpyAsyncInjectResult InjectMACAMemcpyAsync(const Stmt &body) {
+  MACAMemcpyAsyncInjector injector;
   Stmt injected = injector(body);
   return {injected, injector.InjectedMACAMemcpyAsync()};
 }

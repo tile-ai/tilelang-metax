@@ -168,7 +168,8 @@ class PassConfigKey(str, Enum):
 
     Default: True
     """
-
+    TL_ENABLE_MACA_ASYNC_COPY_SWIZZLE_STRATEGY = "tl.enable_async_copy_swizzle"
+    """Enable the dedicated swizzle strategy for MACA async copy."""
     TL_ENABLE_LOWER_LDGSTG = "tl.enable_lower_ldgstg"
     """Enable non-predicated LDG/STG lowering for global memory access.
     When enabled, converts Ramp-based global buffer load/store to ldg/stg intrinsics.
