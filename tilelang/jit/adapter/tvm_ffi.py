@@ -388,7 +388,7 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
         adapter.libpath = kernel_lib_path
         adapter.kernel_global_source = device_kernel_source.text
         adapter.rt_mod = None
-        adapter.executable = runtime.load_module(kernel_lib_path)
+        adapter.executable = runtime.Executable(runtime.load_module(kernel_lib_path))
         adapter._ffi_callee_allocated_output_abi = adapter._uses_ffi_callee_allocated_output_abi()
         adapter.dynamic_symbolic_map = None if adapter._ffi_callee_allocated_output_abi else adapter._process_dynamic_symbolic()
         adapter._executable_lock = threading.Lock()

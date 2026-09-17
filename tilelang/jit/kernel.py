@@ -179,10 +179,15 @@ class JITKernel(Generic[_P, _T]):
             backend_context=backend_context,
         )
 
+        adapter_func = func
+        adapter_out_idx = out_idx
+        if instance.execution_backend == "tvm_ffi":
+            adapter_func, adapter_out_idx = prepare_tvm_ffi_callee_allocated_outputs(adapter_func, adapter_out_idx)
+
         instance.adapter = instance._create_adapter_from_database(
-            func_or_mod=func,
+            func_or_mod=adapter_func,
             params=params,
-            result_idx=out_idx,
+            result_idx=adapter_out_idx,
             target=target,
             host_kernel_source=host_kernel_source,
             device_kernel_source=device_kernel_source,
