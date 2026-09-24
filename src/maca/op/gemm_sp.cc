@@ -110,7 +110,8 @@ struct GemmSP {
                        int block_size, Target target, String gemm_inst) {
     int warp_size = TargetMacaGetWarpSize(target);
     ICHECK(block_size >= warp_size)
-        << "T.gemm_sp needs at least one full warp (wavefront), but this kernel block has only "
+        << "T.gemm_sp needs at least one full warp (wavefront), but this "
+           "kernel block has only "
         << block_size << " threads while the target warp size is " << warp_size
         << ". Raise the kernel's thread count to at least " << warp_size << ".";
     int num_warps = block_size / warp_size;
