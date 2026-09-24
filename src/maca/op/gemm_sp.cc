@@ -108,7 +108,13 @@ struct GemmSP {
   static std::pair<int, int>
   ComputeWarpPartition(const GemmSPWarpPolicyNode &policy, int M, int N,
                        int block_size, Target target, String gemm_inst) {
-    int num_warps = block_size / TargetMacaGetWarpSize(target);
+    int warp_size = TargetMacaGetWarpSize(target);
+    ICHECK(block_size >= warp_size)
+        << "T.gemm_sp needs at least one full warp (wavefront), but this "
+           "kernel block has only "
+        << block_size << " threads while the target warp size is " << warp_size
+        << ". Raise the kernel's thread count to at least " << warp_size << ".";
+    int num_warps = block_size / warp_size;
     int k_n_per_warp = 16;
     return ComputeDefaultWarpPartition(policy, M, N, num_warps, k_n_per_warp);
   }
