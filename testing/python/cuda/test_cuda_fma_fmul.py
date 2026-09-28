@@ -145,7 +145,6 @@ def test_fma_fmul_vectorized_cutedsl_codegen():
     assert source.count("tl.ieee_fmaf(") >= WIDTH
 
 
-@pytest.mark.xfail(Reason="precision issues")
 @tilelang.testing.requires_cuda
 def test_fma_fmul_vectorized_cuda_result():
     kernel = tilelang.compile(_make_vectorized_program(), out_idx=[3], target="auto")
@@ -153,7 +152,10 @@ def test_fma_fmul_vectorized_cuda_result():
     b = torch.randn((ROWS, WIDTH), device="cuda", dtype=torch.float32)
     c = torch.randn((ROWS, WIDTH), device="cuda", dtype=torch.float32)
 
-    expected = torch.addcmul(c * b, a, b)
+    # Match T.fmul followed by T.fma: c*b is rounded to FP32 first, then
+    # a*b + (c*b) is evaluated as one fused FP32 multiply-add.
+    cb = c * b
+    expected = ((a.double() * b.double()) + cb.double()).float()
     actual = kernel(a, b, c)
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 

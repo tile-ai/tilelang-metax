@@ -1052,6 +1052,16 @@ template <typename T> TL_DEVICE ::uint1 to_uint1(T v) {
   return r;
 }
 
+// Pack two float bit patterns into one uint64 value.
+TL_DEVICE unsigned long long pack_float2_as_uint64(float a, float b) {
+  float2 packed = make_float2(a, b);
+  unsigned long long result;
+  static_assert(sizeof(packed) == sizeof(result),
+                "float2 must have the same size as uint64");
+  __builtin_memcpy(&result, &packed, sizeof(packed));
+  return result;
+}
+
 // =========================================================================
 // Packed x2 element-wise math helpers
 //
@@ -1103,7 +1113,7 @@ TL_DEVICE half2 sub2(half2 a, half2 b) { return __hsub2(a, b); }
 // --- mul2 ----------------------------------------------------------------
 
 TL_DEVICE float2 mul2(float2 a, float2 b) {
-  return make_float2(a.x * b.x, a.y * b.y);
+  return make_float2(__fmul_rn(a.x, b.x), __fmul_rn(a.y, b.y));
 }
 
 TL_DEVICE maca_bfloat162 mul2(maca_bfloat162 a, maca_bfloat162 b) {
@@ -1115,7 +1125,7 @@ TL_DEVICE half2 mul2(half2 a, half2 b) { return __hmul2(a, b); }
 // --- fma2 ----------------------------------------------------------------
 
 TL_DEVICE float2 fma2(float2 a, float2 b, float2 c) {
-  return make_float2(a.x * b.x + c.x, a.y * b.y + c.y);
+  return make_float2(__fmaf_rn(a.x, b.x, c.x), __fmaf_rn(a.y, b.y, c.y));
 }
 
 TL_DEVICE maca_bfloat162 fma2(maca_bfloat162 a, maca_bfloat162 b,

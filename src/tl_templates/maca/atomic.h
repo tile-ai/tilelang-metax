@@ -183,8 +183,7 @@ TL_DEVICE T1 AtomicMinRet(T1 *address, T2 val, int memory_order = 0) {
   }
 }
 
-TL_DEVICE inline void AtomicMax(float *address, float val,
-                                int memory_order = 0) {
+TL_DEVICE void AtomicMax(float *address, float val, int memory_order = 0) {
   (void)memory_order;
   int *address_as_i = reinterpret_cast<int *>(address);
   int old = *address_as_i, assumed;
@@ -196,8 +195,7 @@ TL_DEVICE inline void AtomicMax(float *address, float val,
   } while (assumed != old);
 }
 
-TL_DEVICE inline float AtomicMaxRet(float *address, float val,
-                                    int memory_order = 0) {
+TL_DEVICE float AtomicMaxRet(float *address, float val, int memory_order = 0) {
   (void)memory_order;
   int *address_as_i = reinterpret_cast<int *>(address);
   int old = *address_as_i, assumed;
@@ -210,8 +208,7 @@ TL_DEVICE inline float AtomicMaxRet(float *address, float val,
   return __int_as_float(old);
 }
 
-TL_DEVICE inline void AtomicMin(float *address, float val,
-                                int memory_order = 0) {
+TL_DEVICE void AtomicMin(float *address, float val, int memory_order = 0) {
   (void)memory_order;
   int *address_as_i = reinterpret_cast<int *>(address);
   int old = *address_as_i, assumed;
@@ -223,8 +220,7 @@ TL_DEVICE inline void AtomicMin(float *address, float val,
   } while (assumed != old);
 }
 
-TL_DEVICE inline float AtomicMinRet(float *address, float val,
-                                    int memory_order = 0) {
+TL_DEVICE float AtomicMinRet(float *address, float val, int memory_order = 0) {
   (void)memory_order;
   int *address_as_i = reinterpret_cast<int *>(address);
   int old = *address_as_i, assumed;
