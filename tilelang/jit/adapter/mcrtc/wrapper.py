@@ -50,6 +50,7 @@ class TLMCRTCSourceWrapper(TLCUDASourceWrapper):
         "float8_e5m2": "ctypes.c_uint8",
         "float64": "ctypes.c_double",
         "int64": "ctypes.c_int64",
+        "uint64": "ctypes.c_uint64",
         "int32": "ctypes.c_int32",
         "uint32": "ctypes.c_uint32",
         "bool": "ctypes.c_bool",
@@ -71,7 +72,7 @@ class TLMCRTCSourceWrapper(TLCUDASourceWrapper):
     ):
         super().__init__(scheduled_ir_module, source, target, device_mod, host_mod, pass_configs)
 
-    def _pythonic_expr(self, expr: tvm.tir.PrimExpr) -> str:
+    def _pythonic_expr(self, expr: tvm.tirx.PrimExpr) -> str:
         return pythonic_expr(expr, self._TYPE_MAP, ignore_cast=True, floor_div_op="//")
 
     def create_dispatch_func(self, code: str, function_informations: dict[str, dict]) -> str:
@@ -83,7 +84,7 @@ class TLMCRTCSourceWrapper(TLCUDASourceWrapper):
             if param in self.prim_func.buffer_map:
                 buffer = self.prim_func.buffer_map[param]
                 function_args.append({"name": buffer.data.name, "type": "ctypes.c_void_p"})
-            elif isinstance(param, tvm.tir.Var):
+            elif isinstance(param, tvm.tirx.Var):
                 function_args.append({"name": param.name, "type": self._lookup_type(param.dtype)})
             else:
                 raise ValueError(f"Parameter {param} is not in the buffer map of the primary function.")

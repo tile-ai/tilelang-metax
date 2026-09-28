@@ -21,7 +21,6 @@ def test_uint64_tensor(execution_backend):
     assert kernel(a).cpu().tolist() == [(x + 1) % (1 << 64) for x in values]
 
 
-@pytest.mark.xfail(Reason="mcrtr fail")
 @tilelang.testing.requires_cuda
 @pytest.mark.parametrize("execution_backend", ["cython", "mcrtc"])
 def test_uint64_scalar(execution_backend):

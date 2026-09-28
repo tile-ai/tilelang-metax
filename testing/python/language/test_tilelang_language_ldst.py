@@ -4,7 +4,6 @@ import tilelang
 import tilelang.language as T
 import tilelang.testing
 import torch
-import pytest
 
 
 @tilelang.testing.requires_cuda
@@ -211,7 +210,6 @@ def test_stg256_codegen():
     torch.testing.assert_close(Y, X, atol=1e-5, rtol=1e-5)
 
 
-@pytest.mark.xfail
 @tilelang.testing.requires_cuda
 @tilelang.testing.requires_cuda_compute_version_lt(10, 0)
 def test_implicit_256_bit_vector_store_fallback_on_pre_sm100():

@@ -35,7 +35,6 @@ def test_out_idx_via_attr_lazy():
         rt_mod.get_function(f"{kernel.attrs['global_symbol']}_auto_output", query_imports=True)
 
 
-@pytest.mark.xfail(Reason="expected: 37, got: 75")
 @tilelang.testing.requires_cuda
 def test_empty_dynamic_shape_is_allocated_by_tvm_ffi():
     """T.empty shape expressions should be evaluated by the packed ABI binder."""

@@ -3910,7 +3910,6 @@ void CodeGenTileLangMACA::VisitExpr_(const BroadcastNode *op,
     os << ')';
     return;
   }
-
   if (op->dtype.is_float() && op->dtype.bits() == 32 &&
       op->dtype.lanes() == 8) {
     std::string v = PrintExpr(op->value);
@@ -3918,7 +3917,7 @@ void CodeGenTileLangMACA::VisitExpr_(const BroadcastNode *op,
     for (int i = 0; i < 4; ++i) {
       if (i != 0)
         os << ", ";
-      os << "*(unsigned long long*)&make_float2(" << v << ", " << v << ")";
+      os << "tl::pack_float2_as_uint64(" << v << ", " << v << ")";
     }
     os << ')';
     return;

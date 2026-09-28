@@ -166,30 +166,77 @@ class MCRTCKernelAdapter(BaseKernelAdapter):
         adapter._post_init()
         return adapter
 
-    def _process_dynamic_symbolic(self) -> dict[tirx.Var, tuple[int, int]]:
-        """Map dynamic variables to their source tensor and shape dimension."""
+    def _process_dynamic_symbolic(self) -> dict[tirx.Var, tuple[int, int, int, int]]:
+        """Extract runtime sources for scalar, shape, and stride symbols.
+
+        Each entry contains ``(kind, parameter_index, dimension, scale)``.
+        ``kind`` is 0 for a shape, 1 for a stride, and 2 for an explicit
+        scalar parameter.
+        """
         func = self.prim_func
         params = func.params
         buffer_map = func.buffer_map
         dynamic_symbolic_map = {}
-        self._dynamic_symbolic_name_map: dict[str, tuple[int, int]] = {}
+        self._dynamic_symbolic_candidates_map: dict[tirx.Var, list[tuple[int, int, int, int]]] = {}
+        self._dynamic_symbolic_name_candidates_map: dict[str, list[tuple[int, int, int, int]]] = {}
+        self._dynamic_symbolic_name_map: dict[str, tuple[int, int, int, int]] = {}
 
-        for param_index, param in enumerate(params):
+        def unique_push_back(v: tirx.Var, entry: tuple[int, int, int, int]):
+            self._dynamic_symbolic_candidates_map.setdefault(v, []).append(entry)
+            self._dynamic_symbolic_name_candidates_map.setdefault(v.name, []).append(entry)
+            if v in dynamic_symbolic_map or v.name in self._dynamic_symbolic_name_map:
+                return
+            dynamic_symbolic_map[v] = entry
+            self._dynamic_symbolic_name_map[v.name] = entry
+
+        for i, param in enumerate(params):
+            if param not in buffer_map:
+                unique_push_back(param, (2, i, -1, 1))
+
+        for i, param in enumerate(params):
+            if param not in buffer_map:
+                continue
             buffer = buffer_map[param]
-            for shape_index, shape in enumerate(buffer.shape):
-                if isinstance(shape, tirx.Var) and shape not in dynamic_symbolic_map:
-                    dynamic_symbolic_map[shape] = (param_index, shape_index)
-                    self._dynamic_symbolic_name_map[shape.name] = (param_index, shape_index)
+            for j, shape in enumerate(buffer.shape):
+                if isinstance(shape, tirx.Var):
+                    unique_push_back(shape, (0, i, j, 1))
+
+        for i, param in enumerate(params):
+            if param not in buffer_map:
+                continue
+            buffer = buffer_map[param]
+            element_bits = buffer.dtype.bits * buffer.dtype.lanes
+            stride_scale = 8 // element_bits if element_bits < 8 else 1
+            for j, stride in enumerate(buffer.strides):
+                if isinstance(stride, tirx.Var):
+                    unique_push_back(stride, (1, i, j, stride_scale))
 
         return dynamic_symbolic_map
 
-    def _lookup_dynamic_symbolic(self, variable: tirx.Var) -> tuple[int, int]:
-        """Find the source tensor and dimension for a dynamic variable."""
-        if variable in self.dynamic_symbolic_map:
-            return self.dynamic_symbolic_map[variable]
-        if variable.name in self._dynamic_symbolic_name_map:
-            return self._dynamic_symbolic_name_map[variable.name]
-        raise KeyError(f"Dynamic symbolic variable '{variable.name}' was not found.")
+    def _lookup_dynamic_symbolic_candidates(self, variable: tirx.Var) -> list[tuple[int, int, int, int]]:
+        """Return all scalar, shape, and stride sources for a dynamic symbol."""
+        if variable in self._dynamic_symbolic_candidates_map:
+            return self._dynamic_symbolic_candidates_map[variable]
+        if variable.name in self._dynamic_symbolic_name_candidates_map:
+            return self._dynamic_symbolic_name_candidates_map[variable.name]
+        raise KeyError(f"Dynamic symbolic variable '{variable.name}' was not found in symbolic map.")
+
+    def _resolve_dynamic_symbolic_value(self, variable: tirx.Var, param_values: list[Any]):
+        """Resolve one symbolic value from the first available runtime source."""
+        unavailable_sources = []
+        for ref_id, param_idx, dim_idx, stride_scale in self._lookup_dynamic_symbolic_candidates(variable):
+            ref_value = param_values[param_idx]
+            if ref_id == 2 and ref_value is not None:
+                return ref_value
+            if isinstance(ref_value, torch.Tensor):
+                if ref_id == 0:
+                    return ref_value.shape[dim_idx]
+                if ref_id == 1:
+                    return ref_value.stride()[dim_idx] * stride_scale
+                raise ValueError(f"Unknown dynamic symbolic reference kind: {ref_id}")
+            unavailable_sources.append(f"parameter {param_idx}: {type(ref_value).__name__}")
+        details = ", ".join(unavailable_sources)
+        raise TypeError(f"Dynamic symbolic variable '{variable.name}' has no available runtime source ({details})")
 
     def get_kernel_source(self, kernel_only: bool = True) -> str | None:
         """Return cached MACA kernel source or generated host source."""
@@ -214,44 +261,42 @@ class MCRTCKernelAdapter(BaseKernelAdapter):
         """Invoke the generated Python launcher."""
         return self.pymodule.call(self.kernels, *args, stream=stream)
 
-    def _wrap_forward_from_prebuild_lib(
-        self,
-        *ins: list[torch.Tensor],
-        stream: int | None = None,
-    ):
+    def _wrap_forward_from_prebuild_lib(self, *ins: Any, stream: int | None = None):
         """Validate inputs, allocate outputs and launch the MACA kernel."""
         if len(ins) + len(self.result_idx) != len(self.params):
             raise ValueError(
-                f"Expected {len(self.params)} inputs, got "
-                f"{len(ins) + len(self.result_idx)} with {len(ins)} inputs "
-                f"and {len(self.result_idx)} outputs."
+                f"Expected {len(self.params)} inputs, got {len(ins) + len(self.result_idx)} "
+                f"with {len(ins)} inputs and {len(self.result_idx)} outputs."
             )
 
         input_index = 0
-        args = []
-
+        param_values: list[Any] = [None] * len(self.params)
         for index in range(len(self.params)):
             if index in self.result_idx:
-                dtype = self.param_dtypes[index]
-                shape = []
+                continue
+            param_values[index] = ins[input_index]
+            input_index += 1
 
-                for dim in self.param_shapes[index]:
-                    if isinstance(dim, tirx.Var):
-                        tensor_index, shape_index = self._lookup_dynamic_symbolic(dim)
-                        shape.append(ins[tensor_index].shape[shape_index])
-                    else:
-                        shape.append(dim)
+        first_tensor = next((value for value in param_values if isinstance(value, torch.Tensor)), None)
 
-                device = ins[0].device if len(ins) > 0 else torch.cuda.current_device()
-                tensor = torch.empty(*shape, dtype=dtype, device=device)
-            else:
-                tensor = ins[input_index]
-                input_index += 1
+        # Allocate outputs in their PrimFunc parameter positions so symbolic
+        # dimensions can resolve against both tensor and scalar inputs.
+        for index in self.result_idx:
+            dtype = self.param_dtypes[index]
+            shape = []
+            for dim in self.param_shapes[index]:
+                if isinstance(dim, tirx.Var):
+                    shape.append(self._resolve_dynamic_symbolic_value(dim, param_values))
+                else:
+                    shape.append(dim)
 
-            args.append(tensor)
+            device = first_tensor.device if first_tensor is not None else torch.cuda.current_device()
+            param_values[index] = torch.empty(*shape, dtype=dtype, device=device)
 
-        for _, (buffer_index, shape_index) in self.dynamic_symbolic_map.items():
-            args.append(args[buffer_index].shape[shape_index])
+        args = list(param_values)
+        for symbol, (ref_id, _, _, _) in self.dynamic_symbolic_map.items():
+            if ref_id != 2:
+                args.append(self._resolve_dynamic_symbolic_value(symbol, param_values))
 
         if stream is None:
             if torch.cuda.is_available():
