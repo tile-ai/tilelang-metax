@@ -11,6 +11,7 @@ from tvm.runtime import convert
 from ..layout.utils import mma_store_index_map
 from tilelang.utils import is_fragment, get_buffer_region_from_load
 from tilelang.maca.intrinsics.layout.mma_layout import *
+from tilelang.maca.intrinsics.macro.mma_macro_generator import _reject_narrow_float_accum
 
 
 lift = convert
@@ -47,7 +48,7 @@ class SparseTensorCoreIntrinEmitter:
         a_dtype: str = "float16",
         e_dtype: str = "uint8",
         b_dtype: str = "float16",
-        accum_dtype: str = "float16",
+        accum_dtype: str = "float32",
         a_transposed: bool = False,
         b_transposed: bool = False,
         e_transposed: bool = False,
@@ -131,10 +132,18 @@ class SparseTensorCoreIntrinEmitter:
         self.local_size_b = (n_dim * k_dim) // warp_size
         self.local_size_out = (m_dim * n_dim) // warp_size
 
+    @staticmethod
+    def _normalize_dtype(dtype) -> str:
+        s = str(dtype)
+        if s.startswith("dtype('") and s.endswith("')"):
+            s = s[7:-2]
+        return s
+
     def _initialize_abbrev(self, a_dtype, b_dtype, accum_dtype):
-        self.a_dtype_abbrv = self.dtype_abbrv[a_dtype]
-        self.b_dtype_abbrv = self.dtype_abbrv[b_dtype]
-        self.accum_dtype_abbrv = self.dtype_abbrv[accum_dtype]
+        _reject_narrow_float_accum(self._normalize_dtype(accum_dtype))
+        self.a_dtype_abbrv = self.dtype_abbrv[self._normalize_dtype(a_dtype)]
+        self.b_dtype_abbrv = self.dtype_abbrv[self._normalize_dtype(b_dtype)]
+        self.accum_dtype_abbrv = self.dtype_abbrv[self._normalize_dtype(accum_dtype)]
 
     def _initialize_mma_prefix(self, k_dim=16):
         in_dtype = self.a_dtype
