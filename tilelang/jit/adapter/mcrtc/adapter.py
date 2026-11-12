@@ -11,7 +11,7 @@ from tvm.target import Target
 from tilelang import tvm as tvm
 from tilelang.backend.target import determine_target
 from tilelang.engine.param import KernelParam
-from tilelang.jit.adapter.base import BaseKernelAdapter, CachedTextSource
+from tilelang.jit.adapter.base import BaseKernelAdapter, CachedTextSource, output_allocation_stream
 from tilelang.jit.adapter.mcrtc import check_mcrtc_available
 from tilelang.utils.language import retrieve_func_from_module
 
@@ -278,20 +278,31 @@ class MCRTCKernelAdapter(BaseKernelAdapter):
             input_index += 1
 
         first_tensor = next((value for value in param_values if isinstance(value, torch.Tensor)), None)
+        device = first_tensor.device if first_tensor is not None else None
 
-        # Allocate outputs in their PrimFunc parameter positions so symbolic
-        # dimensions can resolve against both tensor and scalar inputs.
-        for index in self.result_idx:
-            dtype = self.param_dtypes[index]
-            shape = []
-            for dim in self.param_shapes[index]:
-                if isinstance(dim, tirx.Var):
-                    shape.append(self._resolve_dynamic_symbolic_value(dim, param_values))
-                else:
-                    shape.append(dim)
+        # Outputs written on a caller-supplied stream are allocated on that stream.
+        alloc_stream = None
+        if stream is not None and self.result_idx:
+            if device is None:
+                device = torch.device("cuda", torch.cuda.current_device())
+            alloc_stream = output_allocation_stream(stream, device)
 
-            device = first_tensor.device if first_tensor is not None else torch.cuda.current_device()
-            param_values[index] = torch.empty(*shape, dtype=dtype, device=device)
+        # Allocate output tensors in their PrimFunc parameter positions.
+        with torch.cuda.stream(alloc_stream):
+            for i in range(len(self.params)):
+                if i in self.result_idx:
+                    dtype = self.param_dtypes[i]
+                    shape = []
+                    # Now working with native Python list, no FFI calls needed
+                    for s in self.param_shapes[i]:
+                        if isinstance(s, tirx.Var):
+                            shape.append(self._resolve_dynamic_symbolic_value(s, param_values))
+                        else:  # Already converted to Python int during initialization
+                            shape.append(s)
+                    if device is None:
+                        device = torch.cuda.current_device()
+                    tensor = torch.empty(*shape, dtype=dtype, device=device)
+                    param_values[i] = tensor
 
         args = list(param_values)
         for symbol, (ref_id, _, _, _) in self.dynamic_symbolic_map.items():

@@ -10,6 +10,7 @@ from tilelang.backend.target import determine_target
 from tilelang.cuda.target import normalize_cutedsl_target
 
 
+@tilelang.testing.skip_on_maca
 def test_cutedsl_dict_target_normalizes_to_cuda_marker(monkeypatch):
     from tilelang.jit.adapter.cutedsl import checks
 
@@ -21,6 +22,7 @@ def test_cutedsl_dict_target_normalizes_to_cuda_marker(monkeypatch):
     assert {"cuda", "gpu", "cutedsl"}.issubset(set(target.keys))
 
 
+@tilelang.testing.skip_on_maca
 def test_cutedsl_string_target_uses_detected_cuda_arch(monkeypatch):
     """Verify bare CuTeDSL targets use TileLang's CUDA arch normalization."""
 
@@ -37,6 +39,7 @@ def test_cutedsl_string_target_uses_detected_cuda_arch(monkeypatch):
     assert {"cuda", "gpu", "cutedsl"}.issubset(set(target.keys))
 
 
+@tilelang.testing.skip_on_maca
 def test_cutedsl_codegen_supports_tl_ptx_cp_async():
     if not tvm.runtime.enabled("cuda"):
         pytest.skip("TileLang CuTeDSL codegen requires TVM built with CUDA support.")

@@ -4,11 +4,8 @@ from tilelang import language as T
 
 
 def _compile_cuda(func):
-    tilelang.disable_cache()
-    try:
-        return tilelang.compile(func, execution_backend="tvm_ffi")
-    finally:
-        tilelang.enable_cache()
+    with tilelang.testing.without_kernel_cache():
+        return tilelang.compile(func, target="auto", execution_backend="tvm_ffi")
 
 
 @tilelang.testing.requires_cuda
@@ -25,7 +22,7 @@ def test_sync_threads_with_variable_barrier_id():
     assert "tl::__sync_thread_partial<" in src, src
 
 
-@tilelang.testing.pytest.mark.skip
+@tilelang.testing.skip_on_maca
 @tilelang.testing.requires_cuda
 def test_sync_threads_with_computed_barrier_id():
     @T.prim_func

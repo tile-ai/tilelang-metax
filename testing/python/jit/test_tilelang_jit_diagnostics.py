@@ -188,24 +188,33 @@ def test_nvcc_compile_cuda_honors_target_code(monkeypatch):
 
 
 @tilelang.testing.skip_on_maca
-def test_cuda_compile_callback_uses_fatbin_for_multiple_target_code(monkeypatch):
+def test_cuda_compile_callback_uses_fatbin_for_multiple_target_code(monkeypatch, tmp_path):
     from tilelang.backend.target import determine_target
     from tilelang.cuda import backend as cuda_backend
+    from tilelang.env import CacheState, env
 
-    captured = {}
+    monkeypatch.setattr(env, "TILELANG_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(env, "TILELANG_DISABLE_CACHE", "0")
+    monkeypatch.setattr(CacheState, "_enabled", True)
+    compile_calls = []
 
     def fake_compile_cuda(code, target_format, arch, options=None, verbose=False):
-        captured["target_format"] = target_format
-        captured["arch"] = arch
+        compile_calls.append((target_format, arch))
         return bytearray(b"fake-cuda-binary")
 
     monkeypatch.setattr(cuda_backend.nvcc, "compile_cuda", fake_compile_cuda)
+    monkeypatch.setattr(cuda_backend.nvcc, "get_nvcc_version", lambda: (13, 0, 88))
 
     target = determine_target({"kind": "cuda", "arch": "sm_100f", "code": ["sm_100a", "sm_103a"]}, return_object=True)
-    cuda_backend.tilelang_callback_cuda_compile("__global__ void kernel() {}", target)
+    source = "__global__ void kernel() {}"
+    first = cuda_backend.tilelang_callback_cuda_compile(source, target)
 
-    assert captured["target_format"] == "fatbin"
-    assert captured["arch"] == ["-gencode", "arch=compute_100f,code=[sm_100a,sm_103a]"]
+    assert compile_calls == [("fatbin", ["-gencode", "arch=compute_100f,code=[sm_100a,sm_103a]"])]
+    assert bytes(first) == b"fake-cuda-binary"
+
+    second = cuda_backend.tilelang_callback_cuda_compile(source, target)
+    assert second == first
+    assert len(compile_calls) == 1
 
 
 @tilelang.testing.skip_on_maca
@@ -218,6 +227,7 @@ def test_jit_compile_reports_timeout_for_hanging_nvcc(monkeypatch, tmp_path, cap
     monkeypatch.setattr(env, "TILELANG_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("TILELANG_JIT_DIAGNOSTICS", "1")
     monkeypatch.setenv("TILELANG_COMPILE_TIMEOUT_SECONDS", "0.25")
+    monkeypatch.setattr(nvcc, "get_nvcc_version", lambda: (13, 0, 88))
     monkeypatch.setattr(nvcc.subprocess, "Popen", lambda *args, **kwargs: _HangingProcess())
 
     caplog.set_level(logging.INFO, logger="tilelang.jit.diagnostics")
@@ -316,16 +326,12 @@ def test_explicit_cuda_arch_source_generation_probe():
     from tilelang.engine.lower import lower as tilelang_lower
 
     target = tvm.target.Target({"kind": "cuda", "arch": "sm_120"})
-    tilelang.disable_cache()
-    try:
-        with target:
-            artifact = tilelang_lower(
-                _make_cuda_compile_probe(),
-                target=target,
-                enable_device_compile=False,
-            )
-    finally:
-        tilelang.enable_cache()
+    with tilelang.testing.without_kernel_cache(), target:
+        artifact = tilelang_lower(
+            _make_cuda_compile_probe(),
+            target=target,
+            enable_device_compile=False,
+        )
 
     assert "__global__" in artifact.kernel_source
     assert "add_one" in artifact.kernel_source

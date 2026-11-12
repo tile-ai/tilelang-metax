@@ -22,6 +22,7 @@ def _lower_cutedsl(program):
         return lower(program.with_attr("global_symbol", "main"), target=target)
 
 
+@tilelang.testing.skip_on_maca
 def test_cutedsl_codegen_promotes_narrow_shift_before_wide_cast():
     @T.prim_func
     def prog(A: T.Tensor((1,), "uint16"), B: T.Tensor((1,), "uint32")):
@@ -36,6 +37,7 @@ def test_cutedsl_codegen_promotes_narrow_shift_before_wide_cast():
     assert "cutlass.Uint32(cutlass.Uint16((local[0] << cutlass.Uint16(20))))" not in artifact.kernel_source
 
 
+@tilelang.testing.skip_on_maca
 def test_cutedsl_codegen_does_not_promote_shift_across_signedness():
     @T.prim_func
     def prog(A: T.Tensor((1,), "int8"), B: T.Tensor((1,), "uint16")):

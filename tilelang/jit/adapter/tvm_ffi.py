@@ -13,6 +13,7 @@ import sys
 import threading
 
 import torch
+from tvm_ffi import use_torch_stream
 from tilelang import tvm
 from tvm import runtime, tirx
 from tvm.target import Target
@@ -22,6 +23,7 @@ from tilelang.jit.abi import CALLEE_ALLOCATED_OUTPUTS_ATTR
 from tilelang.jit.adapter.base import BaseKernelAdapter, CachedTextSource
 from tilelang.utils.language import retrieve_func_from_module
 from tilelang.engine.param import KernelParam
+from tilelang.engine.host_mapped import get_host_mapped_params
 from tilelang.language.dtypes import dtype
 
 
@@ -61,7 +63,7 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
     # that is not wrapped by the wrapper code
     host_kernel_source: str | None = None
     device_kernel_source: str | None = None
-    executable: tvm.runtime.Executable | None = None
+    executable: tvm.runtime.Executable | tvm.runtime.Module | None = None
     # Pass configs for the compiler
     pass_configs: dict[str, Any] | None = None
     # host_mod
@@ -135,12 +137,20 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
         if self.rt_mod is None:
             raise RuntimeError("Cannot create TVM FFI executable without a runtime module.")
         executable = runtime.Executable(self.rt_mod)
-        if COMPILE_ARGS:
-            # Precompile jit module with extra arguments.
-            executable.jit(**COMPILE_ARGS)
+        compile_args = dict(COMPILE_ARGS)
+        from tilelang.cpu.toolchain import get_compile_flags
+
+        backend_flags = get_compile_flags(self.target, self.pass_configs, execution_backend="tvm_ffi")
+        if backend_flags:
+            options = list(compile_args.get("options", []))
+            options += backend_flags
+            compile_args["options"] = options
+        if compile_args:
+            # Precompile with platform and backend-owned toolchain options.
+            executable.jit(**compile_args)
         return executable
 
-    def _get_executable(self) -> tvm.runtime.Executable:
+    def _get_executable(self) -> tvm.runtime.Executable | tvm.runtime.Module:
         executable = self.executable
         if executable is not None:
             return executable
@@ -152,7 +162,8 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
                 self.executable = executable
             return executable
 
-    def get_exportable_executable(self) -> tvm.runtime.Executable:
+    def get_exportable_executable(self) -> tvm.runtime.Executable | tvm.runtime.Module:
+        """Return the lazy executable, or the runnable module loaded from disk cache."""
         return self._get_executable()
 
     def _uses_ffi_callee_allocated_output_abi(self) -> bool:
@@ -214,6 +225,7 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
             return self._convert_ffi_callee_allocated_output_func()
 
         current_device_functor = None
+        has_host_mapped_params = bool(get_host_mapped_params(self.prim_func))
 
         # Convert TVM types to native Python types during initialization
         # Convert tvm.DataType to torch.dtype for tensor creation
@@ -265,7 +277,11 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
             # Resolve the device used for outputs. Prefer the first tensor input's device
             # if available, otherwise use PyTorch's current device.
             out_device: torch.device | None = next(
-                (input.device for input in inputs if isinstance(input, torch.Tensor)),
+                (
+                    input.device
+                    for input in inputs
+                    if isinstance(input, torch.Tensor) and (not has_host_mapped_params or input.device.type != "cpu")
+                ),
                 None,
             )
 
@@ -336,7 +352,13 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
             if out_device is not None:
                 self._prepare_torch_device(out_device)
             executable = self._get_executable()
-            executable(*tensor_list)
+            if has_host_mapped_params and out_device is None:
+                # CPU tensors do not propagate a CUDA stream through DLPack.
+                # All-host signatures still follow Torch's stream/capture.
+                with use_torch_stream():
+                    executable(*tensor_list)
+            else:
+                executable(*tensor_list)
 
             # Return outputs in the requested form
             if len(self.result_idx) == 1:
@@ -349,6 +371,7 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
         """Create a Torch callable whose outputs are allocated by TVM-FFI."""
         torch_version = tuple(int(part) for part in str(torch.__version__).split(".")[:2])
         current_device_functor = None
+        has_host_mapped_params = bool(get_host_mapped_params(self.prim_func))
         expected_inputs = len(self.params) - len(self.result_idx)
 
         def func(*inputs: torch.Tensor | Any):
@@ -356,7 +379,14 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
             if len(inputs) != expected_inputs:
                 raise ValueError(f"Kernel expected {expected_inputs} inputs, but {len(inputs)} are provided.")
 
-            allocator_anchor = next((value for value in inputs if isinstance(value, torch.Tensor)), None)
+            allocator_anchor = next(
+                (
+                    value
+                    for value in inputs
+                    if isinstance(value, torch.Tensor) and (not has_host_mapped_params or value.device.type != "cpu")
+                ),
+                None,
+            )
             if allocator_anchor is None:
                 if current_device_functor is None:
                     current_device_functor = self.get_current_device_functor()
@@ -437,7 +467,7 @@ class TVMFFIKernelAdapter(BaseKernelAdapter):
         adapter.libpath = kernel_lib_path
         adapter.kernel_global_source = device_kernel_source.text
         adapter.rt_mod = None
-        adapter.executable = runtime.Executable(runtime.load_module(kernel_lib_path))
+        adapter.executable = runtime.load_module(kernel_lib_path)
         adapter._ffi_callee_allocated_output_abi = adapter._uses_ffi_callee_allocated_output_abi()
         adapter.dynamic_symbolic_map = None if adapter._ffi_callee_allocated_output_abi else adapter._process_dynamic_symbolic()
         adapter._executable_lock = threading.Lock()

@@ -50,10 +50,23 @@ template <typename T> TL_DEVICE unsigned short PackBits16(const T &val) {
 }
 
 template <typename T1, typename T2>
+TL_DEVICE void AtomicAdd(T1 *address, T2 val, int memory_order = 0) {
+  (void)memory_order;
+  if constexpr (std::is_same_v<std::remove_cv_t<T1>, _Float16>) {
+    // TVM may emit _Float16 while the MACA atomic API expects __half.
+    atomicAdd(reinterpret_cast<__half *>(address), static_cast<__half>(val));
+  } else {
+    using NT1 = typename normalize_atomic_type<T1>::type;
+    atomicAdd(reinterpret_cast<NT1 *>(address), static_cast<NT1>(val));
+  }
+}
+
+template <typename T1, typename T2>
 TL_DEVICE T1 AtomicAddRet(T1 *address, T2 val,
                           int memory_order = int(std::memory_order_relaxed)) {
   using NT1 = typename normalize_atomic_type<T1>::type;
-  if constexpr (std::is_same_v<NT1, float> || std::is_same_v<NT1, int>) {
+  if constexpr (std::is_same_v<NT1, float> || std::is_same_v<NT1, int> ||
+                std::is_same_v<NT1, unsigned long long>) {
     return static_cast<T1>(
         atomicAdd(reinterpret_cast<NT1 *>(address), static_cast<NT1>(val)));
   } else if constexpr (std::is_same_v<NT1, half> ||
@@ -95,8 +108,19 @@ template <typename T1, typename T2>
 TL_DEVICE void AtomicMax(T1 *address, T2 val, int memory_order = 0) {
   (void)memory_order;
   using NT1 = typename normalize_atomic_type<T1>::type;
-  if constexpr (std::is_same_v<NT1, half> ||
-                std::is_same_v<NT1, maca_bfloat16>) {
+  if constexpr (std::is_same_v<NT1, float>) {
+    int *address_as_i = reinterpret_cast<int *>(address);
+    int old = *address_as_i, assumed;
+    do {
+      assumed = old;
+      float f_assumed = __int_as_float(assumed);
+      float f_max = (f_assumed > static_cast<float>(val))
+                        ? f_assumed
+                        : static_cast<float>(val);
+      old = atomicCAS(address_as_i, assumed, __float_as_int(f_max));
+    } while (assumed != old);
+  } else if constexpr (std::is_same_v<NT1, half> ||
+                       std::is_same_v<NT1, maca_bfloat16>) {
     // No native atomicMax for half/bf16 on MACA, use atomicCAS loop
     unsigned short *address_as_ushort =
         reinterpret_cast<unsigned short *>(address);
@@ -109,8 +133,11 @@ TL_DEVICE void AtomicMax(T1 *address, T2 val, int memory_order = 0) {
       if (assumed == old_val_ushort)
         break;
     }
+  } else if constexpr (std::is_same_v<NT1, unsigned long long>) {
+    atomicMax(reinterpret_cast<long long *>(address),
+              static_cast<long long>(val));
   } else {
-    atomicMax(reinterpret_cast<T1 *>(address), static_cast<T1>(val));
+    TL_NOT_IMPLEMENTED();
   }
 }
 
@@ -118,8 +145,20 @@ template <typename T1, typename T2>
 TL_DEVICE T1 AtomicMaxRet(T1 *address, T2 val, int memory_order = 0) {
   (void)memory_order;
   using NT1 = typename normalize_atomic_type<T1>::type;
-  if constexpr (std::is_same_v<NT1, half> ||
-                std::is_same_v<NT1, maca_bfloat16>) {
+  if constexpr (std::is_same_v<NT1, float>) {
+    int *address_as_i = reinterpret_cast<int *>(address);
+    int old = *address_as_i, assumed;
+    do {
+      assumed = old;
+      float f_assumed = __int_as_float(assumed);
+      float f_max = (f_assumed > static_cast<float>(val))
+                        ? f_assumed
+                        : static_cast<float>(val);
+      old = atomicCAS(address_as_i, assumed, __float_as_int(f_max));
+    } while (assumed != old);
+    return static_cast<T1>(__int_as_float(old));
+  } else if constexpr (std::is_same_v<NT1, half> ||
+                       std::is_same_v<NT1, maca_bfloat16>) {
     unsigned short *address_as_ushort =
         reinterpret_cast<unsigned short *>(address);
     NT1 val_cast = maca_cast<NT1>(val);
@@ -132,8 +171,11 @@ TL_DEVICE T1 AtomicMaxRet(T1 *address, T2 val, int memory_order = 0) {
         break;
     }
     return static_cast<T1>(*reinterpret_cast<T1 *>(&old_val_ushort));
+  } else if constexpr (std::is_same_v<NT1, unsigned long long>) {
+    return atomicMax(reinterpret_cast<long long *>(address),
+                     static_cast<long long>(val));
   } else {
-    return atomicMax(reinterpret_cast<T1 *>(address), static_cast<T1>(val));
+    TL_NOT_IMPLEMENTED();
   }
 }
 
@@ -141,8 +183,19 @@ template <typename T1, typename T2>
 TL_DEVICE void AtomicMin(T1 *address, T2 val, int memory_order = 0) {
   (void)memory_order;
   using NT1 = typename normalize_atomic_type<T1>::type;
-  if constexpr (std::is_same_v<NT1, half> ||
-                std::is_same_v<NT1, maca_bfloat16>) {
+  if constexpr (std::is_same_v<NT1, float>) {
+    int *address_as_i = reinterpret_cast<int *>(address);
+    int old = *address_as_i, assumed;
+    do {
+      assumed = old;
+      float f_assumed = __int_as_float(assumed);
+      float f_min = (f_assumed < static_cast<float>(val))
+                        ? f_assumed
+                        : static_cast<float>(val);
+      old = atomicCAS(address_as_i, assumed, __float_as_int(f_min));
+    } while (assumed != old);
+  } else if constexpr (std::is_same_v<NT1, half> ||
+                       std::is_same_v<NT1, maca_bfloat16>) {
     // No native atomicMin for half/bf16 on MACA, use atomicCAS loop
     unsigned short *address_as_ushort =
         reinterpret_cast<unsigned short *>(address);
@@ -155,8 +208,11 @@ TL_DEVICE void AtomicMin(T1 *address, T2 val, int memory_order = 0) {
       if (assumed == old_val_ushort)
         break;
     }
+  } else if constexpr (std::is_same_v<NT1, unsigned long long>) {
+    atomicMin(reinterpret_cast<long long *>(address),
+              static_cast<long long>(val));
   } else {
-    atomicMin(reinterpret_cast<T1 *>(address), static_cast<T1>(val));
+    TL_NOT_IMPLEMENTED();
   }
 }
 
@@ -164,8 +220,20 @@ template <typename T1, typename T2>
 TL_DEVICE T1 AtomicMinRet(T1 *address, T2 val, int memory_order = 0) {
   (void)memory_order;
   using NT1 = typename normalize_atomic_type<T1>::type;
-  if constexpr (std::is_same_v<NT1, half> ||
-                std::is_same_v<NT1, maca_bfloat16>) {
+  if constexpr (std::is_same_v<NT1, float>) {
+    int *address_as_i = reinterpret_cast<int *>(address);
+    int old = *address_as_i, assumed;
+    do {
+      assumed = old;
+      float f_assumed = __int_as_float(assumed);
+      float f_min = (f_assumed < static_cast<float>(val))
+                        ? f_assumed
+                        : static_cast<float>(val);
+      old = atomicCAS(address_as_i, assumed, __float_as_int(f_min));
+    } while (assumed != old);
+    return static_cast<T1>(__int_as_float(old));
+  } else if constexpr (std::is_same_v<NT1, half> ||
+                       std::is_same_v<NT1, maca_bfloat16>) {
     unsigned short *address_as_ushort =
         reinterpret_cast<unsigned short *>(address);
     NT1 val_cast = maca_cast<NT1>(val);
@@ -178,59 +246,12 @@ TL_DEVICE T1 AtomicMinRet(T1 *address, T2 val, int memory_order = 0) {
         break;
     }
     return static_cast<T1>(*reinterpret_cast<T1 *>(&old_val_ushort));
+  } else if constexpr (std::is_same_v<NT1, unsigned long long>) {
+    return atomicMin(reinterpret_cast<long long *>(address),
+                     static_cast<long long>(val));
   } else {
-    return atomicMin(reinterpret_cast<T1 *>(address), static_cast<T1>(val));
+    TL_NOT_IMPLEMENTED();
   }
-}
-
-TL_DEVICE void AtomicMax(float *address, float val, int memory_order = 0) {
-  (void)memory_order;
-  int *address_as_i = reinterpret_cast<int *>(address);
-  int old = *address_as_i, assumed;
-  do {
-    assumed = old;
-    float f_assumed = __int_as_float(assumed);
-    float f_max = (f_assumed > val) ? f_assumed : val;
-    old = atomicCAS(address_as_i, assumed, __float_as_int(f_max));
-  } while (assumed != old);
-}
-
-TL_DEVICE float AtomicMaxRet(float *address, float val, int memory_order = 0) {
-  (void)memory_order;
-  int *address_as_i = reinterpret_cast<int *>(address);
-  int old = *address_as_i, assumed;
-  do {
-    assumed = old;
-    float f_assumed = __int_as_float(assumed);
-    float f_max = (f_assumed > val) ? f_assumed : val;
-    old = atomicCAS(address_as_i, assumed, __float_as_int(f_max));
-  } while (assumed != old);
-  return __int_as_float(old);
-}
-
-TL_DEVICE void AtomicMin(float *address, float val, int memory_order = 0) {
-  (void)memory_order;
-  int *address_as_i = reinterpret_cast<int *>(address);
-  int old = *address_as_i, assumed;
-  do {
-    assumed = old;
-    float f_assumed = __int_as_float(assumed);
-    float f_min = (f_assumed < val) ? f_assumed : val;
-    old = atomicCAS(address_as_i, assumed, __float_as_int(f_min));
-  } while (assumed != old);
-}
-
-TL_DEVICE float AtomicMinRet(float *address, float val, int memory_order = 0) {
-  (void)memory_order;
-  int *address_as_i = reinterpret_cast<int *>(address);
-  int old = *address_as_i, assumed;
-  do {
-    assumed = old;
-    float f_assumed = __int_as_float(assumed);
-    float f_min = (f_assumed < val) ? f_assumed : val;
-    old = atomicCAS(address_as_i, assumed, __float_as_int(f_min));
-  } while (assumed != old);
-  return __int_as_float(old);
 }
 
 // For vectorized AtomicAdd, we maintain two versions of interfaces:
