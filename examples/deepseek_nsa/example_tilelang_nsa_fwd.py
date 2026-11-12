@@ -41,7 +41,7 @@ def native_sparse_attention(Q, K, V, BlockIndices, dim, is_causal, scale=None, b
     G = groups
     BS = block_S
     BK = BV = block_T
-    num_stages = 2
+    num_stages = 0
     threads = 64
 
     Q: T.Tensor(q_shape, dtype)

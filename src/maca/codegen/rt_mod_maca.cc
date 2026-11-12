@@ -3,6 +3,7 @@
 
 #include "../runtime/maca_module.h"
 #include "codegen_maca.h"
+#include "config.h"
 #include "op/builtin.h"
 #include "runtime/pack_args.h"
 #include "support/check.h"
@@ -103,10 +104,10 @@ Module BuildTileLangMACA(IRModule mod, Target target) {
   bool output_ssa = false;
   CodeGenTileLangMACA cg;
   cg.Init(output_ssa);
-  cg.SetEmitLineDirectives(
-      tvm::transform::PassContext::Current()
-          ->GetConfig<Bool>(tl::kEmitLineDirectives, Bool(false))
-          .value());
+  // this position can be worked
+  cg.SetXcoreNum(
+      target->GetAttr<Integer>("xcore_num", 1000).value().IntValue());
+  cg.SetEmitLineDirectives(tl::tl_config::EmitLineDirectivesEnabled());
 
   ValidateUniqueDeviceGlobalSymbols(mod);
   if (const auto f = Function::GetGlobal("tilelang_callback_maca_validate")) {
@@ -147,11 +148,11 @@ Module BuildTileLangMACA(IRModule mod, Target target) {
 ffi::Module BuildTileLangMACAWithoutCompile(IRModule mod, Target target) {
   bool output_ssa = false;
   CodeGenTileLangMACA cg;
+  // this position can be worked
+  cg.SetXcoreNum(
+      target->GetAttr<Integer>("xcore_num", 1000).value().IntValue());
   cg.Init(output_ssa);
-  cg.SetEmitLineDirectives(
-      tvm::transform::PassContext::Current()
-          ->GetConfig<Bool>(tl::kEmitLineDirectives, Bool(false))
-          .value());
+  cg.SetEmitLineDirectives(tl::tl_config::EmitLineDirectivesEnabled());
 
   ValidateUniqueDeviceGlobalSymbols(mod);
   if (const auto f =

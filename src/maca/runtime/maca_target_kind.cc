@@ -1,3 +1,6 @@
+#include <algorithm>
+#include <cctype>
+#include <charconv>
 #include <tvm/target/target.h>
 #include <tvm/target/target_kind.h>
 
@@ -53,11 +56,26 @@ UpdateMACAAttrs(ffi::Map<ffi::String, ffi::Any> target) {
     target.Set("mcpu", ffi::String(arch));
   }
 
+  if (!target.count("xcore_num")) {
+    int64_t xcore_num = 1000;
+    auto first_digit =
+        std::find_if(arch.begin(), arch.end(),
+                     [](unsigned char c) { return std::isdigit(c); });
+    TVM_FFI_CHECK(first_digit != arch.end(), ValueError)
+        << "MACA target gets an invalid XCORE version: -mcpu=" << arch;
+    auto [ptr, ec] =
+        std::from_chars(&*first_digit, arch.data() + arch.size(), xcore_num);
+    TVM_FFI_CHECK(ec == std::errc{}, ValueError)
+        << "MACA target gets an invalid XCORE version: -mcpu=" << arch;
+    target.Set("xcore_num", xcore_num);
+  }
+
   return target;
 }
 
 TVM_REGISTER_TARGET_KIND("maca", kDLMACA)
     .add_attr_option<ffi::String>("mcpu")
+    .add_attr_option<int64_t>("xcore_num")
     .add_attr_option<ffi::String>("mtriple")
     .add_attr_option<ffi::Array<ffi::String>>("mattr")
     .add_attr_option<int64_t>("max_num_threads", refl::DefaultValue(1024))

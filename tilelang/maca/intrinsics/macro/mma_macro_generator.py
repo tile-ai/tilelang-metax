@@ -97,6 +97,13 @@ class TensorCoreIntrinEmitter:
         self.warp_col_tiles = warp_col_tiles
         self.chunk = chunk
         self._initialize_k_dim(a_dtype)
+        if self.chunk % self.k_dim != 0:
+            padded_k = (self.chunk // self.k_dim + 1) * self.k_dim
+            raise ValueError(
+                f"MMA tile K={self.chunk} must be divisible by {self.k_dim} "
+                f"for the current MACA MMA emitter (A dtype={self.a_dtype}). "
+                f"Pad the K tile to {padded_k} and zero-fill the extra K elements of both A and B."
+            )
         self._initialize_abbrev(a_dtype, b_dtype, accum_dtype)
         self._initialize_local_size(self.M_DIM, self.N_DIM, self.k_dim, self.WARP_SIZE)
         self._initialize_mma_prefix(self.k_dim)

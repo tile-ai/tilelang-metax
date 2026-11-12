@@ -18,17 +18,18 @@
 #include <string>
 #include <unordered_map>
 
-#include "backend/common/codegen/codegen_c_line_directives.h"
+#include "backend/common/codegen/codegen_c_base.h"
 #include "tvm/ir/expr.h"
 #include "tvm/runtime/data_type.h"
 
 namespace tvm {
 namespace codegen {
 
-class CodeGenTileLangMACA final : public CodeGenCWithLineDirectives {
+class CodeGenTileLangMACA final : public CodeGenTileLangCBase {
 public:
   CodeGenTileLangMACA();
-  std::string Finish();
+  void SetXcoreNum(int xcore_num) { xcore_num_ = xcore_num; }
+  int GetXcoreNum() const { return xcore_num_; }
   // override behavior
   void PrintFuncPrefix(std::ostream &os) final;
   void PrintExtraAttrs(const PrimFunc &f);
@@ -64,8 +65,8 @@ public:
   void VisitExpr_(const MinNode *op, std::ostream &os) final;
   void VisitExpr_(const MaxNode *op, std::ostream &os) final;
   void VisitExpr_(const NotNode *op, std::ostream &os) final;
-  void VisitStmt_(const EvaluateNode *op) final;
   void VisitStmt_(const AssertStmtNode *op) final;
+  void VisitStmt_(const EvaluateNode *op) final;
   void VisitStmt_(const AllocBufferNode *op) final;
   void VisitStmt_(const AttrStmtNode *op) final;
   void VisitExpr_(const BufferLoadNode *op, std::ostream &os) final;
@@ -78,6 +79,8 @@ public:
                               const PrimFunc &func, std::ostream &os);
 
 protected:
+  void EmitPreamble_(std::ostream &os) const final;
+  void ReserveKeywordsAsUnique_();
   virtual std::string GetBufferRef(DataType t, const BufferNode *buffer,
                                    PrimExpr index) final;
   void PrintCallExtern(Type ret_type, ffi::String global_symbol,
@@ -85,9 +88,23 @@ protected:
                        std::ostream &os) final; // NOLINT(*)
 
 private:
-  // Handle volatile loads
   void HandleVolatileLoads(const std::string &value, const BufferLoadNode *op,
                            std::ostream &os) final;
+  bool HandleLateIntrinsicCall(const CallNode *op, std::ostream &os);
+  bool TryEmitPackedBinaryOp_(const std::string &op, DataType result_type,
+                              const PrimExpr &lhs, const PrimExpr &rhs,
+                              std::ostream &os);
+  bool TryEmitPackedComparison_(const std::string &op, DataType result_type,
+                                DataType lhs_type, DataType rhs_type,
+                                const std::string &lhs, const std::string &rhs,
+                                const std::string &result);
+  void EmitScalarizedBinaryOp_(const std::string &op, DataType result_type,
+                               DataType lhs_type, DataType rhs_type,
+                               const std::string &lhs, const std::string &rhs,
+                               const std::string &result);
+  bool TryEmitFastMathCall_(const Call &call, std::ostream &os);
+  bool TryEmitIEEEMathCall_(const Call &call, std::ostream &os);
+  bool TryEmitPackedMathCall_(const Call &call, std::ostream &os);
   // Emit a vector op of dtype t as lanes/2 packed x2 calls (tl::mul2,
   // tl::fma2, ...). All args must already have dtype t; requires
   // CanEmitPackedX2Math(t).
@@ -97,6 +114,7 @@ private:
   void EmitPerLaneScalarCall(const std::string &func_name, DataType t,
                              const std::vector<PrimExpr> &args,
                              std::ostream &os);
+
   // Whether scope such as "__shared__" or "__constant__"  is part of type.
   bool IsScopePartOfType() const final { return false; }
 
@@ -113,6 +131,8 @@ private:
   // for later rng_rand / rng_rand_float uses.
   std::unordered_map<const CallNode *, std::string> rng_state_name_map_;
 
+  // mcpu num
+  int xcore_num_{1000};
   // whether enable fp16
   bool enable_fp16_{false};
   // whether enable bf16
