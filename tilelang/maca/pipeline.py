@@ -141,7 +141,6 @@ def MACAPassPipelineBody(mod: IRModule, target: Target) -> IRModule:
     mod = tilelang.transform.LowerThreadAllreduce()(mod)
 
     mod = tilelang.cuda.transform.LowerLDGSTG()(mod)
-    mod = tilelang.cuda.transform.LowerHopperIntrin()(mod)
     mod = tilelang.maca.transform.LowerMACAIntrin()(mod)
     mod = tilelang.transform.AnnotateDeviceRegions()(mod)
     mod = tilelang.transform.SplitHostDevice()(mod)

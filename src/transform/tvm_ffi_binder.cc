@@ -27,6 +27,17 @@ namespace tl {
 using namespace tirx;
 using namespace ffi;
 
+namespace {
+
+const char *HostMappedPointerFunc(const PrimExpr &device_type) {
+  const auto *imm = device_type.as<IntImmNode>();
+  return imm != nullptr && imm->value == kDLMACA
+             ? "tl.maca.get_host_mapped_pointer"
+             : "tl.cuda.get_host_mapped_pointer";
+}
+
+} // namespace
+
 std::string ConstraintMessage(const std::string &arg_name) {
   std::string kernel = arg_name;
   std::string buf_and_field = arg_name;
@@ -332,7 +343,8 @@ void TVMFFIABIBuilder::BindDLTensors(
     const PrimExpr &device_type, const PrimExpr &device_id,
     const std::string &func_name,
     const std::unordered_set<const VarNode *> &used_param_buffers,
-    const std::unordered_set<const VarNode *> &used_shape_vars) {
+    const std::unordered_set<const VarNode *> &used_shape_vars,
+    const std::unordered_set<const VarNode *> &host_mapped_buffers) {
   Array<Buffer> buffers;
   Array<Var> handles;
 
@@ -980,15 +992,24 @@ void TVMFFIABIBuilder::BindDLTensors(
         TVMArrayGet(DataType::Int(32), handle, builtin::kDLTensorDeviceId),
         make_zero(DataType::Int(32)));
 
-    // Bind device_id to a safe expression (0 when NULL handle)
-    BindNullable(device_id, actual_dev_id, arg_name + ".device_id", true,
-                 is_null);
+    // Host storage has no CUDA device id. Only device-resident parameters
+    // participate in the execution-device consistency check.
+    bool host_mapped = host_mapped_buffers.count(buffer->data.get());
+    if (!host_mapped) {
+      BindNullable(device_id, actual_dev_id, arg_name + ".device_id", true,
+                   is_null);
+    }
     // Check device_type consistency (device_id equality is implicitly ensured
     // by binding above)
     {
-      PrimExpr ok = (device_type == actual_dev_type) ||
-                    (device_type == DLDeviceType::kDLMACA &&
-                     actual_dev_type == DLDeviceType::kDLCUDA);
+      PrimExpr ok = (device_type == actual_dev_type);
+      if (!host_mapped) {
+        ok = ok || (device_type == DLDeviceType::kDLMACA &&
+                    actual_dev_type == DLDeviceType::kDLCUDA);
+      }
+      if (host_mapped) {
+        ok = ok || (actual_dev_type == kDLCPU);
+      }
       std::ostringstream device_msg;
       device_msg << "kernel " << kernel_nm << " input " << buf_nm
                  << " device_type mismatch";
@@ -1012,6 +1033,11 @@ void TVMFFIABIBuilder::BindDLTensors(
           Not(is_null),
           TVMArrayGet(DataType::Handle(), handle, builtin::kDLTensorData),
           make_zero(DataType::Handle()));
+      if (host_mapped) {
+        data_ptr =
+            Call(DataType::Handle(), builtin::tvm_call_packed(),
+                 {StringImm(HostMappedPointerFunc(device_type)), data_ptr});
+      }
       BindNullable(buffer->data, data_ptr, arg_name + ".data", true, is_null);
 
       // Check if the data pointer is NULL.  This check is skipped for

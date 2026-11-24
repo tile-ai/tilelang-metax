@@ -18,6 +18,7 @@ def test_builtin_backend_modules_are_explicit():
         "webgpu": (("webgpu",), ["tvm_ffi"]),
         "maca": (("maca",), ["tvm_ffi", "mcrtc", "cython", "cutedsl"]),
         "ascend": (("ascend",), ["tvm_ffi", "cython"]),
+        "pto": (("ascend",), ["pto"]),
     }
 
     assert {

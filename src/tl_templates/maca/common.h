@@ -4,12 +4,16 @@
 #pragma once
 
 #include "atomic.h"
+#include "common/__clang_maca_vector_types.h"
+#include <cmath>
 #include <common/maca_bfloat16.h>
 #include <common/maca_fp16.h>
 #include <cstdio>
 #include <limits>
+#include <linux/limits.h>
 #include <maca_fp8.h>
 #include <mcr/mc_runtime.h>
+#include <type_traits>
 
 #define MACART_INF_F __int_as_float(0x7f800000)
 #define MACART_NEGINF_F __int_as_float(0xff800000)
@@ -725,6 +729,23 @@ TL_PATCH TL_DEVICE bfloat16_t hnearbyint(const bfloat16_t x) {
   return bfloat16_t(nearbyintf(float(x)));
 }
 
+#define TL_DEFINE_UNARY_16BIT_MATH(name)                                       \
+  TL_PATCH TL_DEVICE half_t h##name(const half_t x) {                          \
+    return half_t(name##f(float(x)));                                          \
+  }                                                                            \
+  TL_PATCH TL_DEVICE bfloat16_t h##name(const bfloat16_t x) {                  \
+    return bfloat16_t(name##f(float(x)));                                      \
+  }
+
+TL_DEFINE_UNARY_16BIT_MATH(asin)
+TL_DEFINE_UNARY_16BIT_MATH(acos)
+TL_DEFINE_UNARY_16BIT_MATH(asinh)
+TL_DEFINE_UNARY_16BIT_MATH(acosh)
+TL_DEFINE_UNARY_16BIT_MATH(atanh)
+TL_DEFINE_UNARY_16BIT_MATH(log1p)
+
+#undef TL_DEFINE_UNARY_16BIT_MATH
+
 TL_PATCH TL_DEVICE half_t hpow(const half_t x, const half_t y) {
   return half_t(powf(float(x), float(y)));
 }
@@ -739,6 +760,159 @@ TL_PATCH TL_DEVICE half_t hfmod(const half_t x, const half_t y) {
 
 TL_PATCH TL_DEVICE bfloat16_t hfmod(const bfloat16_t x, const bfloat16_t y) {
   return bfloat16_t(fmodf(float(x), float(y)));
+}
+
+template <typename T>
+TL_PATCH TL_DEVICE half_t hatan2(const half_t x, const T y) {
+  return half_t(atan2f(float(x), float(y)));
+}
+
+template <typename T>
+TL_PATCH TL_DEVICE bfloat16_t hatan2(const bfloat16_t x, const T y) {
+  return bfloat16_t(atan2f(float(x), float(y)));
+}
+
+template <typename T>
+TL_PATCH TL_DEVICE half_t hhypot(const half_t x, const T y) {
+  return half_t(hypotf(float(x), float(y)));
+}
+
+template <typename T>
+TL_PATCH TL_DEVICE bfloat16_t hhypot(const bfloat16_t x, const T y) {
+  return bfloat16_t(hypotf(float(x), float(y)));
+}
+
+template <typename T>
+TL_PATCH TL_DEVICE half_t hcopysign(const half_t x, const T y) {
+  return half_t(copysignf(float(x), float(y)));
+}
+
+template <typename T>
+TL_PATCH TL_DEVICE bfloat16_t hcopysign(const bfloat16_t x, const T y) {
+  uint16_t x_bits = __bfloat16_as_ushort(x);
+  uint16_t y_sign;
+  if constexpr (std::is_same_v<std::remove_cv_t<T>, bfloat16_t>) {
+    y_sign = __bfloat16_as_ushort(y) & 0x8000;
+  } else {
+    y_sign = signbit(y) ? 0x8000 : 0;
+  }
+  __maca_bfloat16_raw result{static_cast<uint16_t>((x_bits & 0x7fff) | y_sign)};
+  return bfloat16_t(result);
+}
+
+TL_PATCH TL_DEVICE half_t hldexp(const half_t x, const int n) {
+  return half_t(ldexpf(float(x), n));
+}
+
+TL_PATCH TL_DEVICE bfloat16_t hldexp(const bfloat16_t x, const int n) {
+  return bfloat16_t(ldexpf(float(x), n));
+}
+
+TL_DEVICE uint16_t nextafter_bits16(const uint16_t ux, const uint16_t uy,
+                                    const uint16_t inf) {
+  const uint16_t mx = ux & 0x7FFF, my = uy & 0x7FFF;
+  if (mx > inf || my > inf)
+    return 0x7FFF; // NaN
+  if (ux == uy || (mx | my) == 0)
+    return uy;
+  if (mx == 0)
+    return (uy & 0x8000) | 0x0001;
+  const int kx = (ux & 0x8000) ? -int(mx) : int(mx);
+  const int ky = (uy & 0x8000) ? -int(my) : int(my);
+  const bool away = (kx < ky) == !(ux & 0x8000);
+  return ux + (away ? 1 : -1);
+}
+
+TL_DEVICE uint16_t nextafter_bits16(const uint16_t ux, const uint16_t lower,
+                                    const uint16_t upper, const uint16_t inf) {
+  const bool at_lower = ux == lower || ((ux | lower) & 0X7FFF) == 0;
+  return nextafter_bits16(ux, at_lower ? upper : lower, inf);
+}
+
+template <typename T> TL_DEVICE bool nextafter_wide_is_zero(const T value) {
+  if constexpr (std::is_same_v<std::remove_cv_t<T>, float>) {
+    return (__float_as_uint(value) & 0x7FFFFFFFu) == 0;
+  } else if constexpr (std::is_same_v<std::remove_cv_t<T>, double>) {
+    return (static_cast<unsigned long long>(__double_as_longlong(value)) &
+            0x7FFFFFFFFFFFFFFFULL) == 0;
+  } else {
+    return value == T(0);
+  }
+}
+
+template <typename T> TL_DEVICE bool nextafter_wide_signbit(const T value) {
+  if constexpr (std::is_same_v<std::remove_cv_t<T>, float>) {
+    return (__float_as_uint(value) & 0x80000000u) != 0;
+  } else if constexpr (std::is_same_v<std::remove_cv_t<T>, double>) {
+    return (static_cast<unsigned long long>(__double_as_longlong(value)) &
+            0x8000000000000000ULL) != 0;
+  } else {
+    return signbit(value);
+  }
+}
+
+template <typename T>
+TL_DEVICE uint16_t nextafter_wide_bits16(const uint16_t ux, const half_t x,
+                                         const T y, const uint16_t inf) {
+  const float xf = static_cast<float>(x);
+  if (isnan(xf) || isnan(y))
+    return 0x7FFF;
+  if ((ux & 0x7FFF) == 0 && nextafter_wide_is_zero(y))
+    return static_cast<uint16_t>(__half_as_ushort(half_t(y)));
+  if ((ux & 0x7FFF) == 0 && !nextafter_wide_is_zero(y))
+    return nextafter_wide_signbit(y) ? 0x8001 : 0x0001;
+  if (xf == y)
+    return static_cast<uint16_t>(__half_as_ushort(half_t(y)));
+  const uint16_t target = (xf < y) ? 0x7C00 : 0xFC00;
+  return nextafter_bits16(ux, target, inf);
+}
+
+template <typename T>
+TL_DEVICE uint16_t nextafter_wide_bits16(const uint16_t ux, const bfloat16_t x,
+                                         const T y, const uint16_t inf) {
+  const float xf = static_cast<float>(x);
+  if (isnan(xf) || isnan(y))
+    return 0x7FFF;
+  if ((ux & 0x7FFF) == 0 && nextafter_wide_is_zero(y))
+    return __bfloat16_as_ushort(bfloat16_t(y));
+  if ((ux & 0x7FFF) == 0 && !nextafter_wide_is_zero(y))
+    return nextafter_wide_signbit(y) ? 0x8001 : 0x0001;
+  int relation;
+  if constexpr (std::is_same_v<std::remove_cv_t<T>, float>) {
+    const unsigned int xb = static_cast<unsigned int>(ux) << 16;
+    const unsigned int yb = __float_as_uint(y);
+    const unsigned int xkey = (xb & 0x80000000u) ? ~xb : (xb | 0x80000000u);
+    const unsigned int ykey = (yb & 0x80000000u) ? ~yb : (yb | 0x80000000u);
+    relation = (xkey < ykey) ? -1 : (xkey > ykey) ? 1 : 0;
+  } else {
+    relation = (xf < y) ? -1 : (xf > y) ? 1 : 0;
+  }
+  if (relation == 0)
+    return __bfloat16_as_ushort(bfloat16_t(y));
+  const uint16_t target = (relation < 0) ? 0x7F80 : 0xFF80;
+  return nextafter_bits16(ux, target, inf);
+}
+
+template <typename T>
+TL_PATCH TL_DEVICE half_t hnextafter(const half_t x, const T y) {
+  if constexpr (std::is_same_v<T, half_t>) {
+    return __ushort_as_half(
+        nextafter_bits16(__half_as_ushort(x), __half_as_ushort(y), 0x7C00));
+  } else {
+    return __ushort_as_half(
+        nextafter_wide_bits16(__half_as_ushort(x), x, y, 0x7C00));
+  }
+}
+
+template <typename T>
+TL_PATCH TL_DEVICE bfloat16_t hnextafter(const bfloat16_t x, const T y) {
+  if constexpr (std::is_same_v<T, bfloat16_t>) {
+    return __ushort_as_bfloat16(nextafter_bits16(
+        __bfloat16_as_ushort(x), __bfloat16_as_ushort(y), 0x7F80));
+  } else {
+    return __ushort_as_bfloat16(
+        nextafter_wide_bits16(__bfloat16_as_ushort(x), x, y, 0x7F80));
+  }
 }
 
 // Pack two half_t values.
@@ -757,6 +931,22 @@ TL_DEVICE unsigned __pack_maca_bfloat162(const bfloat16_t x,
 }
 
 namespace tl {
+
+TL_DEVICE float2 __tl_cvt_bf16x2_to_f32x2(__maca_bfloat162 src) {
+  static_assert(sizeof(src) == sizeof(unsigned int));
+
+  unsigned int bits;
+  memcpy(&bits, &src, sizeof(bits));
+
+  unsigned int x_bits = bits << 16;
+  unsigned int y_bits = bits & 0xffff0000u;
+
+  float2 result;
+  memcpy(&result.x, &x_bits, sizeof(x_bits));
+  memcpy(&result.y, &y_bits, sizeof(y_bits));
+  return result;
+}
+
 TL_DEVICE float fast_rcp(float x) { return __fdividef(1.0f, x); }
 
 // Replicate a small repeating unit across a wider vector type, e.g. one
@@ -795,17 +985,6 @@ TL_DEVICE V make_vec(const E first, const Ts... rest) {
   return result;
 }
 } // namespace tl
-
-template <typename T1, typename T2>
-TL_DEVICE void AtomicAdd(T1 *address, T2 val, int memory_order = 0) {
-  using NT1 = typename normalize_atomic_type<T1>::type;
-  (void)memory_order;
-  atomicAdd(reinterpret_cast<NT1 *>(address), static_cast<NT1>(val));
-}
-
-template <typename T> TL_DEVICE void AtomicAdd(_Float16 *address, T val) {
-  atomicAdd(reinterpret_cast<__half *>(address), static_cast<__half>(val));
-}
 
 TL_DEVICE half_t max(const half_t a, const half_t b) {
   return half_t(__hmax(a, b));

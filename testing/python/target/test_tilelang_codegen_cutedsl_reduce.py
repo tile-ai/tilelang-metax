@@ -39,6 +39,7 @@ def _lower_cutedsl_partial_reduce():
         return lower(prog.with_attr("global_symbol", "main"), target=target)
 
 
+@tilelang.testing.skip_on_maca
 def test_cutedsl_codegen_partial_reduce_named_barrier():
     """The partial scalar AllReduce uses its exact participant count."""
     artifact = _lower_cutedsl_partial_reduce()

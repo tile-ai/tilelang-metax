@@ -29,6 +29,8 @@ project(TILE_LANG C CXX)
 # configured further down (add_subdirectory(${TVM_SOURCE}) below) still see it.
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/FindPipCUDAToolkit.cmake)
 
+_tilelang_get_native_windows_arch(_tilelang_native_windows_arch)
+
 # MSVC-specific build configuration. Must run after project() so MSVC is
 # defined, but before add_subdirectory(${TVM_SOURCE}) below so subprojects
 # inherit these settings. CMake also sets MSVC=1 when the compiler is
@@ -64,6 +66,13 @@ if(MSVC)
   add_compile_options(
     $<$<COMPILE_LANGUAGE:CXX>:/EHsc>
     $<$<COMPILE_LANGUAGE:C,CXX>:/bigobj>)
+
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
+      AND (CMAKE_SYSTEM_PROCESSOR MATCHES "^(ARM64|arm64|aarch64)$"
+           OR _tilelang_native_windows_arch STREQUAL "arm64"))
+    add_compile_options(
+      $<$<COMPILE_LANGUAGE:CXX>:/FI${TILELANG_CMAKELISTS_DIR}/cmake/windows_arm64_clang_compat.h>)
+  endif()
 
   # clang-cl-specific compatibility shims. clang-cl is invoked with
   # MSVC-like flags but needs a couple of extra knobs to compile TVM/TileLang
@@ -155,6 +164,12 @@ function(tilelang_generate_windows_import_library DLL_PATH OUTPUT_VAR STEM)
       set(_tilelang_machine "X86")
     elseif(CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")
       set(_tilelang_machine "ARM64")
+    elseif(CMAKE_GENERATOR_PLATFORM STREQUAL "")
+      string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _tilelang_system_processor)
+      if(_tilelang_system_processor MATCHES "^(arm64|aarch64)$"
+          OR _tilelang_native_windows_arch STREQUAL "arm64")
+        set(_tilelang_machine "ARM64")
+      endif()
     endif()
     execute_process(
       COMMAND "${_tilelang_libexe}" "/def:${_tilelang_def_file}" "/machine:${_tilelang_machine}" "/out:${_tilelang_import_lib}"
@@ -387,6 +402,7 @@ file(GLOB TILE_LANG_SRCS
   src/backend/common/target_utils.cc
   src/backend/common/codegen/codegen_utils.cc
   src/backend/common/codegen/codegen_c_host.cc
+  src/backend/common/codegen/codegen_py.cc
 )
 
 # Always include CPU-safe runtime helpers
@@ -575,6 +591,28 @@ endif()
 # dependency and matches Cython's own suggested workaround. See #2125.
 target_compile_definitions(tilelang_cython_wrapper PRIVATE CYTHON_PEP489_MULTI_PHASE_INIT=0)
 
+# PTO owns its packed-storage launch ABI independently of the Cython backend.
+add_custom_command(
+  OUTPUT "${CMAKE_BINARY_DIR}/tilelang_pto_wrapper.cpp"
+  COMMENT
+    "Cythoning tilelang/jit/adapter/pto/cython_wrapper.pyx"
+  COMMAND Python::Interpreter -m cython
+          "${CMAKE_CURRENT_SOURCE_DIR}/tilelang/jit/adapter/pto/cython_wrapper.pyx"
+          --module-name tilelang_pto_wrapper
+          --cplus --output-file "${CMAKE_BINARY_DIR}/tilelang_pto_wrapper.cpp"
+  DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tilelang/jit/adapter/pto/cython_wrapper.pyx"
+  VERBATIM)
+
+python_add_library(tilelang_pto_wrapper MODULE "${CMAKE_BINARY_DIR}/tilelang_pto_wrapper.cpp" ${USE_SABI} WITH_SOABI)
+if(WIN32)
+  target_compile_definitions(tilelang_pto_wrapper PRIVATE Py_NO_LINK_LIB=1)
+  if(DEFINED Python_VERSION_MAJOR AND DEFINED Python_VERSION_MINOR)
+    target_link_options(tilelang_pto_wrapper PRIVATE
+      "/NODEFAULTLIB:python${Python_VERSION_MAJOR}${Python_VERSION_MINOR}_d.lib")
+  endif()
+endif()
+target_compile_definitions(tilelang_pto_wrapper PRIVATE CYTHON_PEP489_MULTI_PHASE_INIT=0)
+
 # Ascend Torch-NPU stream exchange extension. Pure CPython/DLPack (no CANN
 # dependency), so it builds on every configuration like the other
 # TILE_LANG_ASCEND_ALWAYS sources; torch_npu is imported lazily at call time.
@@ -634,6 +672,11 @@ set_target_properties(tilelang_cython_wrapper PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
   ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
 )
+set_target_properties(tilelang_pto_wrapper PROPERTIES
+  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+  ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+)
 set_target_properties(tilelang_ascend_npu_exchange PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
@@ -642,6 +685,10 @@ set_target_properties(tilelang_ascend_npu_exchange PROPERTIES
 
 # Install the extension into tilelang/lib inside the wheel
 install(TARGETS tilelang_cython_wrapper
+        LIBRARY DESTINATION tilelang/lib
+        RUNTIME DESTINATION tilelang/lib
+        ARCHIVE DESTINATION tilelang/lib)
+install(TARGETS tilelang_pto_wrapper
         LIBRARY DESTINATION tilelang/lib
         RUNTIME DESTINATION tilelang/lib
         ARCHIVE DESTINATION tilelang/lib)

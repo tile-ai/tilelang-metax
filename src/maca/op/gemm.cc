@@ -6,6 +6,7 @@
 #include "op/gemm.h"
 
 #include "maca/target_utils.h"
+#include "span_utils.h"
 
 #include <tvm/ffi/reflection/registry.h>
 #include <tvm/tirx/transform.h>
@@ -64,6 +65,68 @@ bool CheckWgmma(const GemmNode &op) {
     return false;
   }
   return false;
+}
+
+bool AllowMacaMMA(const GemmNode &op) {
+  const DataType &a = op.a_->dtype;
+  const DataType &b = op.b_->dtype;
+  const DataType &c = op.c_->dtype;
+
+  if (a != b) {
+    return false;
+  }
+
+  if (a == DataType::Float(16)) {
+    return c == DataType::Float(16) || c == DataType::Float(32);
+  }
+
+  if (a.is_float8_e4m3() || a.is_float8_e4m3fn() || a.is_float8_e5m2()) {
+    return c == DataType::Float(32);
+  }
+
+  if ((a.is_int() || a.is_uint()) && a.bits() == 8) {
+    return c == DataType::Int(32);
+  }
+
+  if (a.is_tfloat32() && b.is_tfloat32()) {
+    return c == DataType::Float(32);
+  }
+
+  if (a == DataType::BFloat(16)) {
+    return c == DataType::Float(32);
+  }
+
+  if (a == DataType::Float(32)) {
+    return c == DataType::Float(32);
+  }
+
+  if (a == DataType::Float(64)) {
+    return c == DataType::Float(64);
+  }
+
+  return false;
+}
+
+// TODO: may be used for fp8
+void FatalMacaFp8MmaUnavailable(const GemmNode &op, Target target) {
+  LOG(FATAL)
+      << "T.gemm() with fp8 operands requires a MACA target with fp8 "
+         "mma.sync atoms , but got target="
+      << target << " with A(dtype=" << op.a_->dtype
+      << "), B(dtype=" << op.b_->dtype
+      << "). MACA arch() have no .e4m3/.e5m2 mma instruction; the kernel "
+         "would compile and then trap at launch."
+      << SpanHintSuffix({op.a_->span, op.b_->span, op.c_->span});
+}
+
+void FatalMacaMmaUnavailable(const GemmNode &op, Target target) {
+  LOG(FATAL)
+      << "T.gemm requires native mma.sync lowering on MACA, "
+         "but the operand dtype configuration is not supported. Got target="
+      << target << ", A(scope=" << op.a_.scope() << ", dtype=" << op.a_->dtype
+      << "), B(scope=" << op.b_.scope() << ", dtype=" << op.b_->dtype
+      << "), C(scope=" << op.c_.scope() << ", dtype=" << op.c_->dtype
+      << "), M=" << op.m_ << ", N=" << op.n_ << ", K=" << op.k_;
 }
 
 std::pair<int, int>
@@ -150,6 +213,9 @@ ComputeDefaultWarpPartition(const GemmWarpPolicyNode &policy, int M, int N,
 
 struct Gemm {
   static String SelectInst(const GemmNode &op, int block_size, Target target) {
+    if (!AllowMacaMMA(op)) {
+      FatalMacaMmaUnavailable(op, target);
+    }
     return kMacaMMA;
   }
 

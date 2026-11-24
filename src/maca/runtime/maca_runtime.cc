@@ -24,6 +24,31 @@ thread_local bool __tl_prev_persisting_l2_cache_saved = false;
 TVM_FFI_STATIC_INIT_BLOCK() {
   namespace refl = tvm::ffi::reflection;
   refl::GlobalDef()
+      .def("tl.maca.current_device",
+           []() {
+             int device = 0;
+             MACA_CALL(mcGetDevice(&device));
+             return static_cast<int32_t>(device);
+           })
+      .def("tl.maca.get_host_mapped_pointer",
+           [](void *host_ptr) -> void * {
+             if (host_ptr == nullptr) {
+               return nullptr;
+             }
+             void *device_ptr = nullptr;
+             mcError_t result =
+                 mcHostGetDevicePointer(&device_ptr, host_ptr, 0);
+             if (result != mcSuccess) {
+               const char *error = mcGetErrorString(result);
+               mcGetLastError();
+               TVM_FFI_THROW(ValueError)
+                   << "Host-mapped buffer is not registered or accessible from "
+                      "the current MACA context; mcHostGetDevicePointer failed "
+                      "with error "
+                   << error;
+             }
+             return device_ptr;
+           })
       .def_packed(
           tvm_maca_stream_set_access_policy_window,
           [](ffi::PackedArgs args, ffi::Any *ret) {

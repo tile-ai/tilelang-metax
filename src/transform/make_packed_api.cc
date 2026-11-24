@@ -1,6 +1,7 @@
 /*!
  * \file make_packed_api.cc Lower PrimFunc to use the packed function API.
  */
+#include "dlpack/dlpack.h"
 #include "support/check.h"
 #include <tvm/ffi/extra/module.h>
 #include <tvm/ffi/function.h>
@@ -40,6 +41,11 @@ constexpr const char *kTileLangCalleeAllocatedOutputs =
     "tilelang_callee_allocated_outputs";
 constexpr const char *kOutputStorageDTypeResolver =
     "tl.tvm_ffi.resolve_output_allocator_dtype";
+
+const char *HostMappedCurrentDeviceFunc(int target_device_type) {
+  return target_device_type == kDLMACA ? "tl.maca.current_device"
+                                       : "tl.cuda.current_device";
+}
 
 struct OutputStorageInfo {
   DataType dtype;
@@ -149,7 +155,7 @@ private:
     } else if (dtype.is_int() || dtype.is_uint()) {
       info.type_index = TypeIndex::kTVMFFIInt;
       info.expr = Cast(DataType::Int(64), val);
-    } else if (dtype.is_float()) {
+    } else if (dtype.is_float() || dtype.is_bfloat16()) {
       info.type_index = TypeIndex::kTVMFFIFloat;
       info.expr = Cast(DataType::Float(64), val);
     } else if (dtype.is_void()) {
@@ -453,6 +459,29 @@ MakePackedAPI(PrimFunc func,
   std::unordered_map<const VarNode *, PrimExpr> vmap;
   TVMFFIABIBuilder binder(&vmap);
   TVMFFIABIBuilder output_binder(&vmap);
+
+  std::unordered_set<const VarNode *> host_mapped_buffers;
+  if (auto indices = func->GetAttr<Array<Integer>>("tl.host_mapped_params")) {
+    ICHECK(target_device_type == kDLCUDA || target_device_type == kDLMACA)
+        << "Host-mapped buffers require a CUDA/MACA target";
+    for (Integer index : indices.value()) {
+      int i = index.IntValue();
+      ICHECK(i >= 0 && i < static_cast<int>(func->params.size()));
+      Var param = func->params[i];
+      ICHECK(func->buffer_map.count(param));
+      host_mapped_buffers.insert(func->buffer_map[param]->data.get());
+    }
+  }
+  if (!host_mapped_buffers.empty()) {
+    // The current context owns the launch stream and the host mappings. Bind
+    // it before processing tensors, including signatures with host buffers
+    // first or with no device-resident tensor at all.
+    binder.Bind(
+        device_id,
+        Call(DataType::Int(32), builtin::tvm_call_packed(),
+             {StringImm(HostMappedCurrentDeviceFunc(target_device_type))}),
+        name_hint + ".device_id", true);
+  }
 
   // ---------------------------
   // local function definitions
@@ -796,7 +825,8 @@ MakePackedAPI(PrimFunc func,
   }
 
   binder.BindDLTensors(buffer_def, device_type, device_id, name_hint,
-                       used_param_buffers, detector.used_shape_vars);
+                       used_param_buffers, detector.used_shape_vars,
+                       host_mapped_buffers);
   for (const auto &[var, buffer] : buffer_def) {
     // Prefer buffer data var name in diagnostics to avoid exposing low-level
     // handle vars

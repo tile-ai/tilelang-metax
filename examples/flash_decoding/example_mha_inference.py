@@ -2,10 +2,13 @@ import torch
 import torch.nn.functional as F
 import tilelang
 from tilelang.autotuner import *
+from tilelang.carver.arch import get_arch
 import tilelang.language as T
 from functools import partial
 
 num_split = 4
+_KERNEL_THREADS = 128
+_TILE_CANDIDATES = (32, 32)
 
 
 @tilelang.jit(out_idx=[3])
@@ -27,7 +30,7 @@ def flashattn(batch, heads, seqlen_q, seqlen_kv, dim, is_causal, block_M, block_
         glse = T.alloc_global([batch, heads, num_split, seqlen_q], dtype)
         Output_partial = T.alloc_global(part_shape, dtype)  # [batch, seqlen_q, heads, num_split, dim]
         # split
-        with T.Kernel(T.ceildiv(seqlen_q, block_M), heads * batch, num_split, threads=128) as (bx, by, bz):
+        with T.Kernel(T.ceildiv(seqlen_q, block_M), heads * batch, num_split, threads=_KERNEL_THREADS) as (bx, by, bz):
             Q_shared = T.alloc_shared([block_M, dim], dtype)
             K_shared = T.alloc_shared([block_N, dim], dtype)
             V_shared = T.alloc_shared([block_N, dim], dtype)
@@ -113,7 +116,7 @@ def flashattn(batch, heads, seqlen_q, seqlen_kv, dim, is_causal, block_M, block_
             T.copy(O_shared, Output_partial[bid, mid * block_M : (mid + 1) * block_M, hid, sid, :], disable_tma=True)
 
         # combine
-        with T.Kernel(T.ceildiv(seqlen_q, block_M), heads, batch, threads=128) as (bx, by, bz):
+        with T.Kernel(T.ceildiv(seqlen_q, block_M), heads, batch, threads=_KERNEL_THREADS) as (bx, by, bz):
             po_local = T.alloc_fragment([block_M, dim], dtype)
             o_accum_local = T.alloc_fragment([block_M, dim], accum_dtype)
             o_shared = T.alloc_shared([block_M, dim], dtype)
@@ -153,6 +156,49 @@ def flashattn(batch, heads, seqlen_q, seqlen_kv, dim, is_causal, block_M, block_
             T.copy(o_shared, Output[bz, bx * block_M : (bx + 1) * block_M, by, :], disable_tma=True)
 
     return flashattn_mha_inference
+
+
+def _max_dynamic_shared_memory(kernel):
+    """Return the largest dynamic shared-memory allocation in a compiled module."""
+    allocations = getattr(kernel.adapter, "dynamic_smem_buf", {}).values()
+    return max((int(size) for size in allocations if size is not None), default=0)
+
+
+def _fits_current_hip_device(kernel):
+    """Check generated HIP resources before attempting a potentially invalid launch."""
+    arch = get_arch(kernel.target)
+    dynamic_smem = _max_dynamic_shared_memory(kernel)
+    if dynamic_smem > arch.smem_cap:
+        return False, f"dynamic shared memory {dynamic_smem} exceeds device limit {arch.smem_cap}"
+
+    for name, usage in kernel.resource_usage.items():
+        if usage.n_regs and usage.n_regs * _KERNEL_THREADS >= arch.reg_cap:
+            return False, f"{name} uses {usage.n_regs} VGPRs per thread at the device register-file limit"
+
+    return True, ""
+
+
+def compile_flashattn_for_current_device(batch, heads, seqlen_q, seqlen_kv, dim, is_causal):
+    """Compile the largest feasible MHA tile for the current device.
+
+    CUDA keeps the original 128x64 configuration. HIP candidates are checked
+    against the generated module's actual LDS and VGPR usage before launch so
+    devices with larger resource budgets can retain the larger tile.
+    """
+    rejected = []
+    for block_M, block_N in _TILE_CANDIDATES:
+        kernel = flashattn(batch, heads, seqlen_q, seqlen_kv, dim, is_causal, block_M, block_N)
+        config = {"block_M": block_M, "block_N": block_N}
+        if kernel.target.kind.name != "hip":
+            return kernel, config
+
+        fits, reason = _fits_current_hip_device(kernel)
+        if fits:
+            return kernel, config
+        rejected.append(f"{block_M}x{block_N}: {reason}")
+
+    details = "; ".join(rejected)
+    raise RuntimeError(f"No feasible flash-decoding tile for the current HIP device ({details}).")
 
 
 def ref_program(Q, K, V, causal):
