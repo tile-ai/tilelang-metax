@@ -33,25 +33,15 @@ from tilelang.cache import _dispatch_map
 BACKENDS = [
     "tvm_ffi",
     "cython",
-    pytest.param("mcrtc", marks=pytest.mark.xfail(reason="mcrtc adapter/cache not implemented")),
-    "cutedsl",
+    "mcrtc",
+    pytest.param("nvrtc", marks=pytest.mark.xfail(reason="nvrtc adapter/cache not implemented on MACA")),
+    pytest.param("cutedsl", marks=tilelang.testing.requires_cutedsl.marks()),
 ]
 
 
 def _get_target_from_backend(backend: str):
     """Map backend to target string."""
     return "cutedsl" if backend == "cutedsl" else "auto"
-
-
-def _require_backend_available(backend: str) -> None:
-    if backend != "cutedsl":
-        return
-    try:
-        from tilelang.jit.adapter.cutedsl.checks import check_cutedsl_available
-
-        check_cutedsl_available()
-    except ImportError as e:
-        pytest.skip(f"CuTeDSL backend unavailable: {e}")
 
 
 class PostProcCounter:
@@ -92,6 +82,7 @@ def setup_module_env():
     # Restore default postproc callbacks
     tvm_ffi.register_global_func("tilelang_callback_cuda_postproc", f=lambda code, _: code, override=True)
     tvm_ffi.register_global_func("tilelang_callback_cutedsl_postproc", f=lambda code, _: code, override=True)
+    tvm_ffi.register_global_func("tilelang_callback_maca_postproc", f=lambda code, _: code, override=True)
 
 
 @pytest.fixture(scope="function")
@@ -106,7 +97,6 @@ def clean_cache_env(tmp_path, request):
     """
     # This fixture should ONLY be used with @pytest.mark.parametrize("backend", ...)
     backend = request.node.callspec.params["backend"]  # Will raise KeyError if missing
-    _require_backend_available(backend)
 
     cache_dir = tmp_path / "tilelang_cache"
     cache_dir.mkdir()
