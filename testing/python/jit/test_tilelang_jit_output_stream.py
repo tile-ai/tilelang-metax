@@ -32,18 +32,22 @@ def _compile(backend):
 
         if not is_mcrtc_available:
             pytest.skip("MCRTC is not available")
-    if backend == "cutedsl":
-        try:
-            from tilelang.jit.adapter.cutedsl.checks import check_cutedsl_available
 
-            check_cutedsl_available()
-        except (ImportError, ModuleNotFoundError, RuntimeError, AssertionError) as err:
-            pytest.skip(f"CuTeDSL is not available: {err}")
+    if backend == "nvrtc":
+        from tilelang.jit.adapter.nvrtc import is_nvrtc_available
+
+        if not is_nvrtc_available:
+            pytest.skip("NVRTC is not available")
     target = "cutedsl" if backend == "cutedsl" else "auto"
     return tilelang.compile(copy_kernel(N), out_idx=[1], target=target, execution_backend=backend)
 
 
-BACKENDS = ["cython", "mcrtc", "cutedsl"]
+BACKENDS = [
+    "cython",
+    "nvrtc",
+    "mcrtc",
+    pytest.param("cutedsl", marks=tilelang.testing.requires_cutedsl.marks()),
+]
 
 
 @tilelang.testing.requires_cuda
